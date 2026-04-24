@@ -79,13 +79,12 @@ export async function fetchSheet(
             if (data.department?.[i]) departments.add(data.department[i]);
             if (data.paymentTerm?.[i]) paymentTerms.add(data.paymentTerm[i]);
             if (data.defaultTerms?.[i]) defaultTerms.add(data.defaultTerms[i]);
-            if (data.unit?.[i]) units.add(data.unit[i]);
-            if (data.Unit?.[i]) units.add(data.Unit[i]);
+
+            // Correct key from MASTER sheet Col-S (typo in sheet header is intentional)
+            if (data.unitOfMeasurment?.[i]) units.add(data.unitOfMeasurment[i]);
 
             // Strictly fetch Ward Names from Column R ONLY (no other columns)
             if (data.wardName?.[i]) wardNames.add(data.wardName[i]);
-            if (data.wardnames?.[i]) wardNames.add(data.wardnames[i]);
-            if (data['Ward Name']?.[i]) wardNames.add(data['Ward Name'][i]);
 
             const group = data.groupHead?.[i];
             const item = data.itemName?.[i];
@@ -193,7 +192,8 @@ export async function postToSheet(
         | Partial<UserPermissions>[]
         | Partial<PoMasterSheet>[]
         | Partial<QuotationHistorySheet>[]
-        | Partial<StoreOutSheet>[],
+        | Partial<StoreOutSheet>[]
+        | Partial<InventorySheet>[],
     action: 'insert' | 'update' | 'delete' | 'insertQuotation' = 'insert',
     sheet: Sheet = 'INDENT'
 ) {

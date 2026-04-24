@@ -712,7 +712,7 @@ export default () => {
                                                             <SelectTrigger className="w-full h-9"><SelectValue placeholder="Unit" /></SelectTrigger>
                                                         </FormControl>
                                                         <SelectContent>
-                                                            {['Kg', 'Pcs', 'Packets', 'Liter', 'Box'].map((u) => (
+                                                            {(options?.units || []).map((u) => (
                                                                 <SelectItem key={u} value={u}>{u}</SelectItem>
                                                             ))}
                                                         </SelectContent>

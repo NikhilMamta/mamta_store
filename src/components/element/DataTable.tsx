@@ -82,79 +82,77 @@ export default function DataTable<TData, TValue>({
                 {extraActions && extraActions}
             </div>
 
-            <div className="relative max-w-full overflow-x-auto">
+            <ScrollArea
+                className={cn('rounded-sm border h-[74dvh] w-full', className)}
+            >
                 <Table>
-                    <ScrollArea
-                        className={cn('rounded-sm border h-[74dvh] w-full', className)}
-                    >
-                        <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <TableRow key={headerGroup.id}>
-                                    {headerGroup.headers.map((header) => {
-                                        return (
-                                            <TableHead key={header.id}>
-                                                {header.isPlaceholder
-                                                    ? null
-                                                    : flexRender(
-                                                        header.column.columnDef.header,
-                                                        header.getContext()
-                                                    )}
-                                            </TableHead>
-                                        );
-                                    })}
-                                </TableRow>
-                            ))}
-                        </TableHeader>
-                        <TableBody>
-                            {dataLoading ? (
-                                Array.from({ length: 15 }).map((_, i) => (
-                                    <TableRow
-                                        key={`skeleton-${i}`}
-                                        className="p-1 hover:bg-transparent"
-                                    >
-                                        {columns.map((_, j) => (
-                                            <TableCell key={`skeleton-cell-${j}`}>
-                                                <Skeleton className="h-4 w-full" />
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
-                                ))
-                            ) : table.getRowModel().rows?.length ? (
-                                table.getRowModel().rows.map((row) => (
-                                    <TableRow
-                                        key={row.id}
-                                        data-state={row.getIsSelected() && 'selected'}
-                                        className="p-1"
-                                    >
-                                        {row.getVisibleCells().map((cell) => (
-                                            <TableCell key={cell.id}>
-                                                {flexRender(
-                                                    cell.column.columnDef.cell,
-                                                    cell.getContext()
+                    <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
+                        {table.getHeaderGroups().map((headerGroup) => (
+                            <TableRow key={headerGroup.id}>
+                                {headerGroup.headers.map((header) => {
+                                    return (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder
+                                                ? null
+                                                : flexRender(
+                                                    header.column.columnDef.header,
+                                                    header.getContext()
                                                 )}
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow className="hover:bg-transparent">
-                                    <TableCell
-                                        colSpan={columns.length}
-                                        className="h-50 text-center text-xl"
-                                    >
-                                        <div className="flex flex-col justify-center items-center w-full gap-1">
-                                            <Package className="text-gray-400" size={50} />
-                                            <p className="text-muted-foreground font-semibold">
-                                                No Indents Found.
-                                            </p>
-                                        </div>
-                                    </TableCell>
+                                        </TableHead>
+                                    );
+                                })}
+                            </TableRow>
+                        ))}
+                    </TableHeader>
+                    <TableBody>
+                        {dataLoading ? (
+                            Array.from({ length: 15 }).map((_, i) => (
+                                <TableRow
+                                    key={`skeleton-${i}`}
+                                    className="p-1 hover:bg-transparent"
+                                >
+                                    {columns.map((_, j) => (
+                                        <TableCell key={`skeleton-cell-${j}`}>
+                                            <Skeleton className="h-4 w-full" />
+                                        </TableCell>
+                                    ))}
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </ScrollArea>
+                            ))
+                        ) : table.getRowModel().rows?.length ? (
+                            table.getRowModel().rows.map((row) => (
+                                <TableRow
+                                    key={row.id}
+                                    data-state={row.getIsSelected() && 'selected'}
+                                    className="p-1"
+                                >
+                                    {row.getVisibleCells().map((cell) => (
+                                        <TableCell key={cell.id}>
+                                            {flexRender(
+                                                cell.column.columnDef.cell,
+                                                cell.getContext()
+                                            )}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow className="hover:bg-transparent">
+                                <TableCell
+                                    colSpan={columns.length}
+                                    className="h-50 text-center text-xl"
+                                >
+                                    <div className="flex flex-col justify-center items-center w-full gap-1">
+                                        <Package className="text-gray-400" size={50} />
+                                        <p className="text-muted-foreground font-semibold">
+                                            No Indents Found.
+                                        </p>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
                 </Table>
-            </div>
+            </ScrollArea>
         </div>
     );
 }

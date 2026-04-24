@@ -305,7 +305,11 @@ const routes: RouteAttributes[] = [
     },
 ];
 
-createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root')!;
+const root = (window as any)._root || createRoot(rootElement);
+(window as any)._root = root;
+
+root.render(
     <StrictMode>
         <AuthProvider>
             <BrowserRouter>
