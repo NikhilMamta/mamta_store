@@ -58,7 +58,8 @@ const toSnakeCase = (obj: any): any => {
                 const snakeKey = key
                     .replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
                     // Automatically add underscore for numbered fields like planned1 -> planned_1, planned5 -> planned_5
-                    .replace(/(planned)(\d)/g, '$1_$2')
+                    // BUT skip planned2 because in the DB it's 'planned2' (no underscore)
+                    .replace(/(planned)([13456789])/g, '$1_$2')
                     .replace(/(actual)(\d)/g, '$1_$2');
                 
                 let value = obj[key];

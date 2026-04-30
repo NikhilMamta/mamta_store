@@ -236,36 +236,55 @@ export default () => {
             const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
             const simpleDate = `${day}/${month}/${year}`;
 
+            // 1. Identify all unique Indent Numbers from selected rows
+            const selectedIndentNos = new Set<string>();
+            selectedRows.forEach(rowIndexStr => {
+                const row = tableData.find(r => String(r.rowIndex) === rowIndexStr);
+                if (row?.indentNo) selectedIndentNos.add(row.indentNo);
+            });
+
             const indentUpdates: any[] = [];
             const approvedRecords: any[] = [];
 
-            Array.from(selectedRows).forEach(rowIndexStr => {
-                const id = rowIndexStr;
-                const update = bulkUpdates.get(id);
-                const originalSheet = indentSheet.find(s => String((s as any).rowIndex) === id);
-
-                if (!originalSheet || !update) return;
-
-                // 1. Prepare Update for INDENT table
-                indentUpdates.push({
-                    rowIndex: (originalSheet as any).rowIndex,
-                    indentNumber: originalSheet.indentNumber,
-                    vendorType: update.vendorType || originalSheet.vendorType,
-                    approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
-                    specifications: update.specifications !== undefined ? update.specifications : originalSheet.specifications,
-                    status: 'Approved', // Set status to 'Approved' as requested
-                    actual1: formattedDate,
+            // 2. Process all rows for each selected Indent Number
+            selectedIndentNos.forEach(indentNo => {
+                // Find all rows in original sheet for this indent number
+                const allRowsForIndent = indentSheet.filter(s => s.indentNumber === indentNo);
+                
+                // Get the update info (vendorType, etc.) from the bulkUpdates map
+                // We'll look for any selected row that has this indentNo to get the update values
+                const representativeRowIndex = Array.from(selectedRows).find(idx => {
+                    const r = tableData.find(tr => String(tr.rowIndex) === idx);
+                    return r?.indentNo === indentNo;
                 });
+                
+                const update = bulkUpdates.get(representativeRowIndex || "");
+                if (!update) return;
 
-                // 2. Prepare Insert for APPROVED INDENT table
-                approvedRecords.push({
-                    timestamp: formattedDate,
-                    indentNumber: originalSheet.indentNumber,
-                    vendorType: update.vendorType || 'Regular',
-                    approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
-                    delay: 'None', // Default
-                    planned2: formattedDate, // Save full time
-                    status: 'Pending',
+                allRowsForIndent.forEach(originalSheet => {
+                    const rowIndex = (originalSheet as any).rowIndex;
+                    
+                    // 1. Prepare Update for INDENT table
+                    indentUpdates.push({
+                        rowIndex: rowIndex,
+                        indentNumber: originalSheet.indentNumber,
+                        vendorType: update.vendorType || originalSheet.vendorType,
+                        approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
+                        specifications: update.specifications !== undefined ? update.specifications : originalSheet.specifications,
+                        status: 'Approved',
+                        actual1: formattedDate,
+                    });
+
+                    // 2. Prepare Insert for APPROVED INDENT table
+                    approvedRecords.push({
+                        timestamp: formattedDate,
+                        indentNumber: originalSheet.indentNumber,
+                        vendorType: update.vendorType || 'Regular',
+                        approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
+                        delay: 'None',
+                        planned2: formattedDate,
+                        status: 'Pending',
+                    });
                 });
             });
 
