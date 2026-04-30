@@ -318,7 +318,7 @@ export default () => {
 
                     const row: Partial<IndentSheet> = {
                         timestamp: timestamp,
-                        indentNumber: currentIndentNumber,
+                        indentNumber: data.products.length > 1 ? `${currentIndentNumber}/${i + 1}` : currentIndentNumber,
                         indenterName: data.indenterName || '',
                         department: product.department || '',
                         areaOfUse: product.areaOfUse || '',
@@ -589,8 +589,8 @@ export default () => {
                                                                 <Search className="mr-2 h-4 w-4 opacity-50" />
                                                                 <input placeholder="Search..." value={indentType === 'Store Out' ? searchTermCategory : searchTermGroupHead} onChange={(e) => indentType === 'Store Out' ? setSearchTermCategory(e.target.value) : setSearchTermGroupHead(e.target.value)} onKeyDown={(e) => e.stopPropagation()} className="flex h-10 w-full bg-transparent text-sm outline-none" />
                                                             </div>
-                                                            {Object.keys(options?.groupHeads || {}).filter(k => k.toLowerCase().includes(indentType === 'Store Out' ? searchTermCategory.toLowerCase() : searchTermGroupHead.toLowerCase())).map((k, i) => (
-                                                                <SelectItem key={i} value={k}>{k}</SelectItem>
+                                                            {[...new Set(Object.keys(options?.groupHeads || {}))].filter(k => k.toLowerCase().includes(indentType === 'Store Out' ? searchTermCategory.toLowerCase() : searchTermGroupHead.toLowerCase())).map((k, i) => (
+                                                                <SelectItem key={`${k}-${i}`} value={k}>{k}</SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
@@ -613,8 +613,8 @@ export default () => {
                                                                 <Search className="mr-2 h-4 w-4 opacity-50" />
                                                                 <input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => e.stopPropagation()} className="flex h-10 w-full bg-transparent text-sm outline-none" />
                                                             </div>
-                                                            {options?.departments.filter(d => d.toLowerCase().includes(searchTerm.toLowerCase())).map((d, i) => (
-                                                                <SelectItem key={i} value={d}>{d}</SelectItem>
+                                                            {[...new Set(options?.departments || [])].filter(d => d.toLowerCase().includes(searchTerm.toLowerCase())).map((d, i) => (
+                                                                <SelectItem key={`${d}-${i}`} value={d}>{d}</SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
@@ -661,8 +661,8 @@ export default () => {
                                                                         <Button type="button" size="sm" onClick={() => addNewProductLocally(index, groupHead!)}>Add</Button>
                                                                     </div>
                                                                 )}
-                                                                {productOptions.filter(p => p.toLowerCase().includes(searchTermProductName.toLowerCase())).map((p, i) => (
-                                                                    <SelectItem key={i} value={p}>{p}</SelectItem>
+                                                                {[...new Set(productOptions)].filter(p => p.toLowerCase().includes(searchTermProductName.toLowerCase())).map((p, i) => (
+                                                                    <SelectItem key={`${p}-${i}`} value={p}>{p}</SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>

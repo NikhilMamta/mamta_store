@@ -491,7 +491,7 @@ export default () => {
 
         // Get all approved indents that need vendor update
         const pendingApprovedIndents = approvedIndentSheet.filter(
-            (approved) => approved.status?.trim().toLowerCase() === 'pending'
+            (approved) => approved.status?.trim().toLowerCase() === 'pending' && approved.vendorType !== 'Three Party'
         );
 
         const pendingItems = indentSheet

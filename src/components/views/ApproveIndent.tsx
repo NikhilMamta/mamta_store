@@ -62,7 +62,7 @@ export default () => {
     const [editValues, setEditValues] = useState<Partial<HistoryData>>({});
     const [loading, setLoading] = useState(false);
     const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-    const [bulkUpdates, setBulkUpdates] = useState<Map<string, { vendorType?: string; quantity?: number }>>(new Map());
+    const [bulkUpdates, setBulkUpdates] = useState<Map<string, { vendorType?: string; quantity?: number; specifications?: string }>>(new Map());
     const [submitting, setSubmitting] = useState(false);
 
     // Fetching table data
@@ -175,7 +175,7 @@ export default () => {
 
     const handleBulkUpdate = (
         identifier: string, // now represents rowIndex
-        field: 'vendorType' | 'quantity',
+        field: 'vendorType' | 'quantity' | 'specifications',
         value: string | number
     ) => {
         setBulkUpdates((prevUpdates) => {
@@ -198,13 +198,19 @@ export default () => {
                         }
                     });
                 }
-            } else {
-                // value is number here
+            } else if (field === 'quantity') {
                 const qtyValue = value as number;
                 const currentUpdate = newUpdates.get(identifier) || {};
                 newUpdates.set(identifier, {
                     ...currentUpdate,
                     quantity: qtyValue,
+                });
+            } else if (field === 'specifications') {
+                const specValue = value as string;
+                const currentUpdate = newUpdates.get(identifier) || {};
+                newUpdates.set(identifier, {
+                    ...currentUpdate,
+                    specifications: specValue,
                 });
             }
 
@@ -246,6 +252,7 @@ export default () => {
                     indentNumber: originalSheet.indentNumber,
                     vendorType: update.vendorType || originalSheet.vendorType,
                     approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
+                    specifications: update.specifications !== undefined ? update.specifications : originalSheet.specifications,
                     status: 'Approved', // Set status to 'Approved' as requested
                     actual1: formattedDate,
                 });
@@ -258,6 +265,7 @@ export default () => {
                     approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
                     delay: 'None', // Default
                     planned2: formattedDate, // Save full time
+                    status: 'Pending',
                 });
             });
 
@@ -410,6 +418,7 @@ export default () => {
                     approvedQuantity: editValues.approvedQuantity !== undefined ? editValues.approvedQuantity : (currentRow?.approvedQuantity || 0),
                     delay: 'None',
                     planned2: formattedDate, // Save full time
+                    status: 'Pending',
                 }], 'insert', 'APPROVED INDENT');
             }
                 
@@ -468,6 +477,7 @@ export default () => {
                 approvedQuantity: update.quantity !== undefined ? update.quantity : indent.quantity,
                 delay: 'None',
                 planned2: formattedDate, // Save full time
+                status: 'Pending',
             }], 'insert', 'APPROVED INDENT');
 
             toast.success(`Indent ${indent.indentNo} approved!`);
@@ -677,36 +687,28 @@ export default () => {
         {
             accessorKey: 'specifications',
             header: 'Specifications',
-            cell: ({ row, getValue }) => {
-                const [value, setValue] = useState(getValue() as string);
-                const indentNo = row.original.indentNo;
+            cell: ({ row }: { row: Row<ApproveTableData> }) => {
+                const indent = row.original;
+                const identifier = String(indent.rowIndex);
+                const isSelected = selectedRows.has(identifier);
+                const currentValue = bulkUpdates.get(identifier)?.specifications || indent.specifications;
 
-                const handleBlur = async () => {
-                    try {
-                        await postToSheet(
-                            indentSheet
-                                .filter((s) => s.indentNumber === indentNo)
-                                .map((prev) => ({
-                                    rowIndex: (prev as any).rowIndex,
-                                    indentNumber: prev.indentNumber,
-                                    specifications: value,
-                                })),
-                            'update'
-                        );
-                        toast.success(`Updated specifications for ${indentNo}`);
-                        updateIndentSheet();
-                    } catch {
-                        toast.error('Failed to update specifications');
-                    }
-                };
+                const [localValue, setLocalValue] = useState(currentValue || '');
+
+                useEffect(() => {
+                    setLocalValue(currentValue || '');
+                }, [currentValue]);
 
                 return (
-                    <div className="max-w-[120px] sm:max-w-[150px]">
+                    <div className="max-w-[120px] sm:max-w-[150px]" onClick={(e) => e.stopPropagation()}>
                         <Input
-                            value={value}
-                            onChange={(e) => setValue(e.target.value)}
-                            onBlur={handleBlur}
-                            className="border-none focus:border-1 text-xs sm:text-sm"
+                            value={localValue}
+                            onChange={(e) => setLocalValue(e.target.value)}
+                            onBlur={(e) => {
+                                handleBulkUpdate(identifier, 'specifications', e.target.value);
+                            }}
+                            disabled={!isSelected}
+                            className={`border-none focus:border-1 text-xs sm:text-sm ${!isSelected ? 'opacity-50' : ''}`}
                             placeholder="Add specs..."
                         />
                     </div>
@@ -744,26 +746,7 @@ export default () => {
             ),
             size: 100,
         },
-        {
-            id: 'actions',
-            header: 'Actions',
-            cell: ({ row }: { row: Row<ApproveTableData> }) => {
-                const isSelected = selectedRows.has(String(row.original.rowIndex));
-                return (
-                    <div onClick={(e) => e.stopPropagation()}>
-                        <Button 
-                            size="sm" 
-                            variant="default"
-                            disabled={!isSelected || submitting}
-                            onClick={() => handleSingleRowUpdate(row.original)}
-                        >
-                            Update
-                        </Button>
-                    </div>
-                );
-            },
-            size: 100,
-        }
+
     ], [selectedRows, bulkUpdates, submitting, user.indentApprovalAction]);
 
     // History columns with mobile responsiveness
@@ -1020,10 +1003,27 @@ export default () => {
                 <TabsContent value="pending" className="w-full">
                     <div className="space-y-4">
                         {selectedRows.size > 0 && (
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 sm:p-4 bg-primary/10 rounded-lg gap-2 sm:gap-0 border border-primary/20">
-                                <span className="text-sm font-medium">
-                                    {selectedRows.size} row(s) selected for update
-                                </span>
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 sm:p-4 bg-primary/10 rounded-lg gap-2 sm:gap-4 border border-primary/20">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 w-full">
+                                    <span className="text-sm font-medium whitespace-nowrap">
+                                        {selectedRows.size} row(s) selected
+                                    </span>
+                                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                                        <span className="text-xs text-muted-foreground whitespace-nowrap">Set all to:</span>
+                                        <Select onValueChange={(val) => {
+                                            selectedRows.forEach(id => handleBulkUpdate(id, 'vendorType', val));
+                                        }}>
+                                            <SelectTrigger className="w-full sm:w-[150px] h-9 text-xs">
+                                                <SelectValue placeholder="Select Type" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Regular">Regular</SelectItem>
+                                                <SelectItem value="Three Party">Three Party</SelectItem>
+                                                <SelectItem value="Reject">Reject</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
                                 <Button
                                     onClick={handleSubmitBulkUpdates}
                                     disabled={submitting}

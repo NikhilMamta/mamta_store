@@ -83,46 +83,19 @@ export default () => {
             return;
         }
 
-        // PENDING TAB: Show data from vendor_rate_update table where status = 'Pending'
-        // AND approved_indent table has vendor_type = 'Three Party'
-        const pendingVendorUpdates = vendorRateUpdateSheet.filter(
-            (vru) => vru.status?.trim().toLowerCase() === 'pending'
+        const pendingApprovedIndents = approvedIndentSheet.filter(
+            (ai) => ai.vendorType?.trim() === 'Three Party' && ai.status?.trim() === 'Pending'
         );
 
-        const threePartyApprovedIndents = approvedIndentSheet.filter(
-            (ai) => ai.vendorType?.trim().toLowerCase() === 'three party'
-        );
-
-        console.log('RateApproval Debug:', {
-            totalIndents: indentSheet.length,
-            pendingVendorUpdates: pendingVendorUpdates.length,
-            threePartyApprovedIndents: threePartyApprovedIndents.length
-        });
+        const pendingIndentNumbers = new Set(pendingApprovedIndents.map(ai => ai.indentNumber));
 
         const pendingItems = indentSheet
-            .filter((sheet) => {
-                // Check if indent has vendor_type = 'Three Party' in approved_indent
-                const isThreeParty = threePartyApprovedIndents.some(
-                    (ai) => ai.indentNumber === sheet.indentNumber
-                );
-                
-                // Check if indent exists in vendor_rate_update with status = 'Pending'
-                const hasPendingUpdate = pendingVendorUpdates.some(
-                    (vru) => vru.indentNumber === sheet.indentNumber
-                );
-                
-                // Also check if the indent itself has Three Party vendor type
-                const indentIsThreeParty = sheet.vendorType?.trim().toLowerCase() === 'three party';
-                
-                return (hasPendingUpdate && isThreeParty) || indentIsThreeParty;
-            })
+            .filter((sheet) => pendingIndentNumbers.has(sheet.indentNumber))
             .map((sheet) => {
-                // Find matching vendor rate update record
-                const vendorUpdate = pendingVendorUpdates.find(
-                    (vru) => vru.indentNumber === sheet.indentNumber
+                const vendorUpdate = vendorRateUpdateSheet.find(
+                    (vru) => vru.indentNumber === sheet.indentNumber && vru.status?.trim().toLowerCase() === 'pending'
                 );
 
-                // Use vendor data from vendor_rate_update if available, otherwise fallback to indent sheet
                 return {
                     rowIndex: (sheet as any).rowIndex,
                     indentNo: sheet.indentNumber,
