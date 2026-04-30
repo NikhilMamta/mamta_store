@@ -904,7 +904,7 @@ import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Input } from '../ui/input';
-import { postToSheet, uploadFile } from '@/lib/fetchers';
+import { postToSheet, uploadFile, uploadFileToSupabase } from '@/lib/fetchers';
 import type { ReceivedSheet } from '@/types';
 import { Truck } from 'lucide-react';
 import { Tabs, TabsContent } from '../ui/tabs';
@@ -949,7 +949,7 @@ interface HistoryData {
 }
 
 export default () => {
-    const { indentSheet, receivedSheet, updateAll, indentLoading, receivedLoading } = useSheets();
+    const { indentSheet, receivedSheet, poApprovalSheet, poHistorySheet, updateAll, indentLoading, receivedLoading, poApprovalLoading } = useSheets();
     const { user } = useAuth();
 
     const [tableData, setTableData] = useState<RecieveItemsData[]>([]);
@@ -960,23 +960,29 @@ export default () => {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const filteredIndents = indentSheet.filter(
-            (i) => i.planned5 !== '' && i.actual5 === ''
+        // Show items from PO APPROVAL table where status is 'Pending'
+        const filteredIndents = poApprovalSheet.filter(
+            (i) => i.status === 'Pending'
         );
 
         const grouped = filteredIndents.reduce((acc: { [key: string]: RecieveItemsData }, i) => {
-            const poNumber = i.poNumber;
+            // Find full details from poHistorySheet or indentSheet
+            const indentDetail = indentSheet.find(indent => indent.indentNumber === i.indentNumber);
+            const poHistoryDetail = poHistorySheet.find(history => history.indentNumber === i.indentNumber);
+            
+            const poNumber = poHistoryDetail?.poNumber || 'N/A';
+            
             if (!acc[poNumber]) {
                 acc[poNumber] = {
                     indentNumber: i.indentNumber,
-                    poNumber: i.poNumber,
-                    uom: i.uom,
-                    poCopy: i.poCopy,
-                    vendor: i.approvedVendorName,
-                    quantity: i.qty || i.approvedQuantity,
-                    poDate: i.actual4,
-                    product: i.productName,
-                    searialNumber: i.searialNumber,
+                    poNumber: poNumber,
+                    uom: indentDetail?.uom || '',
+                    poCopy: poHistoryDetail?.pdf || '',
+                    vendor: poHistoryDetail?.partyName || '',
+                    quantity: indentDetail?.qty || indentDetail?.approvedQuantity || indentDetail?.quantity || 0,
+                    poDate: poHistoryDetail?.timestamp || '',
+                    product: indentDetail?.productName || '',
+                    searialNumber: indentDetail?.searialNumber,
                     _count: 1
                 };
             } else {
@@ -986,7 +992,7 @@ export default () => {
         }, {});
 
         setTableData(Object.values(grouped).reverse());
-    }, [indentSheet]);
+    }, [poApprovalSheet, indentSheet, poHistorySheet]);
 
     useEffect(() => {
         setHistoryData(
@@ -1235,21 +1241,29 @@ export default () => {
     useEffect(() => {
         if (selectedIndent) {
             // Filter from indentSheet to get ALL products in the PO that are pending
-            const matching: RecieveItemsData[] = indentSheet
+            // Filter from poApprovalSheet to get items in this PO
+            const matching: RecieveItemsData[] = poApprovalSheet
                 .filter(
-                    (i) => i.poNumber === selectedIndent.poNumber && i.planned5 !== '' && i.actual5 === ''
+                    (i) => {
+                        const history = poHistorySheet.find(h => h.indentNumber === i.indentNumber);
+                        return history?.poNumber === selectedIndent.poNumber && i.status === 'Pending';
+                    }
                 )
-                .map((i) => ({
-                    indentNumber: i.indentNumber,
-                    poNumber: i.poNumber,
-                    uom: i.uom,
-                    poCopy: i.poCopy,
-                    vendor: i.approvedVendorName,
-                    quantity: i.qty || i.approvedQuantity,
-                    poDate: i.actual4,
-                    product: i.productName,
-                    searialNumber: i.searialNumber,
-                }));
+                .map((i) => {
+                    const indent = indentSheet.find(indent => indent.indentNumber === i.indentNumber);
+                    const history = poHistorySheet.find(h => h.indentNumber === i.indentNumber);
+                    return {
+                        indentNumber: i.indentNumber,
+                        poNumber: history?.poNumber || '',
+                        uom: indent?.uom || '',
+                        poCopy: history?.pdf || '',
+                        vendor: history?.partyName || '',
+                        quantity: indent?.qty || indent?.approvedQuantity || indent?.quantity || 0,
+                        poDate: history?.timestamp || '',
+                        product: indent?.productName || '',
+                        searialNumber: indent?.searialNumber,
+                    };
+                });
 
             setMatchingIndents(matching);
 
@@ -1275,23 +1289,36 @@ export default () => {
     // Updated onSubmit
     async function onSubmit(values: z.infer<typeof schema>) {
         try {
-            // Photo of bill upload
+            // Photo of bill upload to Supabase
             let billPhotoUrl = '';
             if (values.photoOfBill !== undefined) {
-                billPhotoUrl = await uploadFile(
-                    values.photoOfBill,
-                    import.meta.env.VITE_BILL_PHOTO_FOLDER
-                );
+                try {
+                    billPhotoUrl = await uploadFileToSupabase(
+                        values.photoOfBill,
+                        'bill' // Supabase bucket name
+                    );
+                } catch (err) {
+                    console.error('Error uploading bill photo to Supabase:', err);
+                    // Continue without photo or throw? Let's throw for now as per user's "failed" report
+                    throw new Error('Failed to upload bill photo');
+                }
             }
 
             const rows: Partial<ReceivedSheet>[] = values.items.map((item) => {
                 const match = matchingIndents.find(i =>
                     i.searialNumber ? String(i.searialNumber) === String(item.searialNumber) : i.indentNumber === item.indentNumber
                 );
+                
+                // Format poDate: Ensure it's a valid date or null for Postgres
+                let pDate = selectedIndent?.poDate;
+                if (!pDate || pDate === '' || pDate === 'N/A') {
+                    pDate = null as any;
+                }
+
                 return {
-                    timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+                    timestamp: new Date().toISOString(),
                     indentNumber: item.indentNumber,
-                    poDate: selectedIndent?.poDate,
+                    poDate: pDate,
                     poNumber: selectedIndent?.poNumber,
                     vendor: selectedIndent?.vendor,
                     receivedStatus: values.status,
@@ -1301,6 +1328,8 @@ export default () => {
                     billAmount: values.billAmount,
                     photoOfBill: billPhotoUrl,
                     searialNumber: item.searialNumber,
+                    planned6: formatDate(new Date()), // Defaulting to current date
+                    status: 'Pending' 
                 };
             });
 
@@ -1308,7 +1337,7 @@ export default () => {
             // Insert in RECEIVED sheet
             await postToSheet(rows, 'insert', 'RECEIVED');
 
-            // Update each indent
+            // Update each indent and PO APPROVAL status
             for (const item of values.items) {
                 const indentToUpdate = indentSheet.find(
                     (s) => s.searialNumber ? String(s.searialNumber) === String(item.searialNumber) : s.indentNumber === item.indentNumber
@@ -1321,16 +1350,26 @@ export default () => {
                         actual5: formatDate(new Date()),
                         receiveStatus: values.status,
                     };
-
                     await postToSheet([updatePayload], 'update', 'INDENT');
+
+                    // Update PO APPROVAL table status to 'Received'
+                    const approvalToUpdate = poApprovalSheet.find(a => a.indentNumber === item.indentNumber);
+                    if (approvalToUpdate) {
+                        const approvalUpdate = {
+                            id: approvalToUpdate.id,
+                            status: 'Approved'
+                        };
+                        await postToSheet([approvalUpdate], 'update', 'PO APPROVAL');
+                    }
                 }
             }
 
             toast.success(`Items received for PO ${selectedIndent?.poNumber}`);
             setOpenDialog(false);
             setTimeout(() => updateAll(), 1000);
-        } catch {
-            toast.error('Failed to receive items');
+        } catch (error) {
+            console.error('Submission error in ReceiveItems:', error);
+            toast.error('Failed to receive items. Check console for details.');
         }
     }
 
@@ -1356,7 +1395,7 @@ export default () => {
                             data={tableData}
                             columns={columns}
                             searchFields={['product', 'department', 'indenter', 'vendorType']}
-                            dataLoading={indentLoading}
+                            dataLoading={poApprovalLoading}
                             extraActions={
                                 <Button
                                     variant="default"
@@ -1554,7 +1593,6 @@ export default () => {
                                                                             type="number"
                                                                             className="h-8"
                                                                             placeholder="Qty"
-                                                                            max={indent.quantity}
                                                                             disabled={status !== 'Received'}
                                                                             {...field}
                                                                         />

@@ -31,6 +31,7 @@ interface DataTableProps<TData, TValue> {
     children?: ReactNode;
     className?: string;
     extraActions?: ReactNode;
+    onRowClick?: (row: TData) => void;
 }
 
 function globalFilterFn<TData>(row: TData, columnIds: string[], filterValue: string) {
@@ -50,6 +51,7 @@ export default function DataTable<TData, TValue>({
     children: _children, // <-- underscore avoids TS unused variable error
     className,
     extraActions,
+    onRowClick,
 }: DataTableProps<TData, TValue>) {
     const [globalFilter, setGlobalFilter] = useState('');
     const table = useReactTable({
@@ -70,16 +72,14 @@ export default function DataTable<TData, TValue>({
         <div className="p-5 grid gap-4">
             <div className="flex justify-between items-center w-full gap-3">
                 {searchFields.length !== 0 && (
-                    <div className="flex items-center w-full">
-                        <Input
-                            placeholder={`Search...`}
-                            value={globalFilter}
-                            onChange={(e) => setGlobalFilter(e.target.value)}
-                            className="w-230"
-                        />
-                    </div>
+                    <Input
+                        placeholder={`Search...`}
+                        value={globalFilter}
+                        onChange={(e) => setGlobalFilter(e.target.value)}
+                        className="max-w-sm"
+                    />
                 )}
-                {extraActions && extraActions}
+                {extraActions && <div className="ml-auto">{extraActions}</div>}
             </div>
 
             <ScrollArea
@@ -123,7 +123,8 @@ export default function DataTable<TData, TValue>({
                                 <TableRow
                                     key={row.id}
                                     data-state={row.getIsSelected() && 'selected'}
-                                    className="p-1"
+                                    className={cn('p-1', onRowClick && 'cursor-pointer hover:bg-muted/50')}
+                                    onClick={() => onRowClick?.(row.original)}
                                 >
                                     {row.getVisibleCells().map((cell) => (
                                         <TableCell key={cell.id}>

@@ -152,22 +152,7 @@ export default () => {
         return `SI-${String(nextNumber).padStart(4, '0')}`;
     };
 
-    const getNextIssueNumber = () => {
-        if (!storeOutSheet || storeOutSheet.length === 0) {
-            return 'IS-001';
-        }
 
-        const issueNumbers = storeOutSheet
-            .map(row => (row as any)['Issue No'] || row.issueNo || (row as any).issueNumber || (row as any).indentNumber)
-            .filter(num => num && typeof num === 'string' && num.startsWith('IS-'))
-            .map(num => parseInt(num.replace('IS-', ''), 10))
-            .filter(num => !isNaN(num));
-
-        const maxNumber = Math.max(...issueNumbers, 0);
-        const nextNumber = maxNumber + 1;
-
-        return `IS-${String(nextNumber).padStart(3, '0')}`;
-    };
 
 
     // Better approach using image tag
@@ -240,7 +225,7 @@ export default () => {
             if (data.indentType === 'Store Out') {
                 // STORE OUT sheet submission
                 const storeOutRows: Partial<StoreOutSheet>[] = [];
-                let currentIssueNumber = getNextIssueNumber();
+
 
                 for (let i = 0; i < data.products.length; i++) {
                     const product = data.products[i];
@@ -278,44 +263,37 @@ export default () => {
                     // };
 
 
-                    // Using camelCase keys that backend expects
+                    // Using camelCase keys that backend expects for store_out_request
                     const storeOutRow: any = {
                         timestamp: timestamp,
-                        issueNo: currentIssueNumber,
                         issueDate: product.issueDate ? formatDate(new Date(product.issueDate)) : issueDate,
                         indenterName: data.indenterName || '',
                         indentType: data.indentType || 'Store Out',
                         approvalNeeded: data.indentApproveBy || '',
-                        requestedBy: data.indenterName || '', // Default to indenterName
-                        floor: '',
+                        requestedBy: data.indenterName || '',
+                        floor: product.floor || '',
                         wardName: product.wardName || '',
                         qty: Number(product.quantity) || 0,
                         unit: product.uom || '',
                         department: product.department || '',
                         category: product.category || '',
-                        groupHead: product.category || '', // Guess for Column T
-                        groupOfHead: product.category || '', // Another guess for Column T
                         areaOfUse: product.areaOfUse || '',
-                        productName: product.productName || '',
-                        planned: '',  // Empty for now, will be filled during approval
-                        actual: '',   // Empty for now, will be filled during approval
-                        timeDelay: '',
-                        status: '',
-                        approveQty: ''
+                        planned7: timestamp, // planned_7 in SQL
+                        status: 'Pending'
                     };
 
 
                     storeOutRows.push(storeOutRow);
                 }
 
-                console.log("=== FINAL ALIGNED PAYLOAD ===");
+                console.log("=== STORE OUT REQUEST SUBMISSION ===");
                 console.log(JSON.stringify(storeOutRows, null, 2));
 
-                const res = await postToSheet(storeOutRows, 'insert', 'STORE OUT');
+                const res = await postToSheet(storeOutRows, 'insert', 'STORE OUT REQUEST');
                 console.log("Response:", res);
 
                 if (res.success) {
-                    toast.success(`Store Out created! Issue No: ${storeOutRows.map(r => r.issueNo).join(', ')}`);
+                    toast.success('Store Out created successfully!');
 
                     // Submit custom ward names to MASTER Column R if any
                     for (const product of data.products) {
@@ -352,6 +330,8 @@ export default () => {
                         indentApprovedBy: data.indentApproveBy || '',
                         indentType: data.indentType || 'Purchase',
                         attachment: '',
+                        planned1: timestamp,
+                        status: 'Pending',
                     };
 
                     if (product.attachment !== undefined) {

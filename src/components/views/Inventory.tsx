@@ -40,7 +40,7 @@ interface InventoryTable {
     approved: number;
     purchaseQuantity: number;
     outQuantity: number;
-    current: number;
+    currentStock: number;
     totalPrice: number;
 }
 
@@ -60,19 +60,18 @@ export default () => {
     useEffect(() => {
         setTableData(
             inventorySheet.map((i) => ({
-                totalPrice: i.totalPrice,
-                approvedIndents: i.approved,
-                uom: i.uom,
-                rate: i.individualRate,
-                current: i.current,
-                status: i.colorCode,
-                indented: i.indented,
-                opening: i.opening,
-                itemName: i.itemName,
-                groupHead: i.groupHead,
-                purchaseQuantity: i.purchaseQuantity,
-                approved: i.approved,
-                outQuantity: i.outQuantity,
+                totalPrice: i.totalPrice || 0,
+                uom: i.uom || '',
+                rate: i.individualRate || 0,
+                currentStock: i.currentStock || 0,
+                status: i.colorCode || '',
+                indented: i.indented || 0,
+                opening: i.opening || 0,
+                itemName: i.itemName || '',
+                groupHead: i.groupHead || '',
+                purchaseQuantity: i.purchaseQuantity || 0,
+                approved: i.approved || 0,
+                outQuantity: i.outQuantity || 0,
             }))
             .reverse()
         );
@@ -100,8 +99,8 @@ export default () => {
             accessorKey: 'status',
             header: 'Status',
             cell: ({ row }) => {
-                const code = row.original.status.toLowerCase();
-                if (row.original.current === 0) {
+                const code = row.original.status?.toLowerCase() || '';
+                if (row.original.currentStock === 0) {
                     return <Pill variant="reject">Out of Stock</Pill>;
                 }
                 if (code === 'red') {
@@ -117,7 +116,7 @@ export default () => {
         { accessorKey: 'approved', header: 'Approved' },
         { accessorKey: 'purchaseQuantity', header: 'Purchased' },
         { accessorKey: 'outQuantity', header: 'Issued' },
-        { accessorKey: 'current', header: 'Quantity' },
+        { accessorKey: 'currentStock', header: 'Quantity' },
         {
             accessorKey: 'totalPrice',
             header: 'Total Price',
@@ -161,6 +160,7 @@ export default () => {
                         itemName: formData.itemName,                       // Col B
                         uom: formData.uom,                                 // Col C
                         opening: parseFloat(formData.opening as any) || 0, // Col E
+                        currentStock: parseFloat(formData.opening as any) || 0, // Initial current stock = opening
                     },
                 ],
                 'insert',

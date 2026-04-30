@@ -5,10 +5,34 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: Date): string {
-    const d = date.getDate().toString().padStart(2, '0');
-    const m = (date.getMonth() + 1).toString().padStart(2, '0'); // months are 0-based
-    const y = date.getFullYear();
+export function formatDate(date: Date | string | number | null | undefined): string {
+    if (!date) return '';
+
+    let dObj: Date;
+
+    if (date instanceof Date) {
+        dObj = date;
+    } else if (typeof date === 'string') {
+        // Handle DD/MM/YYYY or DD-MM-YYYY formats specifically
+        const parts = date.split(/[-/]/);
+        // If it looks like DD/MM/YYYY
+        if (parts.length === 3 && parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            dObj = new Date(year, month, day);
+        } else {
+            dObj = new Date(date);
+        }
+    } else {
+        dObj = new Date(date);
+    }
+
+    if (isNaN(dObj.getTime())) return typeof date === 'string' ? date : '';
+
+    const d = dObj.getDate().toString().padStart(2, '0');
+    const m = (dObj.getMonth() + 1).toString().padStart(2, '0'); // months are 0-based
+    const y = dObj.getFullYear();
     return `${d}/${m}/${y}`;
 }
 

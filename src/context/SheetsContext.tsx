@@ -1,5 +1,6 @@
 import { fetchSheet } from '@/lib/fetchers';
 import type { IndentSheet, InventorySheet, MasterSheet, PoMasterSheet, ReceivedSheet, StoreOutSheet } from '@/types';
+import type { ApprovedIndentSheet, VendorRateUpdateSheet, ThreePartyApprovalSheet, PoApprovalSheet } from '@/types/sheets';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -8,6 +9,11 @@ interface SheetsState {
     updatePoMasterSheet: () => void;
     updateIndentSheet: () => void;
     updateStoreOutSheet: () => void;
+    updateApprovedIndentSheet: () => void;
+    updateVendorRateUpdateSheet: () => void;
+    updateThreePartyApprovalSheet: () => void;
+    updatePoHistorySheet: () => void;
+    updatePoApprovalSheet: () => void;
     updateAll: () => void;
 
     indentSheet: IndentSheet[];
@@ -15,6 +21,11 @@ interface SheetsState {
     poMasterSheet: PoMasterSheet[];
     receivedSheet: ReceivedSheet[];
     inventorySheet: InventorySheet[];
+    approvedIndentSheet: ApprovedIndentSheet[];
+    vendorRateUpdateSheet: VendorRateUpdateSheet[];
+    threePartyApprovalSheet: ThreePartyApprovalSheet[];
+    poHistorySheet: PoHistorySheet[];
+    poApprovalSheet: PoApprovalSheet[];
     masterSheet: MasterSheet | undefined;
 
     indentLoading: boolean;
@@ -22,6 +33,11 @@ interface SheetsState {
     poMasterLoading: boolean;
     receivedLoading: boolean;
     inventoryLoading: boolean;
+    approvedIndentLoading: boolean;
+    vendorRateUpdateLoading: boolean;
+    threePartyApprovalLoading: boolean;
+    poHistoryLoading: boolean;
+    poApprovalLoading: boolean;
     allLoading: boolean;
 }
 
@@ -33,6 +49,12 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
     const [receivedSheet, setReceivedSheet] = useState<ReceivedSheet[]>([]);
     const [poMasterSheet, setPoMasterSheet] = useState<PoMasterSheet[]>([]);
     const [inventorySheet, setInventorySheet] = useState<InventorySheet[]>([]);
+    const [approvedIndentSheet, setApprovedIndentSheet] = useState<ApprovedIndentSheet[]>([]);
+    const [vendorRateUpdateSheet, setVendorRateUpdateSheet] = useState<VendorRateUpdateSheet[]>([]);
+    const [threePartyApprovalSheet, setThreePartyApprovalSheet] = useState<ThreePartyApprovalSheet[]>([]);
+    const [poHistorySheet, setPoHistorySheet] = useState<PoHistorySheet[]>([]);
+    const [poApprovalSheet, setPoApprovalSheet] = useState<PoApprovalSheet[]>([]);
+    const [storeOutApprovalSheet, setStoreOutApprovalSheet] = useState<any[]>([]);
     const [masterSheet, setMasterSheet] = useState<MasterSheet>();
 
     const [indentLoading, setIndentLoading] = useState(true);
@@ -40,6 +62,12 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
     const [poMasterLoading, setPoMasterLoading] = useState(true);
     const [receivedLoading, setReceivedLoading] = useState(true);
     const [inventoryLoading, setInventoryLoading] = useState(true);
+    const [approvedIndentLoading, setApprovedIndentLoading] = useState(true);
+    const [vendorRateUpdateLoading, setVendorRateUpdateLoading] = useState(true);
+    const [threePartyApprovalLoading, setThreePartyApprovalLoading] = useState(true);
+    const [poHistoryLoading, setPoHistoryLoading] = useState(true);
+    const [poApprovalLoading, setPoApprovalLoading] = useState(true);
+    const [storeOutApprovalLoading, setStoreOutApprovalLoading] = useState(true);
     const [allLoading, setAllLoading] = useState(true);
 
     function updateIndentSheet() {
@@ -52,7 +80,7 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
 
     function updateStoreOutSheet() {
         setStoreOutLoading(true);
-        fetchSheet('STORE OUT').then((res) => {
+        fetchSheet('STORE OUT APPROVAL').then((res) => {
             setStoreOutSheet(res as any as StoreOutSheet[]);
             setStoreOutLoading(false);
         });
@@ -80,6 +108,55 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
             setInventoryLoading(false);
         });
     }
+
+    function updateApprovedIndentSheet() {
+        setApprovedIndentLoading(true);
+        fetchSheet('APPROVED INDENT').then((res) => {
+            setApprovedIndentSheet(res as ApprovedIndentSheet[]);
+            setApprovedIndentLoading(false);
+        });
+    }
+    
+    function updateVendorRateUpdateSheet() {
+        setVendorRateUpdateLoading(true);
+        fetchSheet('VENDOR RATE UPDATE').then((res) => {
+            setVendorRateUpdateSheet(res as VendorRateUpdateSheet[]);
+            setVendorRateUpdateLoading(false);
+        });
+    }
+    
+    function updateThreePartyApprovalSheet() {
+        setThreePartyApprovalLoading(true);
+        fetchSheet('THREE PARTY APPROVAL').then((res) => {
+            setThreePartyApprovalSheet(res as ThreePartyApprovalSheet[]);
+            setThreePartyApprovalLoading(false);
+        });
+    }
+
+    function updatePoHistorySheet() {
+        setPoHistoryLoading(true);
+        fetchSheet('PO HISTORY').then((res) => {
+            setPoHistorySheet(res as PoHistorySheet[]);
+            setPoHistoryLoading(false);
+        });
+    }
+
+    function updatePoApprovalSheet() {
+        setPoApprovalLoading(true);
+        fetchSheet('PO APPROVAL').then((res) => {
+            setPoApprovalSheet(res as PoApprovalSheet[]);
+            setPoApprovalLoading(false);
+        });
+    }
+
+    function updateStoreOutApprovalSheet() {
+        setStoreOutApprovalLoading(true);
+        fetchSheet('STORE OUT REQUEST').then((res) => {
+            setStoreOutApprovalSheet(res as any[]);
+            setStoreOutApprovalLoading(false);
+        });
+    }
+    
     function updateMasterSheet() {
         fetchSheet('MASTER').then((res) => {
             setMasterSheet(res as MasterSheet);
@@ -94,6 +171,12 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
         updateStoreOutSheet();
         updatePoMasterSheet();
         updateInventorySheet();
+        updateApprovedIndentSheet();
+        updateVendorRateUpdateSheet();
+        updateThreePartyApprovalSheet();
+        updatePoHistorySheet();
+        updatePoApprovalSheet();
+        updateStoreOutApprovalSheet();
         setAllLoading(false);
     }
 
@@ -114,18 +197,36 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
                 updateStoreOutSheet,
                 updatePoMasterSheet,
                 updateReceivedSheet,
+                updateApprovedIndentSheet,
+                updateVendorRateUpdateSheet,
+                updateThreePartyApprovalSheet,
+                updatePoHistorySheet,
+                updatePoApprovalSheet,
+                updateStoreOutApprovalSheet,
                 updateAll,
                 indentSheet,
                 storeOutSheet,
                 poMasterSheet,
-                inventorySheet,
                 receivedSheet,
+                storeOutApprovalSheet,
+                inventorySheet,
+                approvedIndentSheet,
+                vendorRateUpdateSheet,
+                threePartyApprovalSheet,
+                poHistorySheet,
+                poApprovalSheet,
+                masterSheet,
                 indentLoading,
                 storeOutLoading,
-                masterSheet,
                 poMasterLoading,
                 receivedLoading,
+                storeOutApprovalLoading,
                 inventoryLoading,
+                approvedIndentLoading,
+                vendorRateUpdateLoading,
+                threePartyApprovalLoading,
+                poHistoryLoading,
+                poApprovalLoading,
                 allLoading,
             }}
         >

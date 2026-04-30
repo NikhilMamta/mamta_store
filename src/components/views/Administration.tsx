@@ -1,16 +1,10 @@
-import { Eye, EyeClosed, MoreHorizontal, Pencil, ShieldUser, Trash, UserPlus } from 'lucide-react';
+import { Eye, EyeClosed, Pencil, ShieldUser, Trash, UserPlus, Lock, Shield, Layout, ClipboardList, ShoppingCart, Truck, Package, Key } from 'lucide-react';
 import Heading from '../element/Heading';
 import { useEffect, useState } from 'react';
 import { fetchSheet, postToSheet } from '@/lib/fetchers';
 import { allPermissionKeys, type UserPermissions } from '@/types/sheets';
 import type { ColumnDef } from '@tanstack/react-table';
 import DataTable from '../element/DataTable';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
 import { Button } from '../ui/button';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -21,6 +15,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from '../ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
 import { PuffLoader as Loader } from 'react-spinners';
 import { z } from 'zod';
@@ -37,47 +38,70 @@ interface UsersTableData {
     name: string;
     password: string;
     permissions: string[];
-    rowIndex: number;
+    id?: number;
 }
 
 function camelToTitleCase(str: string): string {
     return str
-        .replace(/([a-z])([A-Z])/g, '$1 $2') // insert space before capitals
-        .replace(/^./, (char) => char.toUpperCase()); // capitalize first letter
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/^./, (char) => char.toUpperCase());
 }
+
+const PERMISSION_GROUPS = [
+    {
+        name: 'General',
+        icon: <Layout size={16} />,
+        keys: ['dashboard', 'inventory', 'administrate']
+    },
+    {
+        name: 'Indent Management',
+        icon: <ClipboardList size={16} />,
+        keys: ['createIndent', 'allIndent', 'indentApprovalView', 'indentApprovalAction', 'pendingIndentsView']
+    },
+    {
+        name: 'Purchase (PO)',
+        icon: <ShoppingCart size={16} />,
+        keys: ['createPo', 'poMaster', 'ordersView', 'getPurchase', 'quotation']
+    },
+    {
+        name: 'Vendor & Quality',
+        icon: <Shield size={16} />,
+        keys: ['updateVendorView', 'updateVendorAction', 'threePartyApprovalView', 'threePartyApprovalAction']
+    },
+    {
+        name: 'Store & Logistic',
+        icon: <Truck size={16} />,
+        keys: ['receiveItemView', 'receiveItemAction', 'storeOutApprovalView', 'storeOutApprovalAction']
+    },
+    {
+        name: 'Utilities',
+        icon: <Key size={16} />,
+        keys: ['trainingVideo', 'license']
+    }
+];
 
 export default () => {
     const { user: currentUser } = useAuth();
-
     const [tableData, setTableData] = useState<UsersTableData[]>([]);
     const [dataLoading, setDataLoading] = useState(true);
     const [openDialog, setOpenDialog] = useState(false);
     const [selectedUser, setSelectedUser] = useState<UsersTableData | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
-    useEffect(() => {
-        if (!openDialog) {
-            setSelectedUser(null);
-        }
-    }, [openDialog]);
-
     function fetchUser() {
         setDataLoading(true);
         fetchSheet('USER').then((res) => {
             setTableData(
-                (res as UserPermissions[]).map((user) => {
-                    const permissionKeys = Object.keys(user).filter(
-                        (key): key is keyof UserPermissions =>
-                            !['username', 'password', 'name', 'rowIndex'].includes(key) &&
-                            user[key as keyof UserPermissions] === true
+                (res as any[]).map((user) => {
+                    const permissionKeys = allPermissionKeys.filter(
+                        (key) => user[key] === true || user[key] === 'TRUE'
                     );
-
                     return {
                         username: user.username,
                         name: user.name,
                         password: user.password,
-                        permissions: permissionKeys,
-                        rowIndex: user.rowIndex,
+                        permissions: permissionKeys as string[],
+                        id: user.id,
                     };
                 })
             );
@@ -90,214 +114,198 @@ export default () => {
     }, []);
 
     const columns: ColumnDef<UsersTableData>[] = [
+        { 
+            accessorKey: 'name', 
+            header: 'Full Name',
+            cell: ({ row }) => (
+                <div className="flex items-center gap-2">
+                    <span className="font-medium">{row.original.name}</span>
+                    {row.original.username === 'admin' && <Pill className="bg-primary/10 text-primary border-primary/20">Admin</Pill>}
+                </div>
+            )
+        },
         { accessorKey: 'username', header: 'Username' },
-        { accessorKey: 'name', header: 'Name' },
         {
             accessorKey: 'permissions',
             header: 'Permissions',
             cell: ({ row }) => {
                 const permissions = row.original.permissions;
                 return (
-                    <div className="grid place-items-center">
-                        <div className="flex flex-wrap gap-1">
-                            {permissions.slice(0, 2).map((perm, i) => (
-                                <Pill key={i}>{camelToTitleCase(perm)}</Pill>
-                            ))}
-                            {permissions.length > 2 && (
-                                <HoverCard>
-                                    <HoverCardTrigger>
-                                        <Pill>...</Pill>
-                                    </HoverCardTrigger>
-                                    <HoverCardContent className="min-w-4 max-w-100 flex flex-wrap gap-1 bg-background">
-                                        {permissions.map((perm, i) => (
-                                            <Pill key={i}>{camelToTitleCase(perm)}</Pill>
-                                        ))}
-                                    </HoverCardContent>
-                                </HoverCard>
-                            )}
-                        </div>
+                    <div className="flex flex-wrap gap-1">
+                        {permissions.slice(0, 3).map((perm, i) => (
+                            <Pill key={i}>{camelToTitleCase(perm)}</Pill>
+                        ))}
+                        {permissions.length > 3 && (
+                            <HoverCard>
+                                <HoverCardTrigger>
+                                    <Pill className="cursor-pointer bg-muted text-muted-foreground">+{permissions.length - 3} more</Pill>
+                                </HoverCardTrigger>
+                                <HoverCardContent className="w-80 flex flex-wrap gap-1 p-3">
+                                    {permissions.map((perm, i) => (
+                                        <Pill key={i}>{camelToTitleCase(perm)}</Pill>
+                                    ))}
+                                </HoverCardContent>
+                            </HoverCard>
+                        )}
                     </div>
                 );
             },
         },
         {
             id: 'actions',
+            header: 'Actions',
             cell: ({ row }) => {
                 const user = row.original;
                 return (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            asChild
-                            disabled={
-                                user.username === 'admin' || user.username === currentUser.username
-                            }
+                    <div className="flex items-center gap-2">
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 px-2 flex items-center gap-1"
+                            onClick={() => {
+                                setSelectedUser(user);
+                                setOpenDialog(true);
+                            }}
                         >
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                <span className="sr-only">Open menu</span>
-                                <MoreHorizontal className="h-6 w-6" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    setSelectedUser(user);
-                                    setOpenDialog(true);
-                                }}
-                            >
-                                <Pencil /> Edit Permissions
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={async () => {
-                                    try {
-                                        if (user.username === 'admin') {
-                                            throw new Error();
-                                        }
-                                        await postToSheet(
-                                            [{ rowIndex: user.rowIndex }],
-                                            'delete',
-                                            'USER'
-                                        );
-                                        toast.success(`Deleted ${user.name} successfully`);
-                                        setTimeout(fetchUser, 1000);
-                                    } catch {
-                                        toast.error('Failed to delete user');
-                                    }
-                                }}
-                            >
-                                <Trash className="text-destructive" /> Delete User
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                            <Pencil size={14} /> Edit
+                        </Button>
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
+                            disabled={user.username === 'admin'}
+                            onClick={async () => {
+                                if (confirm(`Delete ${user.name}?`)) {
+                                    await postToSheet([{ id: user.id }], 'delete', 'USER');
+                                    fetchUser();
+                                }
+                            }}
+                        >
+                            <Trash size={14} />
+                        </Button>
+                    </div>
                 );
             },
         },
     ];
 
     const schema = z.object({
-        name: z.string().nonempty(),
-        username: z.string().nonempty(),
-        password: z.string().nonempty(),
+        name: z.string().min(2),
+        username: z.string().min(3),
+        password: z.string().min(4),
+        role: z.enum(['Admin', 'User']).default('User'),
         permissions: z.array(z.string()),
     });
 
-    const form = useForm({ resolver: zodResolver(schema) });
+    const form = useForm({ 
+        resolver: zodResolver(schema),
+        defaultValues: { name: '', username: '', password: '', role: 'User', permissions: [] }
+    });
+
+    const selectedRole = form.watch('role');
+    useEffect(() => {
+        if (selectedRole === 'Admin') {
+            form.setValue('permissions', [...allPermissionKeys]);
+        }
+    }, [selectedRole, form]);
 
     useEffect(() => {
         if (selectedUser) {
+            const isAdmin = selectedUser.permissions.length === allPermissionKeys.length;
             form.reset({
                 username: selectedUser.username,
                 name: selectedUser.name,
                 password: selectedUser.password,
+                role: isAdmin ? 'Admin' : 'User',
                 permissions: selectedUser.permissions,
             });
-            return;
+        } else {
+            form.reset({ name: '', username: '', password: '', role: 'User', permissions: [] });
         }
-        form.reset();
-    }, [selectedUser]);
+    }, [selectedUser, form]);
 
     async function onSubmit(value: z.infer<typeof schema>) {
-        if (
-            tableData.map((d) => d.username).includes(value.username) &&
-            value.username !== selectedUser?.username
-        ) {
-            toast.error('Username already exists');
-            return;
-        }
-        if (selectedUser) {
-            try {
-                const row: Partial<UserPermissions> = {
-                    rowIndex: selectedUser.rowIndex,
-                    username: value.username,
-                    name: value.name,
-                    password: value.password,
-                };
-
-                allPermissionKeys.forEach((perm) => {
-                    row[perm] = value.permissions.includes(perm);
-                });
-
-                await postToSheet([row], 'update', 'USER');
-                setOpenDialog(false);
-                setTimeout(fetchUser, 1000);
-                toast.success('Updated user settings');
-            } catch {
-                toast.error('Failed to update user settings');
-            }
-            return;
-        }
+        const isEdit = !!selectedUser;
         try {
-            const row: Partial<UserPermissions> = {
+            const row: any = {
                 username: value.username,
                 name: value.name,
                 password: value.password,
             };
+            if (isEdit) row.id = selectedUser!.id;
 
+            // Set all permission flags (true/false)
             allPermissionKeys.forEach((perm) => {
                 row[perm] = value.permissions.includes(perm);
             });
 
-            await postToSheet([row], 'insert', 'USER');
+            await postToSheet([row], isEdit ? 'update' : 'insert', 'USER');
+
+            toast.success(isEdit ? `✅ ${value.name} updated successfully` : `✅ ${value.name} created successfully`);
             setOpenDialog(false);
-            setTimeout(fetchUser, 1000);
-            toast.success('Created user successfully');
-        } catch {
-            toast.error('Failed to update user settings');
+            form.reset({ name: '', username: '', password: '', role: 'User', permissions: [] });
+            setSelectedUser(null);
+
+            // Small delay to allow Supabase to commit before re-fetching
+            setTimeout(() => fetchUser(), 800);
+        } catch (error) {
+            console.error('User save error:', error);
+            toast.error('❌ Failed to save user. Please try again.');
         }
     }
 
-    function onError(e: any) {
-        console.log(e);
-        toast.error('Please fill all required fields');
-    }
     return (
-        <div>
-            <Dialog open={openDialog} onOpenChange={(open) => setOpenDialog(open)}>
-                <div>
-                    <Heading
-                        heading="Administration"
-                        subtext="Manage permissions and user for the app"
-                    >
-                        <ShieldUser size={50} className="text-primary" />
-                    </Heading>
+        <div className="space-y-6">
+            <Heading heading="Administration" subtext="User Management">
+                <ShieldUser size={50} className="text-primary" />
+            </Heading>
 
-                    <DataTable
-                        data={tableData}
-                        columns={columns}
-                        searchFields={['name', 'username', 'permissions']}
-                        dataLoading={dataLoading}
-                        className="h-[80dvh]"
-                    >
+            <div className="bg-card border rounded-lg overflow-hidden">
+                <DataTable
+                    data={tableData}
+                    columns={columns}
+                    searchFields={['name', 'username']}
+                    dataLoading={dataLoading}
+                    extraActions={
                         <Button
-                            className="h-full w-40"
+                            className="gap-2"
                             onClick={() => {
-                                setOpenDialog(true);
                                 setSelectedUser(null);
+                                setOpenDialog(true);
                             }}
                         >
-                            <UserPlus />
-                            Create User
+                            <UserPlus size={18} />
+                            Create New User
                         </Button>
-                    </DataTable>
-                </div>
+                    }
+                />
+            </div>
 
-                <DialogContent className="sm:max-w-3xl">
+            <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl flex items-center gap-2">
+                            {selectedUser ? <Pencil size={20} /> : <UserPlus size={20} />}
+                            {selectedUser ? 'Edit User Access' : 'Create New System User'}
+                        </DialogTitle>
+                    </DialogHeader>
+
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit, onError)} className="space-y-7">
-                            <DialogHeader className="space-y-1">
-                                <DialogTitle className="text-lg">
-                                    {selectedUser ? 'Edit' : 'Create'} User
-                                </DialogTitle>
-                            </DialogHeader>
-                            <div className="grid md:grid-cols-2 gap-4">
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                            <div className="grid md:grid-cols-4 gap-6">
                                 <FormField
                                     control={form.control}
-                                    name="username"
+                                    name="role"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Username</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Enter username" {...field} />
-                                            </FormControl>
+                                            <FormLabel>User Role</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="Admin">Admin (Full Access)</SelectItem>
+                                                    <SelectItem value="User">Regular User</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </FormItem>
                                     )}
                                 />
@@ -306,13 +314,18 @@ export default () => {
                                     name="name"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Name</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    placeholder="Enter name of user"
-                                                    {...field}
-                                                />
-                                            </FormControl>
+                                            <FormLabel>Full Name</FormLabel>
+                                            <FormControl><Input {...field} /></FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="username"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Username</FormLabel>
+                                            <FormControl><Input {...field} disabled={selectedUser?.username === 'admin'} /></FormControl>
                                         </FormItem>
                                     )}
                                 />
@@ -324,25 +337,9 @@ export default () => {
                                             <FormLabel>Password</FormLabel>
                                             <FormControl>
                                                 <div className="relative">
-                                                    <Input
-                                                        type={showPassword ? 'text' : 'password'}
-                                                        placeholder="Enter password"
-                                                        {...field}
-                                                    />
-                                                    <Button
-                                                        variant="ghost"
-                                                        type="button"
-                                                        className="absolute right-1 top-1/2 -translate-y-1/2 hover:bg-transparent active:bg-transparent"
-                                                        tabIndex={-1}
-                                                        onMouseDown={(e) => {
-                                                            e.preventDefault();
-                                                            setShowPassword(!showPassword);
-                                                        }}
-                                                    >
-                                                        {showPassword ? <EyeClosed /> : <Eye />}
-                                                        <span className="sr-only">
-                                                            Toggle password visibility
-                                                        </span>
+                                                    <Input type={showPassword ? 'text' : 'password'} {...field} />
+                                                    <Button variant="ghost" type="button" className="absolute right-0 top-0" onClick={() => setShowPassword(!showPassword)}>
+                                                        {showPassword ? <EyeClosed size={16} /> : <Eye size={16} />}
                                                     </Button>
                                                 </div>
                                             </FormControl>
@@ -350,71 +347,46 @@ export default () => {
                                     )}
                                 />
                             </div>
-                            <FormField
-                                control={form.control}
-                                name="permissions"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-md">Permissions</FormLabel>
-                                        <div className="grid md:grid-cols-3 gap-4 p-4 border rounded-sm">
-                                            {allPermissionKeys.map((perm) => (
-                                                <FormField
-                                                    key={perm}
-                                                    control={form.control}
-                                                    name="permissions"
-                                                    render={() => (
-                                                        <FormItem className="flex gap-2">
-                                                            <FormControl>
+
+                            <section className="space-y-4">
+                                <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground border-b pb-2">Module Access Permissions</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                                    {PERMISSION_GROUPS.map((group) => (
+                                        <div key={group.name} className="space-y-3">
+                                            <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+                                                {group.icon} {group.name}
+                                            </div>
+                                            <div className="space-y-2 pl-6">
+                                                {group.keys.map((perm) => (
+                                                    <FormField
+                                                        key={perm}
+                                                        control={form.control}
+                                                        name="permissions"
+                                                        render={({ field }) => (
+                                                            <div className="flex items-center justify-between py-1 border-b border-muted last:border-0">
+                                                                <label htmlFor={perm} className="text-xs font-medium cursor-pointer">{camelToTitleCase(perm)}</label>
                                                                 <Checkbox
                                                                     id={perm}
-                                                                    checked={field.value?.includes(
-                                                                        perm
-                                                                    )}
+                                                                    checked={field.value?.includes(perm)}
                                                                     onCheckedChange={(checked) => {
-                                                                        const values =
-                                                                            field.value || [];
-                                                                        checked
-                                                                            ? field.onChange([
-                                                                                  ...values,
-                                                                                  perm,
-                                                                              ])
-                                                                            : field.onChange(
-                                                                                  values.filter(
-                                                                                      (p) =>
-                                                                                          p !== perm
-                                                                                  )
-                                                                              );
+                                                                        const current = field.value || [];
+                                                                        field.onChange(checked ? [...current, perm] : current.filter(p => p !== perm));
                                                                     }}
                                                                 />
-                                                            </FormControl>
-                                                            <FormLabel
-                                                                className="font-light"
-                                                                htmlFor={perm}
-                                                            >
-                                                                {camelToTitleCase(perm)}
-                                                            </FormLabel>
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                            ))}
+                                                            </div>
+                                                        )}
+                                                    />
+                                                ))}
+                                            </div>
                                         </div>
-                                    </FormItem>
-                                )}
-                            />
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button variant="outline">Close</Button>
-                                </DialogClose>
+                                    ))}
+                                </div>
+                            </section>
 
+                            <DialogFooter>
+                                <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
                                 <Button type="submit" disabled={form.formState.isSubmitting}>
-                                    {form.formState.isSubmitting && (
-                                        <Loader
-                                            size={20}
-                                            color="white"
-                                            aria-label="Loading Spinner"
-                                        />
-                                    )}
-                                    {selectedUser ? 'Save' : 'Create'}
+                                    {form.formState.isSubmitting ? <Loader size={18} /> : (selectedUser ? 'Save Changes' : 'Create User Account')}
                                 </Button>
                             </DialogFooter>
                         </form>

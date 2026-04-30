@@ -77,6 +77,7 @@ function generateNextQuotationNumber(existingNumbers: string[]): string {
 
 // Updated schema - removed mandatory validations
 const quotationSchema = z.object({
+  indentNumber: z.string().optional().default(''),
   quotationNumber: z.string().optional().default(''),
   quotationDate: z.coerce.date().optional().default(new Date()),
   suppliers: z.array(z.string()).optional().default([]),
@@ -232,6 +233,7 @@ export default function QuotationPage() {
   const form = useForm<QuotationForm>({
     resolver: zodResolver(quotationSchema),
     defaultValues: {
+      indentNumber: '',
       quotationNumber: '',
       quotationDate: new Date(),
       suppliers: [],
@@ -249,16 +251,16 @@ export default function QuotationPage() {
   }, [details]);
 
 
-  // Auto-generate quotation number in create mode - FIXED
-  useEffect(() => {
-    if (mode === 'create') {
-      // Combine both sources of quotation numbers
-      const allNumbers = [...filterUniqueQuotationNumbers(poMasterSheet), ...latestQuotationNumbers];
-      const nextNumber = generateNextQuotationNumber(allNumbers);
-      form.setValue('quotationNumber', nextNumber);
-      console.log('Generated next quotation number:', nextNumber);
+  // Handle indent number selection from PO MASTER sheet
+  const handleIndentSelect = (indentNumber: string) => {
+    form.setValue('indentNumber', indentNumber);
+    
+    // Auto-fill related data from PO MASTER
+    const selectedIndent = poMasterSheet.find(item => item.internalCode === indentNumber);
+    if (selectedIndent) {
+      console.log('Auto-filled indent data:', selectedIndent);
     }
-  }, [mode, poMasterSheet, latestQuotationNumbers, form]);
+  };
 
 
   // Handle multiple supplier selection from MASTER sheet
@@ -517,6 +519,60 @@ export default function QuotationPage() {
 
                 {/* Quotation meta */}
                 <div className="grid gap-5 px-4 py-2 text-foreground/80">
+                  {/* Indent Number Dropdown from PO MASTER */}
+                  <div className="space-y-3">
+                    <FormField
+                      control={form.control}
+                      name="indentNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Indent Number (From PO MASTER)</FormLabel>
+                          <FormControl>
+                            <Select onValueChange={handleIndentSelect} value={field.value}>
+                              <SelectTrigger size="sm" className="w-full">
+                                <SelectValue placeholder="Select indent number from PO MASTER" />
+                              </SelectTrigger>
+                              <SelectContent className="z-[100] max-h-[300px]">
+                                {poMasterSheet.length === 0 ? (
+                                  <SelectItem value="no-data" disabled>
+                                    No data found in PO MASTER sheet
+                                  </SelectItem>
+                                ) : (
+                                  // Get unique indent numbers from PO MASTER
+                                  Array.from(new Set(poMasterSheet.map(item => item.internalCode))).map((indentNum, k) => (
+                                    <SelectItem key={k} value={indentNum}>
+                                      {indentNum}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Quotation Number - Manual Entry */}
+                  <div className="space-y-3">
+                    <FormField
+                      control={form.control}
+                      name="quotationNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Quotation Number (Manual Entry)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              placeholder="Enter quotation number manually" 
+                              {...field} 
+                              className="w-full"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
                   {/* Multi-Supplier Selection from MASTER sheet */}
                   <div className="space-y-3">
                     <FormField

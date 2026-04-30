@@ -19,6 +19,7 @@ import StoreOut from './components/views/StoreOut';
 import GetPurchase from './components/views/getPurchase';
 import TrainnigVideo from './components/views/TrainingVideo';
 import License from './components/views/License';
+import MasterData from './components/views/MasterData';
 import AllIndent from './components/views/AllIndent';
 import Quotation from './components/views/Quotation';
 import type { RouteAttributes } from './types';
@@ -38,6 +39,7 @@ import {
     Store,
     Video,
     KeyRound,
+    Database,
 
 } from 'lucide-react';
 import type { UserPermissions } from './types/sheets';
@@ -64,6 +66,7 @@ function GatedRoute({
     identifier?: keyof UserPermissions;
 }) {
     const { user } = useAuth();
+    if (user?.username === 'admin') return children;
     if (!identifier) return children;
 
     const permissionValue = (user as any)[identifier];
@@ -92,6 +95,7 @@ function DefaultRoute({ routes }: { routes: RouteAttributes[] }) {
     const { user } = useAuth();
 
     if (!user) return <Navigate to="/login" />;
+    if (user.username === 'admin') return <Navigate to="/dashboard" replace />;
 
     // Find first accessible route
     const firstAccessibleRoute = routes.find(route => {
@@ -148,6 +152,7 @@ const routes: RouteAttributes[] = [
     },
 
 
+/*
     {
         path: 'all-indent',
         gateKey: 'allIndent',
@@ -156,6 +161,7 @@ const routes: RouteAttributes[] = [
         element: <AllIndent />,
         notifications: () => 0,
     },
+*/
     {
         path: 'approve-indent',
         gateKey: 'indentApprovalView',
@@ -234,6 +240,7 @@ const routes: RouteAttributes[] = [
         element: <POApproval />,
         notifications: () => 0,
     },
+/*
     {
         path: 'get-purchase',
         gateKey: 'getPurchase',
@@ -242,6 +249,7 @@ const routes: RouteAttributes[] = [
         element: <GetPurchase />,
         notifications: () => 0,
     },
+*/
     {
         path: 'receive-items',
         gateKey: 'receiveItemView',
@@ -287,6 +295,14 @@ const routes: RouteAttributes[] = [
         name: 'Adminstration',
         icon: <ShieldUser size={20} />,
         element: <Administration />,
+        notifications: () => 0,
+    },
+    {
+        path: 'master-data',
+        gateKey: 'administrate',
+        name: 'Master Data',
+        icon: <Database size={20} />,
+        element: <MasterData />,
         notifications: () => 0,
     },
     {

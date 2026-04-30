@@ -20,7 +20,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
 import { Input } from '../ui/input';
 import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
-import { postToSheet } from '@/lib/fetchers';
+import { postToSheet, uploadFileToSupabase } from '@/lib/fetchers';
+import { generateStoreOutSlip } from '@/lib/pdfGenerator';
 import { PackageCheck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useAuth } from '@/context/AuthContext';
@@ -67,7 +68,7 @@ interface GroupedStoreOutData {
 }
 
 export default () => {
-    const { storeOutSheet, indentLoading, updateStoreOutSheet } = useSheets();
+    const { storeOutApprovalSheet, storeOutSheet, indentSheet, poHistorySheet, indentLoading, updateStoreOutApprovalSheet, storeOutApprovalLoading, storeOutLoading } = useSheets();
     const { user } = useAuth();
     const [selectedGroup, setSelectedGroup] = useState<GroupedStoreOutData | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutData | null>(null);
@@ -77,33 +78,33 @@ export default () => {
 
     const mapRowToTableData = (row: any): StoreOutTableData => {
         return {
-            issueNo: row.issueNo || row['Issue No'],
-            issueDate: formatDate(new Date(row.issueDate || row['Issue Date'])),
-            requestedBy: row.requestedBy || row['Requested By'],
-            department: row.department || row['Department'],
-            product: row.productName || row['Product Name'] || row['Product'] || '',
-            groupHead: row.groupOfHead || row['Group of head'] || row.groupHead || row['Group Head'] || '',
-            qty: Number(row.qty || row['Qty'] || row.quantity || 0),
-            unit: row.unit || row['Unit'],
+            issueNo: row.issueNo || row.indentNumber || 'N/A',
+            issueDate: row.issueDate || formatDate(new Date(row.timestamp)),
+            requestedBy: row.requestedBy || row.indenterName || 'N/A',
+            department: row.department || 'N/A',
+            product: row.productName || 'N/A',
+            groupHead: row.category || '',
+            qty: Number(row.qty || row.approveQty || 0),
+            unit: row.unit || '',
             status: row.status || '',
-            planned: row.planned || '',
-            actual: row.actual || '',
-            approveQty: Number(row.approveQty || 0),
-            indenterName: row.indenterName || row['Indenter Name'] || '',
-            indentType: row.indentType || row['Indent Type'] || '',
-            wardName: row.wardName || row['Ward Name'] || '',
+            planned: row.planned7 || row.planned8 || '',
+            actual: '',
+            approveQty: Number(row.qty || row.approveQty || 0),
+            indenterName: row.indenterName || '',
+            indentType: row.indentType || '',
+            wardName: row.wardName || '',
             searialNumber: row.searialNumber,
             originalRow: row
         };
     };
 
     useEffect(() => {
-        if (!storeOutSheet) return;
+        if (!storeOutApprovalSheet) return;
 
-        const allItems = storeOutSheet.map(mapRowToTableData);
-        const pendingItems = allItems.filter((row) => !row.status || (row.status !== 'Approved' && row.status !== 'Rejected'));
-        const historyItems = allItems.filter((row) => row.status === 'Approved' || row.status === 'Rejected');
-
+        const allItems = storeOutApprovalSheet.map(mapRowToTableData);
+        const pendingItems = allItems.filter((row) => row.status?.toLowerCase() === 'pending');
+        const historyItems = allItems.filter((row) => row.status?.toLowerCase() === 'approved' || row.status?.toLowerCase() === 'rejected');
+        
         const groupItems = (items: StoreOutTableData[]) => {
             return items.reduce((acc, item) => {
                 if (!acc[item.issueNo]) {
@@ -123,7 +124,7 @@ export default () => {
 
         setTableData(Object.values(groupItems(pendingItems)).reverse());
         setHistoryData(Object.values(groupItems(historyItems)).reverse());
-    }, [storeOutSheet]);
+    }, [storeOutApprovalSheet]);
 
     const onDownloadClick = async () => {
         setLoading(true);
@@ -218,7 +219,7 @@ export default () => {
                             data={tableData}
                             columns={columns}
                             searchFields={['issueNo', 'department', 'requestedBy']}
-                            dataLoading={indentLoading}
+                            dataLoading={storeOutApprovalLoading}
                             extraActions={
                                 <Button
                                     variant="default"
@@ -265,7 +266,7 @@ export default () => {
                                     items={selectedGroup.items}
                                     onSuccess={() => {
                                         setSelectedGroup(null);
-                                        setTimeout(() => updateStoreOutSheet(), 1000);
+                                        setTimeout(() => updateStoreOutApprovalSheet(), 1000);
                                     }}
                                 />
                             </div>
@@ -341,24 +342,61 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
     });
 
     const onSubmit = async (values: z.infer<typeof schema>) => {
-        const now = new Date();
-        const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-
         try {
-            const payload = values.approvals.map(appr => {
-                return {
-                    rowIndex: appr.originalRow.rowIndex,
-                    actual: formattedDate,          // Column S
-                    status: appr.status,           // Column U
-                    approveQty: appr.approveQty,   // Column V
-                };
+            // 0. Generate Store Out Slip PDF
+            const firstItem = items[0];
+            const pdfBlob = await generateStoreOutSlip({
+                issueNo: firstItem.issueNo,
+                date: formatDate(new Date()),
+                areaOfUse: firstItem.originalRow.areaOfUse || 'N/A',
+                indenterName: firstItem.indenterName,
+                department: firstItem.department,
+                wardName: firstItem.wardName,
+                category: firstItem.groupHead,
+                items: values.approvals.map(appr => ({
+                    searialNumber: appr.searialNumber,
+                    productName: appr.product,
+                    quantity: appr.approveQty,
+                    unit: appr.originalRow.uom || appr.originalRow.unit
+                })),
+                preparedBy: localStorage.getItem('userName') || 'Admin',
+                approvedBy: ''
             });
 
-            await postToSheet(payload, 'update', 'STORE OUT');
-            toast.success(`Updated ${items.length} items`);
+            // Upload PDF to Supabase 'slip' bucket
+            const fileName = `Slip_${firstItem.issueNo}_${Date.now()}.pdf`;
+            const slipUrl = await uploadFileToSupabase(pdfBlob, 'slip', fileName);
+
+            // 1. Update the status in store_out_request table (which maps to STORE_OUT_REQUEST)
+            const updatePayload = values.approvals.map(appr => ({
+                id: appr.originalRow.id,
+                status: appr.status,
+                qty: appr.approveQty,
+            }));
+
+            await postToSheet(updatePayload, 'update', 'STORE_OUT_REQUEST');
+
+            // 2. Insert into store_out_approval table for the final Store Out step
+            // Only insert if the status was Approved
+            const approvedItems = values.approvals.filter(a => a.status === 'Approved');
+            if (approvedItems.length > 0) {
+                const insertPayload = approvedItems.map(appr => ({
+                    indentNumber: appr.originalRow.indentNumber || appr.originalRow.issueNo,
+                    approveQty: appr.approveQty,
+                    slip: slipUrl,
+                    planned8: new Date().toISOString().split('T')[0], // Planned date for final store out
+                    status: 'Pending', // Status is Pending for the next stage
+                    timestamp: new Date().toISOString(),
+                    delay: 0
+                }));
+                await postToSheet(insertPayload, 'insert', 'STORE_OUT_APPROVAL');
+            }
+            
+            toast.success(`Approved ${items.length} items and generated slip`);
             onSuccess();
-        } catch (e) {
-            toast.error('Failed to update');
+        } catch (error) {
+            console.error('Approval error:', error);
+            toast.error('Failed to update approval');
         }
     };
 

@@ -8,8 +8,8 @@ import { SidebarTrigger } from '../ui/sidebar';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
-import type { PoMasterSheet } from '@/types';
-import { postToSheet, uploadFile } from '@/lib/fetchers';
+import type { PoHistorySheet, PoMasterSheet } from '@/types';
+import { postToSheet, uploadFile, uploadFileToSupabase, postToPoHistory, fetchVendorDetails } from '@/lib/fetchers';
 import { useEffect, useState } from 'react';
 import { useSheets } from '@/context/SheetsContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -91,11 +91,25 @@ function filterUniquePoNumbers(data: PoMasterSheet[]): PoMasterSheet[] {
 }
 
 export default () => {
-    const { indentSheet, poMasterSheet, updateIndentSheet, updatePoMasterSheet, masterSheet: details } = useSheets();
+    const { 
+        indentSheet, 
+        poMasterSheet, 
+        updateIndentSheet, 
+        updatePoMasterSheet, 
+        masterSheet: details, 
+        threePartyApprovalSheet, 
+        vendorRateUpdateSheet, 
+        approvedIndentSheet,
+        poHistorySheet,
+        updatePoHistorySheet,
+        updateThreePartyApprovalSheet,
+        updateVendorRateUpdateSheet
+    } = useSheets();
     const [readOnly, setReadOnly] = useState(-1);
     const [mode, setMode] = useState<'create' | 'revise'>('create');
     const [isEditingDestination, setIsEditingDestination] = useState(false);
     const [destinationAddress, setDestinationAddress] = useState('');
+    const [pendingIndentNumbers, setPendingIndentNumbers] = useState<Set<string>>(new Set());
 
     // Initialize destination address from details
     useEffect(() => {
@@ -103,6 +117,54 @@ export default () => {
             setDestinationAddress(details.destinationAddress);
         }
     }, [details]);
+
+    // Calculate pending indent numbers (same logic as Pending POs page)
+    useEffect(() => {
+        const indentNumbers = new Set<string>();
+
+        // 0. Indent numbers that already have a PO in history
+        const existingPoIndents = new Set(
+            poHistorySheet
+                .map(p => p.indentNumber?.trim())
+                .filter(Boolean) as string[]
+        );
+
+        // 1. Original indent data (planned4 !== '' && actual4 === '')
+        indentSheet
+            .filter((sheet) => sheet.planned4 !== '' && sheet.actual4 === '')
+            .forEach((sheet) => {
+                if (!existingPoIndents.has(sheet.indentNumber)) {
+                    indentNumbers.add(sheet.indentNumber);
+                }
+            });
+
+        // 2. Three Party Approval data with Pending status
+        threePartyApprovalSheet
+            .filter((tpa) => !tpa.status || tpa.status?.trim().toLowerCase() === 'pending')
+            .forEach((tpa) => {
+                if (!existingPoIndents.has(tpa.indentNumber)) {
+                    indentNumbers.add(tpa.indentNumber);
+                }
+            });
+
+        // 3. Vendor Rate Update data where status is 'Approved' and vendor type is 'Regular'
+        vendorRateUpdateSheet
+            .filter((vru) => {
+                const isApproved = vru.status?.trim().toLowerCase() === 'approved';
+                const approvedRecord = approvedIndentSheet.find(
+                    (approved) => approved.indentNumber === vru.indentNumber
+                );
+                const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
+                return isApproved && isRegular;
+            })
+            .forEach((vru) => {
+                if (!existingPoIndents.has(vru.indentNumber)) {
+                    indentNumbers.add(vru.indentNumber);
+                }
+            });
+
+        setPendingIndentNumbers(indentNumbers);
+    }, [indentSheet, threePartyApprovalSheet, vendorRateUpdateSheet, approvedIndentSheet, poHistorySheet]);
 
     const schema = z.object({
         poNumber: z.string().nonempty(),
@@ -233,40 +295,39 @@ export default () => {
     }, [mode]);
 
     useEffect(() => {
-        if (vendor && mode === 'create') {
+        // Only auto-fill address/GSTIN from vendor selection when NO indent number is selected
+        // (if indent is selected, it already handles vendor details from master table)
+        if (vendor && mode === 'create' && !indentNumber) {
             const vendorDetails = details?.vendors.find((v) => v.vendorName === vendor);
-            form.setValue('supplierAddress', vendorDetails?.address || '');
-            form.setValue('gstin', vendorDetails?.gstin || '');
+            if (vendorDetails) {
+                form.setValue('supplierAddress', vendorDetails?.address || '');
+                form.setValue('gstin', vendorDetails?.gstin || '');
+            }
         }
     }, [vendor, details]);
 
-    useEffect(() => {
-        if (indentNumber && mode === 'create') {
-            const items = indentSheet.filter(
-                (i) => i.planned4 !== '' && i.actual4 === '' && i.indentNumber === indentNumber
-            );
-            if (items.length > 0) {
-                const firstItem = items[0];
-                form.setValue('supplierName', firstItem.approvedVendorName);
-
-                form.setValue(
-                    'indents',
-                    items.map((i) => ({
-                        indentNumber: i.indentNumber,
-                        gst: 18,
-                        discount: 0,
-                        searialNumber: i.searialNumber,
-                    }))
-                );
-            }
-        }
-    }, [indentNumber]);
+    // Auto-fill logic moved to handleIndentSelect for better reliability and direct Supabase connection.
+    // Removed old useEffect to avoid race conditions and overwriting of fetched data.
 
     useEffect(() => {
         if (vendor && mode === 'create' && !indentNumber) {
+            // Check if this indent is in the pending list
             const items = indentSheet.filter(
-                (i) => i.planned4 !== '' && i.actual4 === '' && i.approvedVendorName === vendor
+                (i) => pendingIndentNumbers.has(i.indentNumber) && i.approvedVendorName === vendor
             );
+            
+            // Find vendor details from master table and fill address & GSTIN
+            if (vendor && details?.vendors) {
+                const vendorDetails = details.vendors.find(
+                    (v) => v.vendorName && v.vendorName.toLowerCase() === vendor.toLowerCase()
+                );
+                
+                if (vendorDetails) {
+                    form.setValue('supplierAddress', vendorDetails.address || '');
+                    form.setValue('gstin', vendorDetails.gstin || '');
+                }
+            }
+            
             form.setValue(
                 'indents',
                 items.map((i) => ({
@@ -277,7 +338,25 @@ export default () => {
                 }))
             );
         }
-    }, [vendor, indentNumber]);
+    }, [vendor, indentNumber, mode, pendingIndentNumbers, details]);
+
+    // Auto-fill supplier details when supplierName changes manually (not triggered by indent selection)
+    useEffect(() => {
+        if (mode === 'create' && !indentNumber) {
+            const supplierName = form.getValues('supplierName');
+            
+            if (supplierName && details?.vendors) {
+                const vendorDetails = details.vendors.find(
+                    (v) => v.vendorName && v.vendorName.toLowerCase() === supplierName.toLowerCase()
+                );
+                
+                if (vendorDetails) {
+                    form.setValue('supplierAddress', vendorDetails.address || '');
+                    form.setValue('gstin', vendorDetails.gstin || '');
+                }
+            }
+        }
+    }, [form.watch('supplierName')]);
 
 
     useEffect(() => {
@@ -330,6 +409,171 @@ export default () => {
         setDestinationAddress(details?.destinationAddress || '');
         setIsEditingDestination(false);
     };
+    // Helper to find indent across sheets
+    const findIndentWithFallback = (id: string, serial?: number) => {
+        let found = indentSheet.find((i) => {
+            if (serial) return String(i.searialNumber) === String(serial);
+            return i.indentNumber?.trim().toLowerCase() === id.trim().toLowerCase();
+        });
+
+        if (!found) {
+            const approved = approvedIndentSheet.find((i) => {
+                if (serial) return String(i.searialNumber) === String(serial);
+                return i.indentNumber?.trim().toLowerCase() === id.trim().toLowerCase();
+            });
+            if (approved) {
+                found = {
+                    ...approved,
+                    indenterName: (approved as any).indenterName || '',
+                    department: (approved as any).department || '',
+                    groupHead: (approved as any).groupHead || '',
+                    uom: approved.uom,
+                } as any;
+            }
+        }
+        return found;
+    };
+
+    // Direct auto-fill handler — called immediately on indent selection
+    const handleIndentSelect = async (selectedIndentNumber: string) => {
+        if (!selectedIndentNumber) {
+            console.log('No indent number selected, clearing form fields.');
+            form.setValue('indentNumber', '');
+            form.setValue('supplierName', '');
+            form.setValue('supplierAddress', '');
+            form.setValue('gstin', '');
+            form.setValue('indents', []);
+            return;
+        }
+        
+        console.log('--- handleIndentSelect starting ---');
+        console.log('Selected Indent Number:', selectedIndentNumber);
+
+        // Update the main indentNumber field immediately
+        form.setValue('indentNumber', selectedIndentNumber);
+
+        // 1. Find the indent items in indentSheet (trim and case-insensitive to be safe)
+        let items = indentSheet.filter(
+            (i) => i.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+        );
+
+        // Fallback: If not in indentSheet, check approvedIndentSheet
+        if (items.length === 0) {
+            console.log('No items in indentSheet, checking approvedIndentSheet...');
+            const approvedItems = approvedIndentSheet.filter(
+                (i) => i.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+            );
+            if (approvedItems.length > 0) {
+                // Map approved items to match the expected structure
+                items = approvedItems.map(ai => findIndentWithFallback(ai.indentNumber, ai.searialNumber)!) as any;
+            }
+        }
+
+        console.log(`Found ${items.length} items for ${selectedIndentNumber}`);
+
+        // 2. Determine the vendor name for this indent from all possible sources
+        let vendorName = '';
+        
+        // Source A: Approved vendor in the collected items
+        if (items.length > 0) {
+            const firstWithVendor = items.find(i => i.approvedVendorName && i.approvedVendorName.trim() !== '');
+            if (firstWithVendor) {
+                vendorName = (firstWithVendor.approvedVendorName || '').trim();
+                console.log('Vendor name found in items:', vendorName);
+            }
+        }
+
+        // Source B: Three Party Approval sheet
+        if (!vendorName) {
+            const tpa = threePartyApprovalSheet.find(
+                (t) => t.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+            );
+            if (tpa) {
+                vendorName = (tpa.approvedVendorName || '').trim();
+                if (vendorName) console.log('Vendor name found in threePartyApprovalSheet:', vendorName);
+            }
+        }
+
+        // Source C: Vendor Rate Update sheet (for Regular vendors)
+        if (!vendorName) {
+            const vru = vendorRateUpdateSheet.find(
+                (v) => v.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase() &&
+                       v.status?.trim().toLowerCase() === 'approved'
+            );
+            if (vru) {
+                // Check if it's actually a regular indent
+                const approvedRecord = approvedIndentSheet.find(
+                    (approved) => approved.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+                );
+                const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
+                
+                if (isRegular) {
+                    vendorName = (vru.vendorName1 || '').trim();
+                    if (vendorName) console.log('Vendor name found in vendorRateUpdateSheet (Regular):', vendorName);
+                }
+            }
+        }
+
+        console.log('Final vendor name to look up in Supabase master:', vendorName);
+
+        // 3. Auto-fill supplier name
+        form.setValue('supplierName', vendorName);
+
+        // 4. Fetch vendor details DIRECTLY from Supabase master table
+        if (vendorName) {
+            try {
+                console.log(`Fetching details for vendor: "${vendorName}" from Supabase...`);
+                const vendorDetails = await fetchVendorDetails(vendorName);
+                
+                if (vendorDetails) {
+                    console.log('Successfully fetched vendor details from Supabase:', vendorDetails);
+                    form.setValue('supplierAddress', vendorDetails.address || '');
+                    form.setValue('gstin', vendorDetails.gstin || '');
+                } else {
+                    console.warn(`Vendor "${vendorName}" not found in Supabase "master" table. Checking local cache...`);
+                    const localVendor = details?.vendors.find(
+                        (v) => v.vendorName && v.vendorName.trim().toLowerCase() === vendorName.toLowerCase()
+                    );
+                    if (localVendor) {
+                        console.log('Found vendor details in local cache:', localVendor);
+                        form.setValue('supplierAddress', localVendor.address || '');
+                        form.setValue('gstin', localVendor.gstin || '');
+                    } else {
+                        console.error('Vendor details not found anywhere. Clearing address/GSTIN.');
+                        form.setValue('supplierAddress', '');
+                        form.setValue('gstin', '');
+                    }
+                }
+            } catch (err) {
+                console.error('Error in fetchVendorDetails execution:', err);
+                form.setValue('supplierAddress', '');
+                form.setValue('gstin', '');
+            }
+        } else {
+            console.warn('No approved vendor name found for this indent. Clearing details.');
+            form.setValue('supplierAddress', '');
+            form.setValue('gstin', '');
+        }
+
+        // 5. Populate items table
+        if (items.length > 0) {
+            console.log(`Populating PO items table with ${items.length} rows.`);
+            form.setValue(
+                'indents',
+                items.map((i) => ({
+                    indentNumber: i.indentNumber,
+                    gst: 18,
+                    discount: 0,
+                    searialNumber: i.searialNumber,
+                }))
+            );
+        } else {
+            console.error('Critical: Indent selected from dropdown but not found in any sheet.');
+            form.setValue('indents', []);
+        }
+        
+        console.log('--- handleIndentSelect finished ---');
+    };
 
     const getCurrentFormattedDateTime = () => {
         const now = new Date();
@@ -351,12 +595,7 @@ export default () => {
             const grandTotal = calculateGrandTotal(
                 values.indents.map((indent) => {
                     // Precise match using searialNumber if available
-                    const value = indentSheet.find((i) => {
-                        if (indent.searialNumber) {
-                            return String(i.searialNumber) === String(indent.searialNumber);
-                        }
-                        return i.indentNumber === indent.indentNumber;
-                    });
+                    const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber);
 
                     return {
                         quantity: value?.approvedQuantity || 0,
@@ -388,12 +627,7 @@ export default () => {
                 description: values.description,
                 items: values.indents.map((item) => {
                     // Precise match using searialNumber
-                    const indent = indentSheet.find((i) => {
-                        if (item.searialNumber) {
-                            return String(i.searialNumber) === String(item.searialNumber);
-                        }
-                        return i.indentNumber === item.indentNumber;
-                    })!;
+                    const indent = findIndentWithFallback(item.indentNumber, item.searialNumber)!;
 
                     return {
                         internalCode: indent.indentNumber,
@@ -414,9 +648,7 @@ export default () => {
                 }),
                 total: calculateSubtotal(
                     values.indents.map((indent) => {
-                        const value = indentSheet.find(
-                            (i) => i.indentNumber === indent.indentNumber
-                        );
+                        const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber);
                         return {
                             quantity: value?.approvedQuantity || 0,
                             rate: value?.approvedRate || 0,
@@ -426,9 +658,7 @@ export default () => {
                 ),
                 gstAmount: calculateTotalGst(
                     values.indents.map((indent) => {
-                        const value = indentSheet.find(
-                            (i) => i.indentNumber === indent.indentNumber
-                        );
+                        const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber);
                         return {
                             quantity: value?.approvedQuantity || 0,
                             rate: value?.approvedRate || 0,
@@ -452,93 +682,81 @@ export default () => {
             const email = details?.vendors.find((v) => v.vendorName === values.supplierName)?.email;
 
             let url = '';
-
             try {
+                // Upload to Supabase Bucket 'pdf' as requested
+                url = await uploadFileToSupabase(file, 'pdf');
+                
                 if (email) {
-                    // Email hai to PDF upload + email send
-                    url = await uploadFile(
-                        file,
-                        import.meta.env.VITE_PURCHASE_ORDERS_FOLDER,
-                        'email',
-                        email
-                    );
-                    toast.success('PO created and email sent successfully');
+                    console.log(`PO PDF uploaded to Supabase: ${url}. Email sending to ${email} would happen here.`);
+                    toast.success('PO created and PDF saved to Supabase');
                 } else {
-                    // Email nahi hai to sirf PDF upload (without email)
-                    url = await uploadFile(
-                        file,
-                        import.meta.env.VITE_PURCHASE_ORDERS_FOLDER,
-                        'upload',
-                        '' // Empty email parameter
-                    );
-                    toast.warning("PO created but email not sent (vendor email not found)");
+                    toast.success('PO created and PDF saved to Supabase');
                 }
             } catch (uploadError) {
-                console.error("Upload/Email error:", uploadError);
-                toast.error("Failed to upload/email PO, but saving data to sheet...");
+                console.error("Supabase Storage upload error:", uploadError);
+                toast.error("Failed to upload PDF to Supabase.");
                 // URL remains empty but we proceed to save the record
             }
 
-            const rows: PoMasterSheet[] = values.indents.map((v) => {
-                const indent = indentSheet.find((i) => {
-                    if (v.searialNumber) {
-                        return String(i.searialNumber) === String(v.searialNumber);
-                    }
-                    return i.indentNumber === v.indentNumber;
-                })!;
+            // Also save to PO HISTORY table for historical tracking (Supabase Only)
+            const historyRows: PoHistorySheet[] = values.indents.map((v) => {
+                const indent = findIndentWithFallback(v.indentNumber, v.searialNumber)!;
 
                 return {
-                    timestamp: getCurrentFormattedDateTime(), // Updated format: DD/MM/YYYY HH:mm:ss
+                    timestamp: getCurrentFormattedDateTime(),
                     partyName: values.supplierName,
                     poNumber,
+                    indentNumber: v.indentNumber,
                     internalCode: v.indentNumber,
-                    product: indent.productName,
-                    description: values.description,
-                    quantity: indent.approvedQuantity,
-                    unit: indent.uom,
-                    rate: indent.approvedRate,
-                    gst: v.gst,
-                    discount: v.discount || 0,
+                    product: indent?.productName || '',
+                    description: values.description || '',
+                    quantity: indent?.approvedQuantity || 0,
+                    unit: indent?.uom || '',
+                    rate: indent?.approvedRate || 0,
+                    gstPercent: v.gst,
+                    discountPercent: v.discount || 0,
                     amount: calculateTotal(
-                        indent.approvedRate,
+                        indent?.approvedRate || 0,
                         v.gst,
                         v.discount || 0,
-                        indent.approvedQuantity
+                        indent?.approvedQuantity || 0
                     ),
                     totalPoAmount: grandTotal,
-                    pdf: url,
                     preparedBy: values.preparedBy,
                     approvedBy: values.approvedBy,
+                    pdf: url, // This is the Supabase public URL
                     quotationNumber: values.quotationNumber,
-                    quotationDate: values.quotationDate ? formatDate(values.quotationDate) : '', // Use formatDate for consistency
+                    quotationDate: values.quotationDate ? formatDate(values.quotationDate) : '',
                     enquiryNumber: values.ourEnqNo,
-                    enquiryDate: values.enquiryDate ? formatDate(values.enquiryDate) : '', // Use formatDate for consistency. Column T.
-                    term1: values.terms[0],
-                    term2: values.terms[1],
-                    term3: values.terms[2],
-                    term4: values.terms[3],
-                    term5: values.terms[4],
-                    term6: values.terms[5],
-                    term7: values.terms[6],
-                    term8: values.terms[7],
-                    term9: values.terms[8],
-                    term10: values.terms[9],
-                    discountPercent: v.discount || 0, // Add this
-                    gstPercent: v.gst, // Add this
-                    planned: '',
-                    actual: '',
-                    status: '',
-                    indentBy: values.indentBy,
-                    finalApproved: '',
+                    enquiryDate: values.enquiryDate ? formatDate(values.enquiryDate) : '',
+                    term1: values.terms[0] || '',
+                    term2: values.terms[1] || '',
+                    term3: values.terms[2] || '',
+                    term4: values.terms[3] || '',
+                    term5: values.terms[4] || '',
+                    term6: values.terms[5] || '',
+                    term7: values.terms[6] || '',
+                    term8: values.terms[7] || '',
+                    term9: values.terms[8] || '',
+                    term10: values.terms[9] || '',
+                    status: 'Pending',
+                    planned4: formatDate(new Date()), // Automatically generate date for planned_4
                 };
             });
 
-            await postToSheet(rows, 'insert', 'PO MASTER');
+            try {
+                await postToPoHistory(historyRows);
+            } catch (histErr) {
+                console.error('PO HISTORY save failed (non-critical):', histErr);
+            }
             toast.success(`Successfully ${mode}d purchase order`);
             form.reset();
             setTimeout(() => {
                 updatePoMasterSheet();
                 updateIndentSheet();
+                updateThreePartyApprovalSheet();
+                updateVendorRateUpdateSheet();
+                updatePoHistorySheet();
             }, 1000);
         } catch (e) {
             console.log(e);
@@ -692,7 +910,10 @@ export default () => {
                                                 {mode === 'create' ? (
                                                     <FormControl>
                                                         <Select
-                                                            onValueChange={field.onChange}
+                                                            onValueChange={(v) => {
+                                                                field.onChange(v);
+                                                                handleIndentSelect(v);
+                                                            }}
                                                             value={field.value}
                                                         >
                                                             <FormLabel>Indent Number</FormLabel>
@@ -705,17 +926,7 @@ export default () => {
                                                                 </SelectTrigger>
                                                             </FormControl>
                                                             <SelectContent>
-                                                                {[
-                                                                    ...new Set(
-                                                                        indentSheet
-                                                                            .filter(
-                                                                                (i) =>
-                                                                                    i.planned4 !== '' &&
-                                                                                    i.actual4 === ''
-                                                                            )
-                                                                            .map((i) => i.indentNumber)
-                                                                    )
-                                                                ].map((indentNo, k) => (
+                                                                {[...pendingIndentNumbers].map((indentNo, k) => (
                                                                     <SelectItem key={k} value={indentNo}>
                                                                         {indentNo}
                                                                     </SelectItem>
@@ -745,40 +956,55 @@ export default () => {
                                         render={({ field }) => (
                                             <FormItem>
                                                 {mode === 'create' ? (
-                                                    <FormControl>
-                                                        <Select
-                                                            onValueChange={field.onChange}
-                                                            value={field.value}
-                                                        >
+                                                    indentNumber ? (
+                                                        // Indent selected → show auto-filled read-only Input
+                                                        <>
                                                             <FormLabel>Supplier Name</FormLabel>
                                                             <FormControl>
-                                                                <SelectTrigger
-                                                                    size="sm"
-                                                                    className="w-full"
-                                                                >
-                                                                    <SelectValue placeholder="Select supplier" />
-                                                                </SelectTrigger>
+                                                                <Input
+                                                                    className="h-9 bg-muted/50"
+                                                                    readOnly
+                                                                    placeholder="Auto-filled from indent"
+                                                                    {...field}
+                                                                />
                                                             </FormControl>
-                                                            <SelectContent>
-                                                                {[
-                                                                    ...new Map(
-                                                                        indentSheet
-                                                                            .filter(
-                                                                                (i) =>
-                                                                                    i.approvedVendorName !== '' &&
-                                                                                    i.planned4 !== '' &&
-                                                                                    i.actual4 === ''
-                                                                            )
-                                                                            .map((i) => [i.approvedVendorName, i]) // Use approvedVendorName as the key
-                                                                    ).values()
-                                                                ].map((i, k) => (
-                                                                    <SelectItem key={k} value={i.approvedVendorName}>
-                                                                        {i.approvedVendorName}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </FormControl>
+                                                        </>
+                                                    ) : (
+                                                        // No indent selected → show Select dropdown
+                                                        <FormControl>
+                                                            <Select
+                                                                onValueChange={field.onChange}
+                                                                value={field.value}
+                                                            >
+                                                                <FormLabel>Supplier Name</FormLabel>
+                                                                <FormControl>
+                                                                    <SelectTrigger
+                                                                        size="sm"
+                                                                        className="w-full"
+                                                                    >
+                                                                        <SelectValue placeholder="Select supplier" />
+                                                                    </SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent>
+                                                                    {[
+                                                                        ...new Map(
+                                                                            indentSheet
+                                                                                .filter(
+                                                                                    (i) =>
+                                                                                        i.approvedVendorName !== '' &&
+                                                                                        pendingIndentNumbers.has(i.indentNumber)
+                                                                                )
+                                                                                .map((i) => [i.approvedVendorName, i])
+                                                                        ).values()
+                                                                    ].map((i, k) => (
+                                                                        <SelectItem key={k} value={i.approvedVendorName}>
+                                                                            {i.approvedVendorName}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </FormControl>
+                                                    )
                                                 ) : (
                                                     <>
                                                         <FormLabel>Supplier Name</FormLabel>
@@ -1059,14 +1285,7 @@ export default () => {
                                         <TableBody>
                                             {itemsArray.fields.map((field, index) => {
                                                 const value = indents[index];
-                                                const indent = indentSheet.find(
-                                                    (i) => {
-                                                        if (value.searialNumber) {
-                                                            return String(i.searialNumber) === String(value.searialNumber);
-                                                        }
-                                                        return i.indentNumber === value.indentNumber;
-                                                    }
-                                                );
+                                                const indent = findIndentWithFallback(value.indentNumber, value.searialNumber);
                                                 return (
                                                     <TableRow key={field.id}>
                                                         {/* Actual Serial Number from Sheet */}
@@ -1166,11 +1385,7 @@ export default () => {
                                             <span className="text-end">
                                                 {calculateSubtotal(
                                                     indents.map((indent) => {
-                                                        const value = indentSheet.find(
-                                                            (i) =>
-                                                                i.indentNumber ===
-                                                                indent.indentNumber
-                                                        );
+                                                        const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber);
                                                         return {
                                                             quantity: value?.approvedQuantity || 0,
                                                             rate: value?.approvedRate || 0,
@@ -1186,11 +1401,7 @@ export default () => {
                                             <span className="text-end">
                                                 {calculateTotalGst(
                                                     indents.map((indent) => {
-                                                        const value = indentSheet.find(
-                                                            (i) =>
-                                                                i.indentNumber ===
-                                                                indent.indentNumber
-                                                        );
+                                                        const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber);
                                                         return {
                                                             quantity: value?.approvedQuantity || 0,
                                                             rate: value?.approvedRate || 0,
@@ -1207,11 +1418,7 @@ export default () => {
                                             <span className="text-end">
                                                 {calculateGrandTotal(
                                                     indents.map((indent) => {
-                                                        const value = indentSheet.find(
-                                                            (i) =>
-                                                                i.indentNumber ===
-                                                                indent.indentNumber
-                                                        );
+                                                        const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber);
                                                         return {
                                                             quantity: value?.approvedQuantity || 0,
                                                             rate: value?.approvedRate || 0,

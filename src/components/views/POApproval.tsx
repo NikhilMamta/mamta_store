@@ -72,7 +72,7 @@ interface PoTableData {
 }
 
 export default () => {
-    const { poMasterSheet, updatePoMasterSheet, poMasterLoading, masterSheet: details } = useSheets();
+    const { poHistorySheet, updatePoHistorySheet, poHistoryLoading, masterSheet: details } = useSheets();
     const [openDialog, setOpenDialog] = useState(false);
     const [tableData, setTableData] = useState<PoTableData[]>([]);
     const [historyData, setHistoryData] = useState<PoTableData[]>([]);
@@ -132,21 +132,21 @@ export default () => {
     });
 
     useEffect(() => {
-        if (!poMasterSheet) return;
+        if (!poHistorySheet) return;
 
         // Filter: Keep ANY row that has at least one value
-        const validRows = poMasterSheet.filter(row => {
+        const validRows = poHistorySheet.filter(row => {
             return Object.values(row).some(v => v !== null && v !== undefined && String(v).trim() !== '');
         });
 
         // Map all valid rows first
         const allMapped = validRows.map(mapRowToTableData);
 
-        // Pending: Actual date is empty
-        const pending = allMapped.filter(item => !item.actual || item.actual.trim() === '');
+        // Pending: Status is not 'Approved' or 'Rejected' (or use actual date)
+        const pending = allMapped.filter(item => !item.status || (item.status.trim().toLowerCase() !== 'approved' && item.status.trim().toLowerCase() !== 'rejected'));
 
-        // History: Actual date is NOT empty
-        const history = allMapped.filter(item => item.actual && item.actual.trim() !== '');
+        // History: Status is 'Approved' or 'Rejected'
+        const history = allMapped.filter(item => item.status && (item.status.trim().toLowerCase() === 'approved' || item.status.trim().toLowerCase() === 'rejected'));
 
         // Grouping logic for pending (for display)
         const groupedPending: PoTableData[] = [];
@@ -160,7 +160,7 @@ export default () => {
 
         setTableData(groupedPending);
         setHistoryData(history);
-    }, [poMasterSheet]);
+    }, [poHistorySheet]);
 
     const columns: ColumnDef<PoTableData>[] = [
         {
@@ -255,121 +255,37 @@ export default () => {
         const formattedDate = formatDate(new Date());
 
         try {
-            let pdfUrl = selectedItem.pdf;
+            // NEW: Get all items for this PO to update from po_history
+            const poItemsToUpdate = poHistorySheet.filter(p => p.poNumber === selectedItem.poNumber);
+            const todayStr = new Date().toISOString().split('T')[0];
 
-            // Regenerate PDF if Approved
-            if (values.status === 'Approved') {
-                try {
-                    toast.info("Regenerating PDF with Final Approval...");
-
-                    // Filter all rows for this PO
-                    const poItems = poMasterSheet.filter(p => p.poNumber === selectedItem.poNumber);
-
-                    // Construct PDF Props
-                    const pdfProps: POPdfProps = {
-                        companyName: details?.companyName || '',
-                        companyPhone: details?.companyPhone || '',
-                        companyGstin: details?.companyGstin || '',
-                        companyPan: details?.companyPan || '',
-                        companyAddress: details?.companyAddress || '',
-                        billingAddress: details?.billingAddress || '',
-                        destinationAddress: details?.destinationAddress || '',
-                        supplierName: selectedItem.partyName,
-                        // We might need to fetch supplier address/gstin if not in current row, 
-                        // but CreatePO usually saves them. 
-                        // For now, let's use what we can find or empty if missing 
-                        // (assuming standard fields or fetching from context if needed).
-                        // Looking at CreatePO, it fetches from details.vendors.
-                        // Let's try to match vendor name.
-                        supplierAddress: details?.vendors?.find(v => v.vendorName === selectedItem.partyName)?.address || '',
-                        supplierGstin: details?.vendors?.find(v => v.vendorName === selectedItem.partyName)?.gstin || '',
-
-                        orderNumber: selectedItem.poNumber,
-                        orderDate: formatDate(new Date()), // Use current date of approval or original PO date? User implied "update", so maybe current date or keep original. Let's keep original if we can parse it, else current.
-                        quotationNumber: selectedItem.quotationNumber,
-                        quotationDate: selectedItem.quotationDate,
-                        enqNo: selectedItem.enquiryNumber,
-                        enqDate: selectedItem.enquiryDate,
-                        description: selectedItem.description,
-                        items: poItems.map((item) => ({
-                            internalCode: item.internalCode,
-                            product: item.product,
-                            description: item.description,
-                            quantity: Number(item.quantity) || 0,
-                            unit: item.unit || '',
-                            rate: Number(item.rate) || 0,
-                            gst: Number(item.gst || item.gstPercent) || 0, // Handle column name variations if mapped
-                            discount: Number(item.discount || item.discountPercent) || 0,
-                            amount: Number(item.amount) || 0,
-                        })),
-                        total: calculateSubtotal(poItems.map(item => ({
-                            quantity: Number(item.quantity) || 0,
-                            rate: Number(item.rate) || 0,
-                            discountPercent: Number(item.discount || item.discountPercent) || 0
-                        }))),
-                        gstAmount: calculateTotalGst(poItems.map(item => ({
-                            quantity: Number(item.quantity) || 0,
-                            rate: Number(item.rate) || 0,
-                            discountPercent: Number(item.discount || item.discountPercent) || 0,
-                            gstPercent: Number(item.gst || item.gstPercent) || 0
-                        }))),
-                        grandTotal: calculateGrandTotal(poItems.map(item => ({
-                            quantity: Number(item.quantity) || 0,
-                            rate: Number(item.rate) || 0,
-                            discountPercent: Number(item.discount || item.discountPercent) || 0,
-                            gstPercent: Number(item.gst || item.gstPercent) || 0
-                        }))),
-                        terms: [
-                            selectedItem.term1, selectedItem.term2, selectedItem.term3, selectedItem.term4, selectedItem.term5,
-                            selectedItem.term6, selectedItem.term7, selectedItem.term8, selectedItem.term9, selectedItem.term10
-                        ].filter(Boolean),
-                        preparedBy: selectedItem.preparedBy,
-                        approvedBy: selectedItem.approvedBy,
-                        indentBy: selectedItem.indentBy,
-                        finalApproved: 'Dr. Sunil Ramnani',
-                        companyLogo: window.location.origin + '/Mamta-logo.png',
-                    };
-
-                    const blob = await pdf(<POPdf {...pdfProps} />).toBlob();
-                    const file = new File([blob], `PO-${selectedItem.poNumber}.pdf`, {
-                        type: 'application/pdf',
-                    });
-
-                    // Upload
-                    // We need the email to decide folder? CreatePO uses 'email' param if email exists, else 'upload'.
-                    // We'll just use 'upload' safe mode or check vendor email.
-                    const vendorEmail = details?.vendors?.find(v => v.vendorName === selectedItem.partyName)?.email;
-
-                    pdfUrl = await uploadFile(
-                        file,
-                        import.meta.env.VITE_PURCHASE_ORDERS_FOLDER,
-                        vendorEmail ? 'email' : 'upload',
-                        vendorEmail || ''
-                    );
-
-                } catch (pdfError) {
-                    console.error("PDF Regeneration failed", pdfError);
-                    toast.error("Failed to regenerate PDF, saving status only.");
-                }
-            }
-
-            // NEW: Get all items for this PO to update
-            const poItemsToUpdate = poMasterSheet.filter(p => p.poNumber === selectedItem.poNumber);
-
-            const updates = poItemsToUpdate.map(({ planned, ...item }) => ({
+            const updates = poItemsToUpdate.map(({ ...item }) => ({
                 ...item,
-                actual: formattedDate,           // Column AG
-                status: values.status,           // Column AI
-                pdf: pdfUrl,                     // Update PDF URL
-                finalApproved: values.status === 'Approved' ? 'Dr. Sunil Ramnani' : ''
+                status: values.status           // 'Approved' or 'Rejected'
             }));
 
-            await postToSheet(updates, 'update', 'PO MASTER');
+            await postToSheet(updates, 'update', 'PO HISTORY');
+
+            // --- ALSO Save to PO APPROVAL table ---
+            const approvalData = poItemsToUpdate.map(item => ({
+                indentNumber: item.indentNumber,
+                indentBy: selectedItem.indentBy,
+                finalApproval: values.status === 'Approved' ? 'Dr. Sunil Ramnani' : '',
+                planned5: todayStr, // Use YYYY-MM-DD as approval date
+                status: 'Pending' // Always save as Pending in this table
+                // timestamp will be generated automatically by the database
+            }));
+
+            try {
+                await postToSheet(approvalData, 'insert', 'PO APPROVAL');
+            } catch (err) {
+                console.error('PO APPROVAL table save failed:', err);
+            }
 
             toast.success('Submitted successfully');
             setOpenDialog(false);
             // Refresh data
-            updatePoMasterSheet();
+            updatePoHistorySheet();
         } catch (error) {
             console.error(error);
             toast.error('Failed to submit');
@@ -429,7 +345,7 @@ export default () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {poMasterSheet
+                                        {poHistorySheet
                                             .filter(p => p.poNumber === selectedItem.poNumber)
                                             .map((item, idx) => (
                                                 <tr key={idx}>

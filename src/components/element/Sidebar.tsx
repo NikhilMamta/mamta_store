@@ -30,31 +30,44 @@ export default ({ items }: { items: RouteAttributes[] }) => {
             // In the Sidebar component, update the pathToPermissionMap:
 
             const pathToPermissionMap: Record<string, keyof UserPermissions> = {
-                '': 'dashboard', // Dashboard route
+                '': 'dashboard',
                 'dashboard': 'dashboard',
                 'inventory': 'inventory',
                 'administration': 'administrate',
                 'create-indent': 'createIndent',
-                'all-indent': 'allIndent',
                 'create-po': 'createPo',
-                'get-purchase': 'getPurchase',
                 'approve-indent': 'indentApprovalView',
                 'po-history': 'ordersView',
                 'po-approval': 'poMaster',
-                // 'po-master': 'poMaster',
                 'pending-pos': 'pendingIndentsView',
                 'receive-items': 'receiveItemView',
                 'store-out-approval': 'storeOutApprovalView',
+                'store-out': 'storeOutApprovalView',
                 'quotation': 'quotation',
                 'three-party-approval': 'threePartyApprovalView',
                 'vendor-rate-update': 'updateVendorView',
+                'training-video': 'trainingVideo',
+                'license': 'license',
+                'master-data': 'administrate',
             };
 
             const permissionKey = pathToPermissionMap[routeItem.path];
-            if (!permissionKey) return true; // Show by default if no mapping found
+            
+            // If it's the admin, and no specific key is defined, allow it
+            if (user?.username === 'admin' && !permissionKey) return true;
+            
+            if (!permissionKey) return routeItem.path === '' || routeItem.path === 'dashboard'; // Default to true only for dashboard
 
             // Fix: Handle both string and boolean values safely with type assertion
             const userPermission = (user as any)?.[permissionKey];
+
+            // Special handling for Admin: Show everything unless explicitly set to FALSE
+            if (user?.username === 'admin') {
+                if (userPermission === false || userPermission === 'FALSE' || userPermission === 'False') {
+                    return false;
+                }
+                return true;
+            }
 
             // Handle string values like 'TRUE', 'FALSE', 'No Access'
             if (typeof userPermission === 'string') {

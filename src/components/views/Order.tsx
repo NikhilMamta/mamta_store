@@ -3,6 +3,7 @@
 import { Package2, Trash2 } from 'lucide-react';
 import Heading from '../element/Heading';
 import { useSheets } from '@/context/SheetsContext';
+import { postToSheet } from '@/lib/fetchers';
 import { useEffect, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDate } from '@/lib/utils';
@@ -24,34 +25,41 @@ interface HistoryData {
 
 
 export default () => {
-    const { poMasterLoading, poMasterSheet, indentSheet, receivedSheet } = useSheets();
+    const { poHistoryLoading, poHistorySheet, indentSheet, receivedSheet } = useSheets();
 
 
     const [historyData, setHistoryData] = useState<HistoryData[]>([]);
 
 
- // Fetching table data
-useEffect(() => {
-    setHistoryData(
-        poMasterSheet
-            .map((sheet, index) => ({
-                approvedBy: sheet.approvedBy,
-                poCopy: sheet.pdf,
-                poNumber: sheet.poNumber,
-                preparedBy: sheet.preparedBy,
-                totalAmount: sheet.totalPoAmount,
-                vendorName: sheet.partyName,
-                indentNumber: sheet.internalCode || '',
-                rowIndex: (sheet as any).rowIndex || index + 2, // Fallback to index + 2 (accounting for header row)
-                status: (indentSheet.map((s) => s.poNumber).includes(sheet.poNumber)
-                    ? receivedSheet.map((r) => r.poNumber).includes(sheet.poNumber)
-                        ? 'Recieved'
-                        : 'Not Recieved'
-                    : 'Revised') as 'Revised' | 'Not Recieved' | 'Recieved',
-            }))
-            .reverse()
-    );
-}, [poMasterSheet, indentSheet, receivedSheet]);
+    // Fetching table data
+    useEffect(() => {
+        if (!poHistorySheet) return;
+
+        // Group rows by poNumber since po_history has one row per product
+        const groupedMap = new Map<string, HistoryData>();
+
+        poHistorySheet.forEach((row, index) => {
+            if (!groupedMap.has(row.poNumber || '')) {
+                groupedMap.set(row.poNumber || '', {
+                    approvedBy: row.approvedBy || '',
+                    poCopy: row.pdf || '',
+                    poNumber: row.poNumber || '',
+                    preparedBy: row.preparedBy || '',
+                    totalAmount: row.totalPoAmount || 0,
+                    vendorName: row.partyName || '',
+                    indentNumber: row.internalCode || row.indentNumber || '',
+                    rowIndex: (row as any).id || index, // Use database ID or index
+                    status: (indentSheet.map((s) => s.poNumber).includes(row.poNumber || '')
+                        ? receivedSheet.map((r) => r.poNumber).includes(row.poNumber || '')
+                            ? 'Recieved'
+                            : 'Not Recieved'
+                        : 'Revised') as 'Revised' | 'Not Recieved' | 'Recieved',
+                });
+            }
+        });
+
+        setHistoryData(Array.from(groupedMap.values()).reverse());
+    }, [poHistorySheet, indentSheet, receivedSheet]);
 
 
     // Delete handler function using Apps Script
@@ -73,36 +81,9 @@ useEffect(() => {
         if (!confirmDelete) return;
 
         try {
-            // FIXED: Use environment variable or fallback to sessionStorage
-            const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL || sessionStorage.getItem('googleScriptUrl');
-            
-            if (!scriptUrl) {
-                alert('Google Script URL not found');
-                console.error('VITE_APP_SCRIPT_URL not set in .env file');
-                return;
-            }
-
             console.log('Deleting row:', { indentNumber, rowIndex });
             
-            // Prepare the delete request
-            const params = new URLSearchParams();
-            params.append('action', 'delete');
-            params.append('sheetName', 'PO MASTER'); // Make sure this matches your actual sheet name
-            params.append('rows', JSON.stringify([{ rowIndex: rowIndex }]));
-
-            console.log('Request URL:', scriptUrl);
-            console.log('Request params:', params.toString());
-
-            const response = await fetch(scriptUrl, {
-                method: 'POST',
-                body: params,
-                redirect: 'follow',
-            });
-
-            console.log('Response status:', response.status);
-            
-            const result = await response.json();
-            console.log('Response result:', result);
+            const result = await postToSheet([{ rowIndex: rowIndex }], 'delete', 'PO MASTER');
 
             if (result.success) {
                 alert('Row deleted successfully');
@@ -111,12 +92,11 @@ useEffect(() => {
                     prev.filter((item) => item.indentNumber !== indentNumber)
                 );
             } else {
-                console.error('Delete error:', result.error);
-                alert('Failed to delete row: ' + (result.error || 'Unknown error'));
+                alert('Failed to delete row');
             }
         } catch (error) {
             console.error('Delete error:', error);
-            alert('Error deleting row: ' + error.message);
+            alert('Error deleting row: ' + (error as any).message);
         }
     };
 
@@ -186,7 +166,7 @@ useEffect(() => {
                 data={historyData}
                 columns={historyColumns}
                 searchFields={['vendorName', 'poNumber', 'indentNumber']}
-                dataLoading={poMasterLoading}
+                dataLoading={poHistoryLoading}
                 className='h-[80dvh]'
             />
         </div>

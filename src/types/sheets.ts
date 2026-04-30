@@ -1,4 +1,58 @@
-export type Sheet = 'INDENT' | 'RECEIVED' | 'MASTER' | 'USER' | 'PO MASTER' | 'INVENTORY' | 'QUOTATION HISTORY' | 'STORE OUT';
+export type Sheet = 'INDENT' | 'RECEIVED' | 'MASTER' | 'USER' | 'PO MASTER' | 'PO HISTORY' | 'PO APPROVAL' | 'INVENTORY' | 'QUOTATION HISTORY' | 'STORE OUT' | 'APPROVED INDENT' | 'VENDOR RATE UPDATE' | 'THREE PARTY APPROVAL';
+
+export type ApprovedIndentSheet = {
+    id?: number;
+    timestamp: string;
+    indentNumber: string;
+    vendorType: string;
+    approvedQuantity: number;
+    delay?: string;
+    planned2?: string;
+    status?: string;
+};
+
+export type VendorRateUpdateSheet = {
+    id?: number;
+    timestamp: string;
+    indentNumber: string;
+    vendorName1?: string;
+    rate1?: number;
+    paymentTerm1?: string;
+    vendorName2?: string;
+    rate2?: number;
+    paymentTerm2?: string;
+    vendorName3?: string;
+    rate3?: number;
+    paymentTerm3?: string;
+    comparisonSheet?: string;
+    delay?: string;
+    planned3?: string;
+    status?: string;
+};
+
+export type PoApprovalSheet = {
+    id?: number;
+    timestamp: string;
+    indentNumber: string;
+    indentBy?: string;
+    finalApproval?: string;
+    planned5?: string;
+    delay?: string;
+    status?: string;
+};
+
+export type ThreePartyApprovalSheet = {
+    id?: number;
+    timestamp: string;
+    indentNumber: string;
+    approvedVendorName: string;
+    approvedRate: number;
+    approvedPaymentTerm: string;
+    approvedDate: string;
+    planned4: string;
+    delay: string;
+    status?: string;
+};
 
 export type IndentSheet = {
     rowIndex?: number;
@@ -69,6 +123,7 @@ export type IndentSheet = {
     advanceAmountIfAny: number;
     photoOfBill: string;
     rate: number;
+    status?: string;
     searialNumber?: number | string;
 };
 
@@ -188,6 +243,44 @@ export type PoMasterSheet = {
     status: string;
 };
 
+export type PoHistorySheet = {
+    id?: number;
+    timestamp?: string;
+    indentNumber?: string;
+    partyName?: string;
+    poNumber?: string;
+    quotationNumber?: string;
+    quotationDate?: string;
+    enquiryNumber?: string;
+    enquiryDate?: string;
+    internalCode?: string;
+    product?: string;
+    description?: string;
+    quantity?: number;
+    unit?: string;
+    rate?: number;
+    gstPercent?: number;
+    discountPercent?: number;
+    amount?: number;
+    totalPoAmount?: number;
+    preparedBy?: string;
+    approvedBy?: string;
+    pdf?: string;
+    term1?: string;
+    term2?: string;
+    term3?: string;
+    term4?: string;
+    term5?: string;
+    term6?: string;
+    term7?: string;
+    term8?: string;
+    term9?: string;
+    term10?: string;
+    status?: string;
+    planned4?: string;
+    delay?: string;
+};
+
 export type Vendor = {
     vendorName: string;
     gstin: string;
@@ -213,7 +306,7 @@ export type MasterSheet = {
 };
 
 export type UserPermissions = {
-    rowIndex: number;
+    id?: number;
     username: string;
     password: string;
     name: string;
@@ -241,6 +334,8 @@ export type UserPermissions = {
     // New permissions for Dashboard and Inventory
     dashboard: boolean;
     inventory: boolean;
+    trainingVideo: boolean;
+    license: boolean;
 };
 
 export const allPermissionKeys = [
@@ -265,6 +360,8 @@ export const allPermissionKeys = [
     "getPurchase",
     "dashboard",
     "inventory",
+    "trainingVideo",
+    "license",
 ] as const;
 
 

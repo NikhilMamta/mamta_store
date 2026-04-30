@@ -154,14 +154,14 @@ export default function UsersTable() {
                     </Popover>
                     <ComboBox
                         multiple
-                        options={allVendors.map((v) => ({ label: v, value: v }))}
+                        options={allVendors.filter(Boolean).map((v, i) => ({ label: v, value: `vendor-${v}-${i}` }))}
                         value={filteredVendors}
                         onChange={setFilteredVendors}
                         placeholder="Select Vendors"
                     />
                     <ComboBox
                         multiple
-                        options={allProducts.map((v) => ({ label: v, value: v }))}
+                        options={allProducts.filter(Boolean).map((v, i) => ({ label: v, value: `product-${v}-${i}` }))}
                         value={filteredProducts}
                         onChange={setFilteredProducts}
                         placeholder="Select Products"

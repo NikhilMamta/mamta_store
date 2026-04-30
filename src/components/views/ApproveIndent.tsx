@@ -1,7 +1,7 @@
 
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import DataTable from '../element/DataTable';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSheets } from '@/context/SheetsContext';
 import { DownloadOutlined } from "@ant-design/icons";
 
@@ -36,6 +36,7 @@ interface ApproveTableData {
 }
 
 interface HistoryData {
+    id?: number;
     rowIndex: number;
     indentNo: string;
     indenter: string;
@@ -52,7 +53,7 @@ interface HistoryData {
 }
 
 export default () => {
-    const { indentSheet, indentLoading, updateIndentSheet } = useSheets();
+    const { indentSheet, indentLoading, updateIndentSheet, approvedIndentSheet, updateApprovedIndentSheet } = useSheets();
     const { user } = useAuth();
 
     const [tableData, setTableData] = useState<ApproveTableData[]>([]);
@@ -66,16 +67,14 @@ export default () => {
 
     // Fetching table data
     useEffect(() => {
+        // PENDING TAB: only show indents where status = 'Pending' in indent table
         setTableData(
             indentSheet
                 .filter(
-                    (sheet) =>
-                        sheet.planned1 !== '' &&
-                        sheet.actual1 === '' &&
-                        sheet.indentType === 'Purchase'
+                    (sheet) => sheet.status?.trim().toLowerCase() === 'pending' && sheet.indentType?.trim() === 'Purchase'
                 )
-                .map((sheet) => ({
-                    rowIndex: (sheet as any).rowIndex,
+                .map((sheet, idx) => ({
+                    rowIndex: (sheet as any).rowIndex ?? idx,
                     indentNo: sheet.indentNumber,
                     indenter: sheet.indenterName,
                     department: sheet.department,
@@ -84,95 +83,72 @@ export default () => {
                     uom: sheet.uom,
                     attachment: sheet.attachment,
                     specifications: sheet.specifications || '',
-                    vendorType: statuses.includes(sheet.vendorType)
-                        ? (sheet.vendorType as ApproveTableData['vendorType'])
-                        : 'Pending',
+                    vendorType: 'Pending' as ApproveTableData['vendorType'],
                     date: formatDate(new Date(sheet.timestamp)),
                     searialNumber: sheet.searialNumber,
+                    status: sheet.status,
                 }))
                 .reverse()
         );
+
+        // HISTORY TAB: only show indents where status = 'Approved' from indent table
+        // enrich with approved_indent data when available
         setHistoryData(
             indentSheet
                 .filter(
-                    (sheet) =>
-                        sheet.planned1 !== '' &&
-                        sheet.actual1 !== '' &&
-                        sheet.indentType === 'Purchase'
+                    (sheet) => sheet.status?.trim().toLowerCase() === 'approved' && sheet.indentType?.trim() === 'Purchase'
                 )
-                .map((sheet) => ({
-                    rowIndex: (sheet as any).rowIndex,
-                    indentNo: sheet.indentNumber,
-                    indenter: sheet.indenterName,
-                    department: sheet.department,
-                    product: sheet.productName,
-                    approvedQuantity: sheet.approvedQuantity || sheet.quantity,
-                    vendorType: sheet.vendorType as HistoryData['vendorType'],
-                    uom: sheet.uom,
-                    specifications: sheet.specifications || '',
-                    date: formatDate(new Date(sheet.timestamp)),
-                    approvedDate: formatDate(new Date(sheet.actual1)),
-                    searialNumber: sheet.searialNumber,
-                }))
-                .sort((a, b) => {
-                    return b.indentNo.localeCompare(a.indentNo);
+                .map((sheet, idx) => {
+                    const approval = approvedIndentSheet.find(a => a.indentNumber === sheet.indentNumber);
+                    return {
+                        id: approval?.id,
+                        rowIndex: (sheet as any).rowIndex ?? idx,
+                        indentNo: sheet.indentNumber,
+                        indenter: sheet.indenterName,
+                        department: sheet.department,
+                        product: sheet.productName,
+                        approvedQuantity: approval?.approvedQuantity || sheet.quantity,
+                        vendorType: (approval?.vendorType || sheet.vendorType || 'Approved') as any,
+                        uom: sheet.uom,
+                        specifications: sheet.specifications || '',
+                        date: formatDate(new Date(sheet.timestamp)),
+                        approvedDate: approval
+                            ? formatDate(new Date(approval.timestamp))
+                            : 'Approved',
+                        searialNumber: sheet.searialNumber,
+                    };
                 })
+                .sort((a, b) => b.indentNo.localeCompare(a.indentNo))
         );
-    }, [indentSheet]);
-
-    const getCurrentFormattedDate = () => {
-        const now = new Date();
-        const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const year = now.getFullYear();
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        const seconds = String(now.getSeconds()).padStart(2, '0');
-        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-    };
+    }, [indentSheet, approvedIndentSheet]);
 
     const handleRowSelect = (rowIndex: number, checked: boolean) => {
-        const currentRow = tableData.find(row => row.rowIndex === rowIndex);
-        const targetIndentNo = currentRow?.indentNo;
+        const identifier = String(rowIndex);
+        
+        setSelectedRows(prev => {
+            const newSet = new Set(prev);
+            if (checked) newSet.add(identifier);
+            else newSet.delete(identifier);
+            return newSet;
+        });
 
-        if (targetIndentNo) {
-            const rowsToSync = tableData.filter(row => row.indentNo === targetIndentNo);
-            const rowIdsToSync = rowsToSync.map(row => String(row.rowIndex));
-
-            setSelectedRows(prev => {
-                const newSet = new Set(prev);
-                rowIdsToSync.forEach(id => {
-                    if (checked) newSet.add(id);
-                    else newSet.delete(id);
+        if (checked) {
+            const row = tableData.find(r => r.rowIndex === rowIndex);
+            if (row) {
+                setBulkUpdates(prev => {
+                    const next = new Map(prev);
+                    next.set(identifier, {
+                        vendorType: row.vendorType,
+                        quantity: row.quantity
+                    });
+                    return next;
                 });
-                return newSet;
-            });
-
-            setBulkUpdates(prevUpdates => {
-                const newUpdates = new Map(prevUpdates);
-                rowIdsToSync.forEach(id => {
-                    if (checked) {
-                        const rowToSync = rowsToSync.find(r => String(r.rowIndex) === id);
-                        if (rowToSync) {
-                            newUpdates.set(id, {
-                                vendorType: rowToSync.vendorType,
-                                quantity: rowToSync.quantity
-                            });
-                        }
-                    } else {
-                        newUpdates.delete(id);
-                    }
-                });
-                return newUpdates;
-            });
+            }
         } else {
-            // Fallback for unexpected case where indentNo is missing
-            const id = String(rowIndex);
-            setSelectedRows(prev => {
-                const newSet = new Set(prev);
-                if (checked) newSet.add(id);
-                else newSet.delete(id);
-                return newSet;
+            setBulkUpdates(prev => {
+                const next = new Map(prev);
+                next.delete(identifier);
+                return next;
             });
         }
     };
@@ -236,8 +212,6 @@ export default () => {
         });
     };
 
-
-
     const handleSubmitBulkUpdates = async () => {
         if (selectedRows.size === 0) {
             toast.error('Please select at least one row to update');
@@ -246,51 +220,70 @@ export default () => {
 
         setSubmitting(true);
         try {
-            const updatesToProcess = Array.from(selectedRows)
-                .map(rowIndexStr => {
-                    const id = rowIndexStr;
-                    const update = bulkUpdates.get(id);
-                    const originalSheet = indentSheet.find(s => String((s as any).rowIndex) === id);
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+            const simpleDate = `${day}/${month}/${year}`;
 
-                    if (!originalSheet || !update) return null;
+            const indentUpdates: any[] = [];
+            const approvedRecords: any[] = [];
 
-                    // Current date in DD/MM/YYYY HH:mm:ss format
-                    const now = new Date();
-                    const day = String(now.getDate()).padStart(2, '0');
-                    const month = String(now.getMonth() + 1).padStart(2, '0');
-                    const year = now.getFullYear();
-                    const hours = String(now.getHours()).padStart(2, '0');
-                    const minutes = String(now.getMinutes()).padStart(2, '0');
-                    const seconds = String(now.getSeconds()).padStart(2, '0');
-                    const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+            Array.from(selectedRows).forEach(rowIndexStr => {
+                const id = rowIndexStr;
+                const update = bulkUpdates.get(id);
+                const originalSheet = indentSheet.find(s => String((s as any).rowIndex) === id);
 
-                    const dataToSend = {
-                        rowIndex: (originalSheet as any).rowIndex,
-                        indentNumber: originalSheet.indentNumber,
-                        vendorType: update.vendorType || originalSheet.vendorType,
-                        approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
-                        quantity: originalSheet.quantity, // Keep original quantity
-                        actual1: formatDate(new Date()),
-                    };
+                if (!originalSheet || !update) return;
 
-                    return dataToSend;
-                })
-                .filter((item): item is NonNullable<typeof item> => item !== null);
+                // 1. Prepare Update for INDENT table
+                indentUpdates.push({
+                    rowIndex: (originalSheet as any).rowIndex,
+                    indentNumber: originalSheet.indentNumber,
+                    vendorType: update.vendorType || originalSheet.vendorType,
+                    approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
+                    status: 'Approved', // Set status to 'Approved' as requested
+                    actual1: formattedDate,
+                });
 
-            console.log('🚀 Final data before postToSheet:', JSON.stringify(updatesToProcess, null, 2));
+                // 2. Prepare Insert for APPROVED INDENT table
+                approvedRecords.push({
+                    timestamp: formattedDate,
+                    indentNumber: originalSheet.indentNumber,
+                    vendorType: update.vendorType || 'Regular',
+                    approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
+                    delay: 'None', // Default
+                    planned2: formattedDate, // Save full time
+                });
+            });
 
-            if (updatesToProcess.length > 0) {
-                await postToSheet(updatesToProcess, 'update');
-                toast.success(`Updated ${updatesToProcess.length} indents successfully`);
+            console.log('🚀 Updating Indents:', indentUpdates);
+            console.log('🚀 Creating Approved Records:', approvedRecords);
+
+            if (indentUpdates.length > 0) {
+                // Update indent status
+                await postToSheet(indentUpdates, 'update', 'INDENT');
+                
+                // Save to approved_indent table
+                await postToSheet(approvedRecords, 'insert', 'APPROVED INDENT');
+
+                toast.success(`Approved ${indentUpdates.length} indents successfully`);
 
                 setSelectedRows(new Set());
                 setBulkUpdates(new Map());
 
-                setTimeout(() => updateIndentSheet(), 1000);
+                setTimeout(() => {
+                    updateIndentSheet();
+                    updateApprovedIndentSheet();
+                }, 1000);
             }
         } catch (error) {
             console.error('❌ Error:', error);
-            toast.error('Failed to update indents');
+            toast.error('Failed to approve indents');
         } finally {
             setSubmitting(false);
         }
@@ -377,7 +370,9 @@ export default () => {
                 );
                 toast.success(`Updated product name from "${oldProductName}" to "${newProductName}" for ${rowsToUpdate.length} records`);
             } else {
-                // Update only the current row for other fields
+                // 1. Update INDENT table
+                const isNowApproved = (editValues.vendorType && editValues.vendorType !== 'Pending');
+                
                 await postToSheet(
                     indentSheet
                         .filter((s) => (s as any).rowIndex === rowIndex)
@@ -385,14 +380,40 @@ export default () => {
                             return {
                                 rowIndex: (prev as any).rowIndex,
                                 indentNumber: prev.indentNumber,
-                                approvedQuantity: editValues.approvedQuantity,
-                                uom: editValues.uom,
-                                vendorType: editValues.vendorType,
-                                productName: editValues.product,
+                                approvedQuantity: editValues.approvedQuantity !== undefined ? editValues.approvedQuantity : prev.approvedQuantity,
+                                uom: editValues.uom || prev.uom,
+                                vendorType: editValues.vendorType || prev.vendorType,
+                                productName: editValues.product || prev.productName,
+                                status: isNowApproved ? 'Approved' : prev.status,
+                                actual1: isNowApproved ? formattedDate : prev.actual1,
                             };
                         }),
-                    'update'
+                    'update',
+                    'INDENT'
                 );
+
+            // 2. Handle APPROVED INDENT table
+            if (currentRow && currentRow.id) {
+                // Update existing approval record
+                await postToSheet([{
+                    id: currentRow.id,
+                    vendorType: editValues.vendorType || currentRow.vendorType,
+                    approvedQuantity: editValues.approvedQuantity !== undefined ? editValues.approvedQuantity : currentRow.approvedQuantity,
+                    planned2: formattedDate, // Save full time
+                }], 'update', 'APPROVED INDENT');
+            } else if (isNowApproved) {
+                // Create new approval record for previously Pending item
+                await postToSheet([{
+                    timestamp: formattedDate,
+                    indentNumber: currentRow?.indentNo,
+                    vendorType: editValues.vendorType,
+                    approvedQuantity: editValues.approvedQuantity !== undefined ? editValues.approvedQuantity : (currentRow?.approvedQuantity || 0),
+                    delay: 'None',
+                    planned2: formattedDate, // Save full time
+                }], 'insert', 'APPROVED INDENT');
+            }
+                
+                updateApprovedIndentSheet();
                 toast.success(`Updated row ${rowIndex}`);
             }
 
@@ -408,8 +429,72 @@ export default () => {
         setEditValues(prev => ({ ...prev, [field]: value }));
     };
 
+    const handleSingleRowUpdate = async (indent: ApproveTableData) => {
+        const identifier = String(indent.rowIndex);
+        const update = bulkUpdates.get(identifier);
+        
+        if (!update || !update.vendorType || update.vendorType === 'Pending') {
+            toast.error('Please select a Vendor Type first');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+            const simpleDate = `${day}/${month}/${year}`;
+
+            // 1. Update INDENT table
+            await postToSheet([{
+                rowIndex: indent.rowIndex,
+                indentNumber: indent.indentNo,
+                vendorType: update.vendorType,
+                approvedQuantity: update.quantity !== undefined ? update.quantity : indent.quantity,
+                status: 'Approved',
+                actual1: formattedDate,
+            }], 'update', 'INDENT');
+
+            // 2. Insert into APPROVED INDENT table
+            await postToSheet([{
+                timestamp: formattedDate,
+                indentNumber: indent.indentNo,
+                vendorType: update.vendorType,
+                approvedQuantity: update.quantity !== undefined ? update.quantity : indent.quantity,
+                delay: 'None',
+                planned2: formattedDate, // Save full time
+            }], 'insert', 'APPROVED INDENT');
+
+            toast.success(`Indent ${indent.indentNo} approved!`);
+            
+            // Clean up
+            setSelectedRows(prev => {
+                const next = new Set(prev);
+                next.delete(identifier);
+                return next;
+            });
+            setBulkUpdates(prev => {
+                const next = new Map(prev);
+                next.delete(identifier);
+                return next;
+            });
+
+            updateIndentSheet();
+            updateApprovedIndentSheet();
+        } catch (error) {
+            toast.error('Failed to update indent');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     // Creating table columns with mobile responsiveness
-    const columns: ColumnDef<ApproveTableData>[] = [
+    const columns: ColumnDef<ApproveTableData>[] = useMemo(() => [
         {
             id: 'select',
             header: ({ table }) => (
@@ -425,7 +510,7 @@ export default () => {
             cell: ({ row }: { row: Row<ApproveTableData> }) => {
                 const indent = row.original;
                 return (
-                    <div className="flex justify-center">
+                    <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
                         <input
                             type="checkbox"
                             checked={selectedRows.has(String(row.original.rowIndex))}
@@ -469,24 +554,26 @@ export default () => {
                         };
 
                         return (
-                            <Select
-                                value={currentValue === 'Pending' ? '' : currentValue}
-                                onValueChange={handleChange}
-                                disabled={!isSelected}
-                            >
-                                <SelectTrigger
-                                    className={`w-full min-w-[120px] max-w-[150px] text-xs ${!isSelected ? 'opacity-50' : ''
-                                        }`}
+                            <div onClick={(e) => e.stopPropagation()}>
+                                <Select
+                                    value={currentValue === 'Pending' ? '' : currentValue}
+                                    onValueChange={handleChange}
+                                    disabled={!isSelected}
                                 >
-                                    <SelectValue placeholder="Select Vendor Type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {/* Removed Pending option */}
-                                    <SelectItem value="Regular">Regular</SelectItem>
-                                    <SelectItem value="Three Party">Three Party</SelectItem>
-                                    <SelectItem value="Reject">Reject</SelectItem>
-                                </SelectContent>
-                            </Select>
+                                    <SelectTrigger
+                                        className={`w-full min-w-[120px] max-w-[150px] text-xs ${!isSelected ? 'opacity-50' : ''
+                                            }`}
+                                    >
+                                        <SelectValue placeholder="Select Vendor Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {/* Removed Pending option */}
+                                        <SelectItem value="Regular">Regular</SelectItem>
+                                        <SelectItem value="Three Party">Three Party</SelectItem>
+                                        <SelectItem value="Reject">Reject</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         );
                     },
                     size: 150,
@@ -552,24 +639,26 @@ export default () => {
                 }, [currentValue]);
 
                 return (
-                    <Input
-                        type="number"
-                        value={localValue}
-                        onChange={(e) => {
-                            setLocalValue(e.target.value); // Only update local state
-                        }}
-                        onBlur={(e) => {
-                            // Update bulk updates only on blur
-                            const value = e.target.value;
-                            if (value === '' || !isNaN(Number(value))) {
-                                handleBulkUpdate(identifier, 'quantity', Number(value) || 0);
-                            }
-                        }}
-                        disabled={!isSelected}
-                        className={`w-16 sm:w-20 text-xs sm:text-sm ${!isSelected ? 'opacity-50' : ''}`}
-                        min="0"
-                        step="1"
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <Input
+                            type="number"
+                            value={localValue}
+                            onChange={(e) => {
+                                setLocalValue(e.target.value); // Only update local state
+                            }}
+                            onBlur={(e) => {
+                                // Update bulk updates only on blur
+                                const value = e.target.value;
+                                if (value === '' || !isNaN(Number(value))) {
+                                    handleBulkUpdate(identifier, 'quantity', Number(value) || 0);
+                                }
+                            }}
+                            disabled={!isSelected}
+                            className={`w-16 sm:w-20 text-xs sm:text-sm ${!isSelected ? 'opacity-50' : ''}`}
+                            min="0"
+                            step="1"
+                        />
+                    </div>
                 );
             },
             size: 80,
@@ -655,10 +744,30 @@ export default () => {
             ),
             size: 100,
         },
-    ];
+        {
+            id: 'actions',
+            header: 'Actions',
+            cell: ({ row }: { row: Row<ApproveTableData> }) => {
+                const isSelected = selectedRows.has(String(row.original.rowIndex));
+                return (
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <Button 
+                            size="sm" 
+                            variant="default"
+                            disabled={!isSelected || submitting}
+                            onClick={() => handleSingleRowUpdate(row.original)}
+                        >
+                            Update
+                        </Button>
+                    </div>
+                );
+            },
+            size: 100,
+        }
+    ], [selectedRows, bulkUpdates, submitting, user.indentApprovalAction]);
 
     // History columns with mobile responsiveness
-    const historyColumns: ColumnDef<HistoryData>[] = [
+    const historyColumns: ColumnDef<HistoryData>[] = useMemo(() => [
         {
             accessorKey: 'searialNumber',
             header: 'S.No.',
@@ -896,7 +1005,7 @@ export default () => {
                 },
             ]
             : []),
-    ];
+    ], [editingRow, editValues, user.indentApprovalAction]);
 
     return (
         <div className="w-full overflow-hidden">
@@ -938,6 +1047,7 @@ export default () => {
                                 columns={columns}
                                 searchFields={['product', 'department', 'indenter', 'vendorType']}
                                 dataLoading={indentLoading}
+                                onRowClick={(row) => handleRowSelect(row.rowIndex, !selectedRows.has(String(row.rowIndex)))}
                                 extraActions={
                                     <Button
                                         variant="default"

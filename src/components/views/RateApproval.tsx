@@ -68,7 +68,7 @@ interface GroupedHistoryData {
 }
 
 export default () => {
-    const { indentLoading, indentSheet, updateIndentSheet } = useSheets();
+    const { indentLoading, indentSheet, updateIndentSheet, vendorRateUpdateSheet, approvedIndentSheet, threePartyApprovalSheet, updateVendorRateUpdateSheet, updateThreePartyApprovalSheet } = useSheets();
     const { user } = useAuth();
 
     const [selectedIndent, setSelectedIndent] = useState<GroupedRateApprovalData | null>(null);
@@ -77,23 +77,76 @@ export default () => {
     const [historyData, setHistoryData] = useState<GroupedHistoryData[]>([]);
 
     useEffect(() => {
+        // Safety check: ensure sheets are loaded
+        if (!indentSheet || !vendorRateUpdateSheet || !approvedIndentSheet) {
+            console.log('RateApproval: Sheets not loaded yet');
+            return;
+        }
+
+        // PENDING TAB: Show data from vendor_rate_update table where status = 'Pending'
+        // AND approved_indent table has vendor_type = 'Three Party'
+        const pendingVendorUpdates = vendorRateUpdateSheet.filter(
+            (vru) => vru.status?.trim().toLowerCase() === 'pending'
+        );
+
+        const threePartyApprovedIndents = approvedIndentSheet.filter(
+            (ai) => ai.vendorType?.trim().toLowerCase() === 'three party'
+        );
+
+        console.log('RateApproval Debug:', {
+            totalIndents: indentSheet.length,
+            pendingVendorUpdates: pendingVendorUpdates.length,
+            threePartyApprovedIndents: threePartyApprovedIndents.length
+        });
+
         const pendingItems = indentSheet
-            .filter((sheet) => sheet.planned3 !== '' && sheet.actual3 === '' && sheet.vendorType === 'Three Party')
-            .map((sheet) => ({
-                rowIndex: (sheet as any).rowIndex,
-                indentNo: sheet.indentNumber,
-                indenter: sheet.indenterName,
-                department: sheet.department,
-                product: sheet.productName,
-                comparisonSheet: sheet.comparisonSheet || '',
-                date: formatDate(new Date(sheet.timestamp)),
-                searialNumber: sheet.searialNumber,
-                vendors: [
-                    [sheet.vendorName1, sheet.rate1.toString(), sheet.paymentTerm1],
-                    [sheet.vendorName2, sheet.rate2.toString(), sheet.paymentTerm2],
-                    [sheet.vendorName3, sheet.rate3.toString(), sheet.paymentTerm3],
-                ] as [string, string, string][],
-            }));
+            .filter((sheet) => {
+                // Check if indent has vendor_type = 'Three Party' in approved_indent
+                const isThreeParty = threePartyApprovedIndents.some(
+                    (ai) => ai.indentNumber === sheet.indentNumber
+                );
+                
+                // Check if indent exists in vendor_rate_update with status = 'Pending'
+                const hasPendingUpdate = pendingVendorUpdates.some(
+                    (vru) => vru.indentNumber === sheet.indentNumber
+                );
+                
+                // Also check if the indent itself has Three Party vendor type
+                const indentIsThreeParty = sheet.vendorType?.trim().toLowerCase() === 'three party';
+                
+                return (hasPendingUpdate && isThreeParty) || indentIsThreeParty;
+            })
+            .map((sheet) => {
+                // Find matching vendor rate update record
+                const vendorUpdate = pendingVendorUpdates.find(
+                    (vru) => vru.indentNumber === sheet.indentNumber
+                );
+
+                // Use vendor data from vendor_rate_update if available, otherwise fallback to indent sheet
+                return {
+                    rowIndex: (sheet as any).rowIndex,
+                    indentNo: sheet.indentNumber,
+                    indenter: sheet.indenterName,
+                    department: sheet.department,
+                    product: sheet.productName,
+                    comparisonSheet: sheet.comparisonSheet || '',
+                    date: formatDate(new Date(sheet.timestamp)),
+                    searialNumber: sheet.searialNumber,
+                    vendors: vendorUpdate
+                        ? [
+                            [vendorUpdate.vendorName1 || '', vendorUpdate.rate1?.toString() || '0', vendorUpdate.paymentTerm1 || ''],
+                            [vendorUpdate.vendorName2 || '', vendorUpdate.rate2?.toString() || '0', vendorUpdate.paymentTerm2 || ''],
+                            [vendorUpdate.vendorName3 || '', vendorUpdate.rate3?.toString() || '0', vendorUpdate.paymentTerm3 || ''],
+                        ] as [string, string, string][]
+                        : [
+                            [sheet.vendorName1 || '', sheet.rate1?.toString() || '0', sheet.paymentTerm1 || ''],
+                            [sheet.vendorName2 || '', sheet.rate2?.toString() || '0', sheet.paymentTerm2 || ''],
+                            [sheet.vendorName3 || '', sheet.rate3?.toString() || '0', sheet.paymentTerm3 || ''],
+                        ] as [string, string, string][],
+                };
+            });
+
+        console.log('RateApproval Pending Items:', pendingItems.length);
 
         const groupedPending = pendingItems.reduce((acc, item) => {
             if (!acc[item.indentNo]) {
@@ -112,16 +165,16 @@ export default () => {
 
         setTableData(Object.values(groupedPending).reverse());
 
-        const historyItems = indentSheet
-            .filter((sheet) => sheet.planned3 !== '' && sheet.actual3 !== '' && sheet.vendorType === 'Three Party')
-            .map((sheet) => ({
-                indentNo: sheet.indentNumber,
-                indenter: sheet.indenterName,
-                department: sheet.department,
-                product: sheet.productName,
-                date: new Date(sheet.timestamp).toDateString(),
-                searialNumber: sheet.searialNumber,
-                vendor: [sheet.approvedVendorName, sheet.approvedRate.toString()] as [string, string],
+        // HISTORY TAB: Show data from three_party_approval table
+        const historyItems = threePartyApprovalSheet
+            .map((approval) => ({
+                indentNo: approval.indentNumber,
+                indenter: indentSheet.find(i => i.indentNumber === approval.indentNumber)?.indenterName || '',
+                department: indentSheet.find(i => i.indentNumber === approval.indentNumber)?.department || '',
+                product: indentSheet.find(i => i.indentNumber === approval.indentNumber)?.productName || '',
+                date: new Date(approval.approvedDate || approval.timestamp).toDateString(),
+                searialNumber: indentSheet.find(i => i.indentNumber === approval.indentNumber)?.searialNumber,
+                vendor: [approval.approvedVendorName || '', approval.approvedRate?.toString() || '0'] as [string, string],
             }));
 
         const groupedHistory = historyItems.reduce((acc, item) => {
@@ -139,7 +192,7 @@ export default () => {
         }, {} as Record<string, GroupedHistoryData>);
 
         setHistoryData(Object.values(groupedHistory).reverse());
-    }, [indentSheet]);
+    }, [indentSheet, vendorRateUpdateSheet, approvedIndentSheet, threePartyApprovalSheet]);
 
     const columns: ColumnDef<GroupedRateApprovalData>[] = [
         ...(user.threePartyApprovalAction
@@ -197,24 +250,24 @@ export default () => {
 
     return (
         <div>
+            <Tabs defaultValue="pending">
+                <Heading heading="Three Party Rate Approval" subtext="Approve rates for three party vendors" tabs>
+                    <Users size={50} className="text-primary" />
+                </Heading>
+                <TabsContent value="pending">
+                    <DataTable data={tableData} columns={columns} searchFields={['indentNo', 'department', 'indenter']} dataLoading={indentLoading} />
+                </TabsContent>
+                <TabsContent value="history">
+                    <DataTable data={historyData} columns={historyColumns} searchFields={['indentNo', 'department', 'indenter']} dataLoading={indentLoading} />
+                </TabsContent>
+            </Tabs>
+
             <Dialog open={!!(selectedIndent || selectedHistory)} onOpenChange={(open) => {
                 if (!open) {
                     setSelectedIndent(null);
                     setSelectedHistory(null);
                 }
             }}>
-                <Tabs defaultValue="pending">
-                    <Heading heading="Three Party Rate Approval" subtext="Approve rates for three party vendors" tabs>
-                        <Users size={50} className="text-primary" />
-                    </Heading>
-                    <TabsContent value="pending">
-                        <DataTable data={tableData} columns={columns} searchFields={['indentNo', 'department', 'indenter']} dataLoading={indentLoading} />
-                    </TabsContent>
-                    <TabsContent value="history">
-                        <DataTable data={historyData} columns={historyColumns} searchFields={['indentNo', 'department', 'indenter']} dataLoading={indentLoading} />
-                    </TabsContent>
-                </Tabs>
-
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     {selectedIndent && (
                         <>
@@ -229,7 +282,11 @@ export default () => {
                                     items={selectedIndent.items}
                                     onSuccess={() => {
                                         setSelectedIndent(null);
-                                        setTimeout(() => updateIndentSheet(), 1000);
+                                        setTimeout(() => {
+                                            updateIndentSheet();
+                                            updateVendorRateUpdateSheet();
+                                            updateThreePartyApprovalSheet();
+                                        }, 1000);
                                     }}
                                 />
                             </div>
@@ -256,8 +313,8 @@ export default () => {
                                         {selectedHistory.items.map((item, idx) => (
                                             <tr key={idx} className="border-b last:border-0 border-muted/20">
                                                 <td className="py-2">{item.product}</td>
-                                                <td className="py-2">{item.vendor[0]}</td>
-                                                <td className="py-2">₹{item.vendor[1]}</td>
+                                                <td className="py-2">{item.vendor[0] || '-'}</td>
+                                                <td className="py-2">₹{item.vendor[1] || '0'}</td>
                                                 <td className="py-2">{item.searialNumber || '-'}</td>
                                             </tr>
                                         ))}
@@ -276,7 +333,7 @@ export default () => {
 };
 
 const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onSuccess: () => void }) => {
-    const { indentSheet } = useSheets();
+    const { indentSheet, vendorRateUpdateSheet } = useSheets();
     const schema = z.object({
         approvals: z.array(z.object({
             searialNumber: z.union([z.string(), z.number()]),
@@ -300,24 +357,115 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
 
     const onSubmit = async (values: z.infer<typeof schema>) => {
         try {
-            const payload = values.approvals.map(appr => {
-                const originalItem = items.find(i => String(i.searialNumber) === String(appr.searialNumber))!;
-                const selectedVendor = originalItem.vendors[parseInt(appr.vendorIndex)];
+            const now = new Date();
+            const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+            const formattedDateTime = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+            // Get unique indent numbers from the approvals
+            const uniqueIndentNumbers = [...new Set(values.approvals.map(a => a.indentNumber))];
+
+            console.log('🔍 Debug - Items received:', items);
+            console.log('🔍 Debug - Values to submit:', values);
+
+            // 1. Update INDENT table - set actual3, approved vendor details
+            const indentPayload = values.approvals.map((appr, index) => {
+                // Try to find by searialNumber first, fallback to index
+                let originalItem = items.find(i => String(i.searialNumber) === String(appr.searialNumber));
+                
+                // If not found by searialNumber, try by index
+                if (!originalItem) {
+                    console.warn(`⚠️ Item with searialNumber ${appr.searialNumber} not found, using index ${index}`);
+                    originalItem = items[index];
+                }
+
+                if (!originalItem) {
+                    console.error(`❌ Could not find item for approval ${index}`);
+                    throw new Error(`Item not found for approval`);
+                }
+
+                const vendorIndex = parseInt(appr.vendorIndex);
+                if (isNaN(vendorIndex) || !originalItem.vendors || !originalItem.vendors[vendorIndex]) {
+                    console.error(`❌ Invalid vendor selection for item ${originalItem.product}`);
+                    throw new Error(`Invalid vendor selection for ${originalItem.product}`);
+                }
+
+                const selectedVendor = originalItem.vendors[vendorIndex];
+
+                console.log(`✅ Processing: ${originalItem.product}, Vendor: ${selectedVendor[0]}`);
 
                 return {
                     rowIndex: originalItem.rowIndex,
                     indentNumber: appr.indentNumber,
-                    actual3: formatDate(new Date()),
-                    approvedVendorName: selectedVendor[0],
-                    approvedRate: selectedVendor[1],
-                    approvedPaymentTerm: selectedVendor[2],
+                    actual3: formattedDateTime,
+                    approvedVendorName: selectedVendor[0] || '',
+                    approvedRate: parseFloat(selectedVendor[1]) || 0,
+                    approvedPaymentTerm: selectedVendor[2] || '',
                 };
             });
 
-            await postToSheet(payload, 'update', 'INDENT');
+            console.log('📝 Step 1: Updating INDENT table:', indentPayload);
+            await postToSheet(indentPayload, 'update', 'INDENT');
+            console.log('✅ INDENT table updated successfully');
+
+            // 2. Update VENDOR_RATE_UPDATE table - set status to 'Approved'
+            for (const indentNumber of uniqueIndentNumbers) {
+                const vendorUpdateRecord = vendorRateUpdateSheet.find(
+                    (vru) => vru.indentNumber === indentNumber && vru.status?.trim().toLowerCase() === 'pending'
+                );
+
+                if (vendorUpdateRecord && vendorUpdateRecord.id) {
+                    console.log('📝 Step 2: Updating VENDOR_RATE_UPDATE status to Approved:', indentNumber);
+                    await postToSheet([{
+                        id: vendorUpdateRecord.id,
+                        status: 'Approved',
+                        planned3: formattedDateTime,
+                    }], 'update', 'VENDOR RATE UPDATE');
+                    console.log('✅ VENDOR_RATE_UPDATE status updated successfully');
+                } else {
+                    console.warn('⚠️ No vendor_rate_update record found for:', indentNumber);
+                }
+            }
+
+            // 3. Insert into THREE_PARTY_APPROVAL table
+            const threePartyPayload = values.approvals.map((appr, index) => {
+                // Try to find by searialNumber first, fallback to index
+                let originalItem = items.find(i => String(i.searialNumber) === String(appr.searialNumber));
+                
+                if (!originalItem) {
+                    originalItem = items[index];
+                }
+
+                if (!originalItem) {
+                    console.error(`❌ Could not find item for three_party_approval ${index}`);
+                    throw new Error(`Item not found`);
+                }
+
+                const vendorIndex = parseInt(appr.vendorIndex);
+                const selectedVendor = originalItem.vendors?.[vendorIndex] || ['', '0', ''];
+
+                return {
+                    indent_number: appr.indentNumber,
+                    approved_vendor_name: selectedVendor[0] || '',
+                    approved_rate: parseFloat(selectedVendor[1]) || 0,
+                    approved_payment_term: selectedVendor[2] || '',
+                    approved_date: formattedDate,
+                    planned_4: formattedDate,
+                };
+            });
+
+            console.log('📝 Step 3: Inserting into THREE_PARTY_APPROVAL table:', threePartyPayload);
+            try {
+                await postToSheet(threePartyPayload, 'insert', 'THREE PARTY APPROVAL');
+                console.log('✅ THREE_PARTY_APPROVAL table inserted successfully');
+            } catch (threePartyError) {
+                console.error('⚠️ THREE_PARTY_APPROVAL insert failed (table may not exist):', threePartyError);
+                // Don't fail the entire approval if this table doesn't exist yet
+            }
+
             toast.success(`Approved ${items.length} items`);
             onSuccess();
-        } catch {
+        } catch (error) {
+            console.error('Approval failed:', error);
             toast.error('Failed to update');
         }
     };
@@ -343,7 +491,12 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                                         <FormLabel className="text-xs font-semibold">Select Vendor</FormLabel>
                                         <FormControl>
                                             <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col gap-3">
-                                                {item.vendors.map((vendor, i) => (
+                                                {item.vendors.map((vendor, i) => {
+                                                    const vendorName = vendor[0] || 'N/A';
+                                                    const vendorRate = vendor[1] || '0';
+                                                    const vendorPayment = vendor[2] || 'N/A';
+                                                    
+                                                    return (
                                                     <div
                                                         key={i}
                                                         onClick={() => field.onChange(`${i}`)}
@@ -358,13 +511,18 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                                                                 id={`v-${item.searialNumber}-${i}`}
                                                                 className="h-5 w-5 border-2 border-muted-foreground/30 text-blue-600 data-[state=checked]:border-blue-600 data-[state=checked]:text-blue-600"
                                                             />
-                                                            <span className="text-sm font-medium text-foreground/80">
-                                                                Payment Term: {vendor[2]}
+                                                            <span className="text-sm font-semibold text-foreground">
+                                                                {vendorName}
                                                             </span>
                                                         </div>
-                                                        <span className="font-bold text-base">₹{vendor[1]}</span>
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <span className="font-bold text-base">₹{vendorRate}</span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {vendorPayment}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                ))}
+                                                );})}
                                             </RadioGroup>
                                         </FormControl>
                                     </FormItem>
