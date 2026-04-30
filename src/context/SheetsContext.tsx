@@ -1,5 +1,5 @@
 import { fetchSheet } from '@/lib/fetchers';
-import type { IndentSheet, InventorySheet, MasterSheet, PoMasterSheet, ReceivedSheet, StoreOutSheet } from '@/types';
+import type { IndentSheet, InventorySheet, MasterSheet, PoMasterSheet, ReceivedSheet, StoreOutSheet, PoHistorySheet } from '@/types';
 import type { ApprovedIndentSheet, VendorRateUpdateSheet, ThreePartyApprovalSheet, PoApprovalSheet } from '@/types/sheets';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ interface SheetsState {
     updateThreePartyApprovalSheet: () => void;
     updatePoHistorySheet: () => void;
     updatePoApprovalSheet: () => void;
+    updateStoreOutApprovalSheet: () => void;
     updateAll: () => void;
 
     indentSheet: IndentSheet[];
@@ -26,6 +27,7 @@ interface SheetsState {
     threePartyApprovalSheet: ThreePartyApprovalSheet[];
     poHistorySheet: PoHistorySheet[];
     poApprovalSheet: PoApprovalSheet[];
+    storeOutApprovalSheet: any[];
     masterSheet: MasterSheet | undefined;
 
     indentLoading: boolean;
@@ -38,6 +40,7 @@ interface SheetsState {
     threePartyApprovalLoading: boolean;
     poHistoryLoading: boolean;
     poApprovalLoading: boolean;
+    storeOutApprovalLoading: boolean;
     allLoading: boolean;
 }
 

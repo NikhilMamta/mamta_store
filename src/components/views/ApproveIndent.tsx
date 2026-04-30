@@ -371,7 +371,7 @@ export default () => {
                 toast.success(`Updated product name from "${oldProductName}" to "${newProductName}" for ${rowsToUpdate.length} records`);
             } else {
                 // 1. Update INDENT table
-                const isNowApproved = (editValues.vendorType && editValues.vendorType !== 'Pending');
+                const isNowApproved = (editValues.vendorType && (editValues.vendorType as any) !== 'Pending');
                 
                 await postToSheet(
                     indentSheet

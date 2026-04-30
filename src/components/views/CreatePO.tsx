@@ -410,7 +410,7 @@ export default () => {
         setIsEditingDestination(false);
     };
     // Helper to find indent across sheets
-    const findIndentWithFallback = (id: string, serial?: number) => {
+    const findIndentWithFallback = (id: string, serial?: number | string) => {
         let found = indentSheet.find((i) => {
             if (serial) return String(i.searialNumber) === String(serial);
             return i.indentNumber?.trim().toLowerCase() === id.trim().toLowerCase();
@@ -595,7 +595,7 @@ export default () => {
             const grandTotal = calculateGrandTotal(
                 values.indents.map((indent) => {
                     // Precise match using searialNumber if available
-                    const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber);
+                    const value = findIndentWithFallback(indent.indentNumber, indent.searialNumber as any);
 
                     return {
                         quantity: value?.approvedQuantity || 0,

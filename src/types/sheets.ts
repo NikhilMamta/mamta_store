@@ -1,4 +1,4 @@
-export type Sheet = 'INDENT' | 'RECEIVED' | 'MASTER' | 'USER' | 'PO MASTER' | 'PO HISTORY' | 'PO APPROVAL' | 'INVENTORY' | 'QUOTATION HISTORY' | 'STORE OUT' | 'APPROVED INDENT' | 'VENDOR RATE UPDATE' | 'THREE PARTY APPROVAL';
+export type Sheet = 'INDENT' | 'RECEIVED' | 'MASTER' | 'USER' | 'PO MASTER' | 'PO HISTORY' | 'PO APPROVAL' | 'INVENTORY' | 'QUOTATION HISTORY' | 'STORE OUT' | 'APPROVED INDENT' | 'VENDOR RATE UPDATE' | 'THREE PARTY APPROVAL' | 'STORE OUT REQUEST' | 'STORE OUT APPROVAL' | 'STORE_OUT_REQUEST' | 'STORE_OUT_APPROVAL';
 
 export type ApprovedIndentSheet = {
     id?: number;
@@ -9,6 +9,8 @@ export type ApprovedIndentSheet = {
     delay?: string;
     planned2?: string;
     status?: string;
+    searialNumber?: string | number;
+    uom?: string;
 };
 
 export type VendorRateUpdateSheet = {
@@ -125,6 +127,8 @@ export type IndentSheet = {
     rate: number;
     status?: string;
     searialNumber?: number | string;
+    wardName?: string;
+    floor?: string;
 };
 
 export type StoreOutSheet = {
@@ -200,6 +204,7 @@ export type InventorySheet = {
     current: number;
     totalPrice: number;
     colorCode: string;
+    currentStock?: number;
 };
 
 export type PoMasterSheet = {
