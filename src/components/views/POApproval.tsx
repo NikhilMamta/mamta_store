@@ -68,6 +68,7 @@ interface PoTableData {
     status: string;
     actual: string;
     indentBy: string;
+    indentNumber: string;
     originalRow: any;
 }
 
@@ -128,6 +129,7 @@ export default () => {
         status: String(getV(row, 'Status', 'status') || ''),
         actual: String(getV(row, 'Actual', 'actual') || ''),
         indentBy: String(getV(row, 'Indent By', 'indentBy') || ''),
+        indentNumber: String(getV(row, 'Indent Number', 'indentNumber', 'indent_number') || ''),
         originalRow: row
     });
 

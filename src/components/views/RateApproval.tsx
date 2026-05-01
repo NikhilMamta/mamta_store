@@ -324,7 +324,7 @@ export default () => {
 };
 
 const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onSuccess: () => void }) => {
-    const { indentSheet, vendorRateUpdateSheet } = useSheets();
+    const { indentSheet, vendorRateUpdateSheet, approvedIndentSheet, updateApprovedIndentSheet } = useSheets();
     const schema = z.object({
         approvals: z.array(z.object({
             searialNumber: z.union([z.string(), z.number()]),
@@ -415,7 +415,7 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                 }
                 
                 const approvedIndentRecord = approvedIndentSheet.find(
-                    (ai) => ai.indent_number === indentNumber && ai.status?.trim().toLowerCase() === 'pending'
+                    (ai) => ai.indentNumber === indentNumber && ai.status?.trim().toLowerCase() === 'pending'
                 );
                 if (approvedIndentRecord && approvedIndentRecord.id) {
                     await postToSheet([{
