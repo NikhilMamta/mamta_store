@@ -45,8 +45,18 @@ interface InventoryTable {
 }
 
 export default () => {
-    const { inventorySheet, inventoryLoading, masterSheet, updateAll } = useSheets();
-
+    const { 
+        inventorySheet, 
+        inventoryLoading, 
+        masterSheet, 
+        updateAll, 
+        indentSheet,
+        approvedIndentSheet,
+        receivedSheet,
+        storeOutSheet,
+        vendorRateUpdateSheet
+    } = useSheets();
+ 
     const [tableData, setTableData] = useState<InventoryTable[]>([]);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,26 +66,99 @@ export default () => {
         uom: '',
         opening: '',
     });
-
+ 
     useEffect(() => {
+        // 1. Create a mapping of indentNumber -> itemName from indentSheet
+        const indentToItem: Record<string, string> = {};
+        indentSheet.forEach(row => {
+            if (row.indentNumber && row.productName) {
+                indentToItem[row.indentNumber] = row.productName.trim().toLowerCase();
+            }
+        });
+
+        // 2. Calculate dynamic totals
+        const indentTotals: Record<string, number> = {};
+        indentSheet.forEach(curr => {
+            const name = curr.productName?.trim().toLowerCase();
+            if (name) {
+                indentTotals[name] = (indentTotals[name] || 0) + (Number(curr.quantity) || 0);
+            }
+        });
+
+        const approvedTotals: Record<string, number> = {};
+        approvedIndentSheet.forEach(curr => {
+            const name = indentToItem[curr.indentNumber];
+            if (name) {
+                approvedTotals[name] = (approvedTotals[name] || 0) + (Number(curr.approvedQuantity) || 0);
+            }
+        });
+
+        const purchaseTotals: Record<string, number> = {};
+        receivedSheet.forEach(curr => {
+            const name = indentToItem[curr.indentNumber];
+            if (name) {
+                purchaseTotals[name] = (purchaseTotals[name] || 0) + (Number(curr.receivedQuantity) || 0);
+            }
+        });
+
+        const outTotals: Record<string, number> = {};
+        storeOutSheet.forEach(curr => {
+            // Some store out records might have productName directly, some might have indentNumber
+            const name = (curr.productName || (curr.indentNumber ? indentToItem[curr.indentNumber] : '') || '').trim().toLowerCase();
+            if (name) {
+                // 'approveQty' in storeOutSheet typically represents the issued quantity
+                outTotals[name] = (outTotals[name] || 0) + (Number(curr.approveQty || curr.qty) || 0);
+            }
+        });
+
+        // 3. Calculate latest rates from vendorRateUpdateSheet
+        const latestRates: Record<string, number> = {};
+        // Sort by timestamp (newest first) to easily get the latest rate
+        const sortedVendorUpdates = [...vendorRateUpdateSheet].sort((a, b) => 
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        
+        sortedVendorUpdates.forEach(curr => {
+            const name = indentToItem[curr.indentNumber];
+            if (name && !latestRates[name] && curr.rate1) {
+                latestRates[name] = Number(curr.rate1);
+            }
+        });
+
         setTableData(
-            inventorySheet.map((i) => ({
-                totalPrice: i.totalPrice || 0,
-                uom: i.uom || '',
-                rate: i.individualRate || 0,
-                currentStock: i.currentStock || 0,
-                status: i.colorCode || '',
-                indented: i.indented || 0,
-                opening: i.opening || 0,
-                itemName: i.itemName || '',
-                groupHead: i.groupHead || '',
-                purchaseQuantity: i.purchaseQuantity || 0,
-                approved: i.approved || 0,
-                outQuantity: i.outQuantity || 0,
-            }))
+            inventorySheet.map((i) => {
+                const itemName = i.itemName?.trim().toLowerCase();
+                const indented = itemName ? (indentTotals[itemName] || 0) : 0;
+                const approved = itemName ? (approvedTotals[itemName] || 0) : 0;
+                const purchased = itemName ? (purchaseTotals[itemName] || 0) : 0;
+                const issued = itemName ? (outTotals[itemName] || 0) : 0;
+                const opening = i.opening || 0;
+                
+                // Current Stock calculation: Opening + Purchased - Issued
+                const currentStock = opening + purchased - issued;
+
+                // Rate from Vendor Rate Update table
+                const rate = itemName ? (latestRates[itemName] || i.individualRate || 0) : (i.individualRate || 0);
+                const totalPrice = currentStock * rate;
+
+                return {
+                    totalPrice: totalPrice,
+                    uom: i.uom || '',
+                    rate: rate,
+                    currentStock: currentStock,
+                    status: i.colorCode || '',
+                    indented: indented,
+                    opening: opening,
+                    itemName: i.itemName || '',
+                    groupHead: i.groupHead || '',
+                    purchaseQuantity: purchased,
+                    approved: approved,
+                    outQuantity: issued,
+                };
+            })
             .reverse()
         );
-    }, [inventorySheet]);
+    }, [inventorySheet, indentSheet, approvedIndentSheet, receivedSheet, storeOutSheet, vendorRateUpdateSheet]);
     const columns: ColumnDef<InventoryTable>[] = [
         {
             accessorKey: 'itemName',
@@ -114,6 +197,7 @@ export default () => {
         },
         { accessorKey: 'indented', header: 'Indented' },
         { accessorKey: 'approved', header: 'Approved' },
+        { accessorKey: 'opening', header: 'Opening' },
         { accessorKey: 'purchaseQuantity', header: 'Purchased' },
         { accessorKey: 'outQuantity', header: 'Issued' },
         { accessorKey: 'currentStock', header: 'Quantity' },

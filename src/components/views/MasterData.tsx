@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Heading from '../element/Heading';
-import { Database, Building2, Users, Layers, MapPin, Plus, Trash2, Building, RefreshCw } from 'lucide-react';
+import { Database, Building2, Users, Layers, MapPin, Plus, Trash2, Building, RefreshCw, Pencil } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +53,7 @@ export default function MasterData() {
     const [loading, setLoading] = useState(true);
     const [openDialog, setOpenDialog] = useState<string | null>(null);
     const [form, setForm] = useState<Record<string, string>>({});
+    const [editingRow, setEditingRow] = useState<MasterRow | null>(null);
     const [saving, setSaving] = useState(false);
 
     async function fetchMaster() {
@@ -67,12 +68,30 @@ export default function MasterData() {
 
     async function saveRow(fields: Record<string, string>) {
         setSaving(true);
-        const { error } = await supabase.from('master').insert([fields]);
-        if (error) { toast.error('Failed to save: ' + error.message); }
+        let res;
+        if (editingRow) {
+            const idField = 
+                editingRow.vendor_name ? 'vendor_name' :
+                editingRow.department ? 'department' :
+                editingRow.item_name ? 'item_name' :
+                editingRow.ward_name ? 'ward_name' :
+                editingRow.company_name ? 'company_name' : null;
+
+            if (idField) {
+                res = await supabase.from('master').update(fields).eq(idField, (editingRow as any)[idField]);
+            } else {
+                res = await supabase.from('master').insert([fields]);
+            }
+        } else {
+            res = await supabase.from('master').insert([fields]);
+        }
+
+        if (res.error) { toast.error('Failed to save: ' + res.error.message); }
         else {
-            toast.success('✅ Saved successfully');
+            toast.success(editingRow ? '✅ Updated successfully' : '✅ Saved successfully');
             setOpenDialog(null);
             setForm({});
+            setEditingRow(null);
             fetchMaster();
         }
         setSaving(false);
@@ -125,7 +144,7 @@ export default function MasterData() {
                     <div className="bg-card border rounded-lg">
                         <div className="p-4 border-b flex justify-between items-center">
                             <h3 className="font-semibold text-sm">Vendor List</h3>
-                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setOpenDialog('vendor'); }}>
+                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setEditingRow(null); setOpenDialog('vendor'); }}>
                                 <Plus size={14} /> Add Vendor
                             </Button>
                         </div>
@@ -137,7 +156,7 @@ export default function MasterData() {
                                         <TableHead>GSTIN</TableHead>
                                         <TableHead>Email</TableHead>
                                         <TableHead>Address</TableHead>
-                                        <TableHead className="w-16">Action</TableHead>
+                                        <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -148,7 +167,11 @@ export default function MasterData() {
                                                 <TableCell>{r.vendor_gstin}</TableCell>
                                                 <TableCell>{r.vendor_email}</TableCell>
                                                 <TableCell className="max-w-xs truncate">{r.vendor_address}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="flex gap-1">
+                                                    <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
+                                                        onClick={() => { setEditingRow(r); setForm(r as any); setOpenDialog('vendor'); }}>
+                                                        <Pencil size={14} />
+                                                    </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
                                                         onClick={() => deleteRow('vendor_name', r.vendor_name!)}>
                                                         <Trash2 size={14} />
@@ -168,7 +191,7 @@ export default function MasterData() {
                     <div className="bg-card border rounded-lg">
                         <div className="p-4 border-b flex justify-between items-center">
                             <h3 className="font-semibold text-sm">Departments</h3>
-                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setOpenDialog('department'); }}>
+                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setEditingRow(null); setOpenDialog('department'); }}>
                                 <Plus size={14} /> Add Department
                             </Button>
                         </div>
@@ -177,7 +200,7 @@ export default function MasterData() {
                                 <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                                     <TableRow>
                                         <TableHead>Department Name</TableHead>
-                                        <TableHead className="w-16">Action</TableHead>
+                                        <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -185,7 +208,14 @@ export default function MasterData() {
                                         unique('department').map((dep, i) => (
                                             <TableRow key={i}>
                                                 <TableCell className="font-medium">{dep}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="flex gap-1">
+                                                    <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
+                                                        onClick={() => { 
+                                                            const r = masterData.find(x => x.department === dep);
+                                                            if (r) { setEditingRow(r); setForm(r as any); setOpenDialog('department'); }
+                                                        }}>
+                                                        <Pencil size={14} />
+                                                    </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
                                                         onClick={() => deleteRow('department', dep)}>
                                                         <Trash2 size={14} />
@@ -205,7 +235,7 @@ export default function MasterData() {
                     <div className="bg-card border rounded-lg">
                         <div className="p-4 border-b flex justify-between items-center">
                             <h3 className="font-semibold text-sm">Items / Group Heads</h3>
-                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setOpenDialog('item'); }}>
+                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setEditingRow(null); setOpenDialog('item'); }}>
                                 <Plus size={14} /> Add Item
                             </Button>
                         </div>
@@ -216,7 +246,7 @@ export default function MasterData() {
                                         <TableHead>Group Head</TableHead>
                                         <TableHead>Item Name</TableHead>
                                         <TableHead>UOM</TableHead>
-                                        <TableHead className="w-16">Action</TableHead>
+                                        <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -226,7 +256,11 @@ export default function MasterData() {
                                                 <TableCell>{r.group_head}</TableCell>
                                                 <TableCell className="font-medium">{r.item_name}</TableCell>
                                                 <TableCell>{r.unit_of_measurement}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="flex gap-1">
+                                                    <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
+                                                        onClick={() => { setEditingRow(r); setForm(r as any); setOpenDialog('item'); }}>
+                                                        <Pencil size={14} />
+                                                    </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
                                                         onClick={() => deleteRow('item_name', r.item_name!)}>
                                                         <Trash2 size={14} />
@@ -246,7 +280,7 @@ export default function MasterData() {
                     <div className="bg-card border rounded-lg">
                         <div className="p-4 border-b flex justify-between items-center">
                             <h3 className="font-semibold text-sm">Ward / Floor Names</h3>
-                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setOpenDialog('ward'); }}>
+                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setEditingRow(null); setOpenDialog('ward'); }}>
                                 <Plus size={14} /> Add Ward
                             </Button>
                         </div>
@@ -255,7 +289,7 @@ export default function MasterData() {
                                 <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                                     <TableRow>
                                         <TableHead>Ward / Floor Name</TableHead>
-                                        <TableHead className="w-16">Action</TableHead>
+                                        <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -263,7 +297,14 @@ export default function MasterData() {
                                         unique('ward_name').map((ward, i) => (
                                             <TableRow key={i}>
                                                 <TableCell className="font-medium">{ward}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="flex gap-1">
+                                                    <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
+                                                        onClick={() => { 
+                                                            const r = masterData.find(x => x.ward_name === ward);
+                                                            if (r) { setEditingRow(r); setForm(r as any); setOpenDialog('ward'); }
+                                                        }}>
+                                                        <Pencil size={14} />
+                                                    </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
                                                         onClick={() => deleteRow('ward_name', ward)}>
                                                         <Trash2 size={14} />
@@ -283,7 +324,12 @@ export default function MasterData() {
                     <div className="bg-card border rounded-lg p-6 space-y-4">
                         <div className="flex justify-between items-center border-b pb-3">
                             <h3 className="font-semibold">Company Information</h3>
-                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setOpenDialog('company'); }}>
+                            <Button size="sm" className="gap-1" onClick={() => { 
+                                const co = masterData.find(r => r.company_name);
+                                if (co) { setEditingRow(co); setForm(co as any); }
+                                else { setForm({}); setEditingRow(null); }
+                                setOpenDialog('company'); 
+                            }}>
                                 <Plus size={14} /> Update Info
                             </Button>
                         </div>
@@ -320,19 +366,41 @@ export default function MasterData() {
             {/* Vendor Dialog */}
             <Dialog open={openDialog === 'vendor'} onOpenChange={o => !o && setOpenDialog(null)}>
                 <DialogContent className="sm:max-w-lg">
-                    <DialogHeader><DialogTitle>Add New Vendor</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>{editingRow ? 'Edit Vendor' : 'Add New Vendor'}</DialogTitle></DialogHeader>
                     <div className="space-y-3">
-                        {[['vendor_name','Vendor Name'], ['vendor_gstin','GSTIN'], ['vendor_email','Email'], ['vendor_address','Address']].map(([key, label]) => (
-                            <div key={key}>
-                                <label className="text-xs font-medium">{label}</label>
-                                <Input className="mt-1" value={form[key] || ''} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} />
+                        {[
+                            ['vendor_name', 'Vendor Name', false],
+                            ['vendor_gstin', 'GSTIN', false],
+                            ['vendor_email', 'Email', false],
+                            ['vendor_address', 'Address', false],
+                            ['payment_term', 'Payment Term', true]
+                        ].map(([key, label, isDatalist]) => (
+                            <div key={key as string}>
+                                <label className="text-xs font-medium">{label as string}</label>
+                                <Input
+                                    className="mt-1"
+                                    list={isDatalist ? `${key}-list` : undefined}
+                                    value={form[key as string] || ''}
+                                    onChange={e => setForm(p => ({ ...p, [key as string]: e.target.value }))}
+                                />
+                                {isDatalist && (
+                                    <datalist id={`${key}-list`}>
+                                        {unique(key as any).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                )}
                             </div>
                         ))}
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                        <Button disabled={saving} onClick={() => saveRow({ vendor_name: form.vendor_name, vendor_gstin: form.vendor_gstin, vendor_email: form.vendor_email, vendor_address: form.vendor_address })}>
-                            {saving ? 'Saving...' : 'Save Vendor'}
+                        <Button disabled={saving} onClick={() => saveRow({
+                            vendor_name: form.vendor_name,
+                            vendor_gstin: form.vendor_gstin,
+                            vendor_email: form.vendor_email,
+                            vendor_address: form.vendor_address,
+                            payment_term: form.payment_term
+                        })}>
+                            {saving ? 'Saving...' : editingRow ? 'Update Vendor' : 'Save Vendor'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -341,7 +409,7 @@ export default function MasterData() {
             {/* Department Dialog */}
             <Dialog open={openDialog === 'department'} onOpenChange={o => !o && setOpenDialog(null)}>
                 <DialogContent className="sm:max-w-sm">
-                    <DialogHeader><DialogTitle>Add Department</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>{editingRow ? 'Edit Department' : 'Add Department'}</DialogTitle></DialogHeader>
                     <div>
                         <label className="text-xs font-medium">Department Name</label>
                         <Input className="mt-1" value={form.department || ''} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} />
@@ -349,7 +417,7 @@ export default function MasterData() {
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
                         <Button disabled={saving} onClick={() => saveRow({ department: form.department })}>
-                            {saving ? 'Saving...' : 'Save'}
+                            {saving ? 'Saving...' : editingRow ? 'Update' : 'Save'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -358,19 +426,37 @@ export default function MasterData() {
             {/* Item Dialog */}
             <Dialog open={openDialog === 'item'} onOpenChange={o => !o && setOpenDialog(null)}>
                 <DialogContent className="sm:max-w-md">
-                    <DialogHeader><DialogTitle>Add Item</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>{editingRow ? 'Edit Item' : 'Add Item'}</DialogTitle></DialogHeader>
                     <div className="space-y-3">
-                        {[['group_head','Group Head / Category'], ['item_name','Item Name'], ['unit_of_measurement','Unit of Measurement']].map(([key, label]) => (
+                        {[
+                            ['group_head', 'Group Head / Category'],
+                            ['item_name', 'Item Name'],
+                            ['unit_of_measurement', 'Unit of Measurement']
+                        ].map(([key, label]) => (
                             <div key={key}>
                                 <label className="text-xs font-medium">{label}</label>
-                                <Input className="mt-1" value={form[key] || ''} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} />
+                                <Input
+                                    className="mt-1"
+                                    list={key !== 'item_name' ? `${key}-list` : undefined}
+                                    value={form[key] || ''}
+                                    onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                                />
+                                {key !== 'item_name' && (
+                                    <datalist id={`${key}-list`}>
+                                        {unique(key as any).map(v => <option key={v} value={v} />)}
+                                    </datalist>
+                                )}
                             </div>
                         ))}
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                        <Button disabled={saving} onClick={() => saveRow({ group_head: form.group_head, item_name: form.item_name, unit_of_measurement: form.unit_of_measurement })}>
-                            {saving ? 'Saving...' : 'Save Item'}
+                        <Button disabled={saving} onClick={() => saveRow({
+                            group_head: form.group_head,
+                            item_name: form.item_name,
+                            unit_of_measurement: form.unit_of_measurement
+                        })}>
+                            {saving ? 'Saving...' : editingRow ? 'Update Item' : 'Save Item'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -379,7 +465,7 @@ export default function MasterData() {
             {/* Ward Dialog */}
             <Dialog open={openDialog === 'ward'} onOpenChange={o => !o && setOpenDialog(null)}>
                 <DialogContent className="sm:max-w-sm">
-                    <DialogHeader><DialogTitle>Add Ward / Floor</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>{editingRow ? 'Edit Ward / Floor' : 'Add Ward / Floor'}</DialogTitle></DialogHeader>
                     <div>
                         <label className="text-xs font-medium">Ward Name</label>
                         <Input className="mt-1" value={form.ward_name || ''} onChange={e => setForm(p => ({ ...p, ward_name: e.target.value }))} />
@@ -387,7 +473,7 @@ export default function MasterData() {
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
                         <Button disabled={saving} onClick={() => saveRow({ ward_name: form.ward_name })}>
-                            {saving ? 'Saving...' : 'Save'}
+                            {saving ? 'Saving...' : editingRow ? 'Update' : 'Save'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -408,7 +494,7 @@ export default function MasterData() {
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
                         <Button disabled={saving} onClick={() => saveRow(form)}>
-                            {saving ? 'Saving...' : 'Save Company Info'}
+                            {saving ? 'Saving...' : editingRow ? 'Update Company Info' : 'Save Company Info'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

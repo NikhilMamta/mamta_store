@@ -37,6 +37,7 @@ export default () => {
     const [showAddProduct, setShowAddProduct] = useState<{ [key: number]: boolean }>({});
     const [localProducts, setLocalProducts] = useState<{ [key: string]: string[] }>({});
     const [searchTermCategory, setSearchTermCategory] = useState("");
+    const [searchTermWard, setSearchTermWard] = useState("");
 
 
     useEffect(() => {
@@ -529,21 +530,30 @@ export default () => {
                                                 render={({ field }) => (
                                                     <FormItem className="md:col-span-1">
                                                         <FormLabel className="text-sm">Ward Name<span className="text-destructive">*</span></FormLabel>
-                                                        <FormControl>
-                                                            <div className="relative">
-                                                                <Input
-                                                                    placeholder="Search/enter ward"
-                                                                    {...field}
-                                                                    list={`ward-options-${index}`}
-                                                                    className="h-9"
-                                                                />
-                                                                <datalist id={`ward-options-${index}`}>
-                                                                    {options?.wardNames.map((w, i) => (
-                                                                        <option key={i} value={w} />
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl>
+                                                                <SelectTrigger className="w-full h-9">
+                                                                    <SelectValue placeholder="Select ward" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                <div className="flex items-center border-b px-3 pb-3">
+                                                                    <Search className="mr-2 h-4 w-4 opacity-50" />
+                                                                    <input 
+                                                                        placeholder="Search..." 
+                                                                        value={searchTermWard} 
+                                                                        onChange={(e) => setSearchTermWard(e.target.value)} 
+                                                                        onKeyDown={(e) => e.stopPropagation()} 
+                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none" 
+                                                                    />
+                                                                </div>
+                                                                {(options?.wardNames || [])
+                                                                    .filter(w => w.toLowerCase().includes(searchTermWard.toLowerCase()))
+                                                                    .map((w, i) => (
+                                                                        <SelectItem key={i} value={w}>{w}</SelectItem>
                                                                     ))}
-                                                                </datalist>
-                                                            </div>
-                                                        </FormControl>
+                                                            </SelectContent>
+                                                        </Select>
                                                     </FormItem>
                                                 )}
                                             />
@@ -554,21 +564,30 @@ export default () => {
                                                 render={({ field }) => (
                                                     <FormItem className="md:col-span-1">
                                                         <FormLabel className="text-sm">Ward Name<span className="text-destructive">*</span></FormLabel>
-                                                        <FormControl>
-                                                            <div className="relative">
-                                                                <Input
-                                                                    placeholder="Search/enter ward"
-                                                                    {...field}
-                                                                    list={`area-options-${index}`}
-                                                                    className="h-9"
-                                                                />
-                                                                <datalist id={`area-options-${index}`}>
-                                                                    {options?.wardNames.map((w, i) => (
-                                                                        <option key={i} value={w} />
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl>
+                                                                <SelectTrigger className="w-full h-9">
+                                                                    <SelectValue placeholder="Select ward" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                <div className="flex items-center border-b px-3 pb-3">
+                                                                    <Search className="mr-2 h-4 w-4 opacity-50" />
+                                                                    <input 
+                                                                        placeholder="Search..." 
+                                                                        value={searchTermWard} 
+                                                                        onChange={(e) => setSearchTermWard(e.target.value)} 
+                                                                        onKeyDown={(e) => e.stopPropagation()} 
+                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none" 
+                                                                    />
+                                                                </div>
+                                                                {(options?.wardNames || [])
+                                                                    .filter(w => w.toLowerCase().includes(searchTermWard.toLowerCase()))
+                                                                    .map((w, i) => (
+                                                                        <SelectItem key={i} value={w}>{w}</SelectItem>
                                                                     ))}
-                                                                </datalist>
-                                                            </div>
-                                                        </FormControl>
+                                                            </SelectContent>
+                                                        </Select>
                                                     </FormItem>
                                                 )}
                                             />

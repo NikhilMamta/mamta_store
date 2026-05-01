@@ -1016,15 +1016,14 @@ export default () => {
 
     return (
         <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">
-            <Heading
-                heading="Approve Indent"
-                subtext="Update Indent status to Approve or Reject them"
-                tabs
-            >
-                <ClipboardCheck size={50} className="text-primary" />
-            </Heading>
-
             <Tabs defaultValue="pending" className="w-full flex-1 flex flex-col min-h-0">
+                <Heading
+                    heading="Approve Indent"
+                    subtext="Update Indent status to Approve or Reject them"
+                    tabs
+                >
+                    <ClipboardCheck size={50} className="text-primary" />
+                </Heading>
                 <TabsContent value="pending" className="w-full">
                     <div className="space-y-4">
                         {selectedRows.size > 0 && (

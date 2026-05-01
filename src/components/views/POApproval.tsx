@@ -97,6 +97,7 @@ export default () => {
     };
 
     const mapRowToTableData = (row: any): PoTableData => ({
+        indentNumber: String(getV(row, 'Indent Number', 'indentNumber', 'indentnumber') || ''),
         partyName: String(getV(row, 'Party Name', 'partyName', 'party') || ''),
         poNumber: String(getV(row, 'PO Number', 'poNumber', 'ponumber') || ''),
         quotationNumber: String(getV(row, 'Quotation Number', 'quotationNumber') || ''),
@@ -129,7 +130,6 @@ export default () => {
         status: String(getV(row, 'Status', 'status') || ''),
         actual: String(getV(row, 'Actual', 'actual') || ''),
         indentBy: String(getV(row, 'Indent By', 'indentBy') || ''),
-        indentNumber: String(getV(row, 'Indent Number', 'indentNumber', 'indent_number') || ''),
         originalRow: row
     });
 
