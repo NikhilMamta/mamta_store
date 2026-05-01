@@ -125,7 +125,7 @@ const RECEIVES_ITEMS_COLUMNS = [
 ];
 
 const STORE_OUT_REQUEST_COLUMNS = [
-    'id', 'timestamp', 'indent_number', 'issue_no', 'issue_date', 'indenter_name', 'indent_type',
+    'id', 'timestamp', 'indent_number', 'product_name', 'issue_no', 'issue_date', 'indenter_name', 'indent_type',
     'approval_needed', 'requested_by', 'floor', 'ward_name', 'qty', 'unit', 'department',
     'category', 'area_of_use', 'planned_7', 'delay', 'status'
 ];
@@ -150,8 +150,7 @@ const USER_COLUMNS = [
     'update_vendor_view', 'update_vendor_action', 'three_party_approval_view',
     'three_party_approval_action', 'receive_item_view', 'receive_item_action',
     'store_out_approval_view', 'store_out_approval_action', 'pending_indents_view',
-    'orders_view', 'get_purchase', 'po_master', 'all_indent', 'quotation',
-    'training_video', 'license', 'created_at'
+    'orders_view', 'get_purchase', 'po_master', 'all_indent', 'quotation', 'training_video', 'license', 'created_at'
 ];
 
 // Utility to normalize table names

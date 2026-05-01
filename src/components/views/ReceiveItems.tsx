@@ -1237,12 +1237,10 @@ export default () => {
     const billReceived = form.watch('billReceived');
 
     // Updated useEffect for matching indents
-    // Updated useEffect for matching indents
     useEffect(() => {
         if (selectedIndent) {
-            // Filter from indentSheet to get ALL products in the PO that are pending
             // Filter from poApprovalSheet to get items in this PO
-            const matching: RecieveItemsData[] = poApprovalSheet
+            const matching: any[] = poApprovalSheet
                 .filter(
                     (i) => {
                         const history = poHistorySheet.find(h => h.indentNumber === i.indentNumber);
@@ -1252,13 +1250,20 @@ export default () => {
                 .map((i) => {
                     const indent = indentSheet.find(indent => indent.indentNumber === i.indentNumber);
                     const history = poHistorySheet.find(h => h.indentNumber === i.indentNumber);
+                    
+                    const orderedQty = indent?.qty || indent?.approvedQuantity || indent?.quantity || 0;
+                    const alreadyReceived = receivedSheet
+                        .filter(r => r.indentNumber === i.indentNumber)
+                        .reduce((sum, r) => sum + (Number(r.receivedQuantity) || 0), 0);
+
                     return {
                         indentNumber: i.indentNumber,
                         poNumber: history?.poNumber || '',
                         uom: indent?.uom || '',
                         poCopy: history?.pdf || '',
                         vendor: history?.partyName || '',
-                        quantity: indent?.qty || indent?.approvedQuantity || indent?.quantity || 0,
+                        quantity: orderedQty,
+                        pendingQuantity: Math.max(0, orderedQty - alreadyReceived),
                         poDate: history?.timestamp || '',
                         product: indent?.productName || '',
                         searialNumber: indent?.searialNumber,
@@ -1267,10 +1272,10 @@ export default () => {
 
             setMatchingIndents(matching);
 
-            // Initialize items array in form
+            // Initialize items array in form with PENDING quantity
             const initialItems = matching.map((indent) => ({
                 indentNumber: indent.indentNumber,
-                quantity: indent.quantity,
+                quantity: indent.pendingQuantity,
                 searialNumber: indent.searialNumber,
             }));
             form.setValue('items', initialItems as any);
@@ -1299,17 +1304,15 @@ export default () => {
                     );
                 } catch (err) {
                     console.error('Error uploading bill photo to Supabase:', err);
-                    // Continue without photo or throw? Let's throw for now as per user's "failed" report
                     throw new Error('Failed to upload bill photo');
                 }
             }
 
             const rows: Partial<ReceivedSheet>[] = values.items.map((item) => {
-                const match = matchingIndents.find(i =>
+                const match = (matchingIndents as any[]).find(i =>
                     i.searialNumber ? String(i.searialNumber) === String(item.searialNumber) : i.indentNumber === item.indentNumber
                 );
                 
-                // Format poDate: Ensure it's a valid date or null for Postgres
                 let pDate = selectedIndent?.poDate;
                 if (!pDate || pDate === '' || pDate === 'N/A') {
                     pDate = null as any;
@@ -1328,36 +1331,45 @@ export default () => {
                     billAmount: values.billAmount,
                     photoOfBill: billPhotoUrl,
                     searialNumber: item.searialNumber,
-                    planned6: formatDate(new Date()), // Defaulting to current date
+                    planned6: formatDate(new Date()),
                     status: 'Pending' 
                 };
             });
 
-
-            // Insert in RECEIVED sheet
             await postToSheet(rows, 'insert', 'RECEIVED');
 
             // Update each indent and PO APPROVAL status
             for (const item of values.items) {
+                const match = (matchingIndents as any[]).find(i =>
+                    i.searialNumber ? String(i.searialNumber) === String(item.searialNumber) : i.indentNumber === item.indentNumber
+                );
+                
                 const indentToUpdate = indentSheet.find(
                     (s) => s.searialNumber ? String(s.searialNumber) === String(item.searialNumber) : s.indentNumber === item.indentNumber
                 );
 
-                if (indentToUpdate) {
+                if (indentToUpdate && match) {
+                    const alreadyReceived = receivedSheet
+                        .filter(r => r.indentNumber === item.indentNumber)
+                        .reduce((sum, r) => sum + (Number(r.receivedQuantity) || 0), 0);
+                    
+                    const newTotalReceived = alreadyReceived + (Number(item.quantity) || 0);
+                    const isFullyReceived = newTotalReceived >= match.quantity;
+
                     const updatePayload = {
                         rowIndex: (indentToUpdate as any).rowIndex,
                         indentNumber: indentToUpdate.indentNumber,
                         actual5: formatDate(new Date()),
-                        receiveStatus: values.status,
+                        receiveStatus: isFullyReceived ? 'Received' : 'Partially Received',
                     };
                     await postToSheet([updatePayload], 'update', 'INDENT');
 
-                    // Update PO APPROVAL table status to 'Received'
+                    // Update PO APPROVAL table status
                     const approvalToUpdate = poApprovalSheet.find(a => a.indentNumber === item.indentNumber);
                     if (approvalToUpdate) {
                         const approvalUpdate = {
                             id: approvalToUpdate.id,
-                            status: 'Approved'
+                            status: isFullyReceived ? 'Received' : 'Pending'
                         };
                         await postToSheet([approvalUpdate], 'update', 'PO APPROVAL');
                     }

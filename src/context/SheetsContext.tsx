@@ -15,6 +15,7 @@ interface SheetsState {
     updatePoHistorySheet: () => void;
     updatePoApprovalSheet: () => void;
     updateStoreOutApprovalSheet: () => void;
+    updateInventorySheet: () => void;
     updateAll: () => void;
 
     indentSheet: IndentSheet[];
@@ -206,6 +207,7 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
                 updatePoHistorySheet,
                 updatePoApprovalSheet,
                 updateStoreOutApprovalSheet,
+                updateInventorySheet,
                 updateAll,
                 indentSheet,
                 storeOutSheet,

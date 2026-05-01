@@ -100,17 +100,17 @@ export default () => {
 
         const groupItems = (items: StoreOutTableData[]) => {
             return items.reduce((acc, item) => {
-                const key = item.issueNo;
-                if (!acc[key]) {
+                const baseId = (item.issueNo || '').split(/[_/]/)[0];
+                if (!acc[baseId]) {
                     // Smart lookup for department
-                    const lookupId = (key || '').split(/[_/]/)[0].toLowerCase();
+                    const lookupId = baseId.toLowerCase();
                     const indent = indentSheet?.find(i => {
                         const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
                         return lookupId === itemBaseId;
                     });
 
-                    acc[key] = {
-                        issueNo: item.issueNo,
+                    acc[baseId] = {
+                        issueNo: baseId,
                         indenterName: item.requestedBy,
                         department: indent?.department || 'N/A',
                         category: item.category,
@@ -120,7 +120,7 @@ export default () => {
                         items: [],
                     };
                 }
-                acc[key].items.push(item);
+                acc[baseId].items.push(item);
                 return acc;
             }, {} as Record<string, GroupedStoreOutStatusData>);
         };

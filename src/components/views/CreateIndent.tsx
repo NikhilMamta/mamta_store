@@ -20,7 +20,7 @@ import {
 import { ClipLoader as Loader } from 'react-spinners';
 import { ClipboardList, Trash, Search, Plus } from 'lucide-react'; // Plus ko import karo
 import { postToSheet, submitToMaster, uploadFile } from '@/lib/fetchers';
-import type { IndentSheet, StoreOutSheet } from '@/types';
+import type { IndentSheet, StoreOutSheet, InventorySheet } from '@/types';
 import { useSheets } from '@/context/SheetsContext';
 import Heading from '../element/Heading';
 import { useEffect, useState } from 'react';
@@ -28,7 +28,7 @@ import { formatDate } from '@/lib/utils';
 
 
 export default () => {
-    const { indentSheet: sheet, storeOutSheet, updateIndentSheet, updateStoreOutSheet, masterSheet: options } = useSheets();
+    const { indentSheet: sheet, storeOutSheet, inventorySheet, updateIndentSheet, updateStoreOutSheet, updateInventorySheet, masterSheet: options } = useSheets();
     const [indentSheet, setIndentSheet] = useState<IndentSheet[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [searchTermGroupHead, setSearchTermGroupHead] = useState("");
@@ -136,21 +136,27 @@ export default () => {
 
 
     // Function to generate next indent number
-    const getNextIndentNumber = () => {
-        if (indentSheet.length === 0) {
-            return 'SI-0001';
+    const getNextIndentNumber = (type: 'Purchase' | 'Store Out' = 'Purchase') => {
+        const prefix = type === 'Purchase' ? 'SI-' : 'SO-';
+        const targetSheet = type === 'Purchase' ? indentSheet : (storeOutSheet as any[]);
+        
+        if (!targetSheet || targetSheet.length === 0) {
+            return `${prefix}0001`;
         }
 
-        const indentNumbers = indentSheet
-            .map(row => row.indentNumber)
-            .filter(num => num && num.startsWith('SI-'))
-            .map(num => parseInt(num.replace('SI-', ''), 10))
-            .filter(num => !isNaN(num));
+        const indentNumbers = targetSheet
+            .map((row: any) => row.indentNumber || row.issueNo)
+            .filter((num: string) => num && num.startsWith(prefix))
+            .map((num: string) => {
+                const base = num.split(/[_/]/)[0];
+                return parseInt(base.replace(prefix, ''), 10);
+            })
+            .filter((num: number) => !isNaN(num));
 
-        const maxNumber = Math.max(...indentNumbers, 0);
+        const maxNumber = indentNumbers.length > 0 ? Math.max(...indentNumbers, 0) : 0;
         const nextNumber = maxNumber + 1;
 
-        return `SI-${String(nextNumber).padStart(4, '0')}`;
+        return `${prefix}${String(nextNumber).padStart(4, '0')}`;
     };
 
 
@@ -225,48 +231,18 @@ export default () => {
 
             if (data.indentType === 'Store Out') {
                 // STORE OUT sheet submission
-                const storeOutRows: Partial<StoreOutSheet>[] = [];
-
+                const storeOutRows: any[] = [];
+                let currentIndentNumber = getNextIndentNumber('Store Out');
 
                 for (let i = 0; i < data.products.length; i++) {
                     const product = data.products[i];
 
-                    // const storeOutRow: Partial<StoreOutSheet> = {
-                    //     timestamp: timestamp,
-                    //     // Match Column B: Issue No
-                    //     issueNo: currentIssueNumber,
-                    //     indentNumber: currentIssueNumber,
-                    //     // Match Column C: Issue Date
-                    //     issueDate: product.issueDate ? formatDate(new Date(product.issueDate)) : issueDate,
-                    //     // Match Column D: Requested By
-                    //     requestedBy: product.requestedBy || data.indenterName || '',
-                    //     // Match Column E: Floor
-                    //     floor: product.floor || '',
-                    //     // Match Column F: Ward Name
-                    //     wardName: product.wardName || '',
-                    //     // Match Column G: Qty
-                    //     qty: Number(product.quantity) || 0,
-                    //     quantity: Number(product.quantity) || 0,
-                    //     // Match Column H: Unit
-                    //     unit: product.uom || '',
-                    //     uom: product.uom || '',
-                    //     // Match Column I: Department
-                    //     department: product.department || '',
-                    //     // Match Column J: Category
-                    //     category: product.category || '',
-                    //     groupHead: product.category || '',
-                    //     // Match Product Name (Missing in previous version but required)
-                    //     productName: product.productName || '',
-                    //     // Match Column K: Area Of Use
-                    //     areaOfUse: product.areaOfUse || '',
-                    //     // App Specific
-                    //     indentType: 'Store Out'
-                    // };
-
-
                     // Using camelCase keys that backend expects for store_out_request
                     const storeOutRow: any = {
                         timestamp: timestamp,
+                        indentNumber: `${currentIndentNumber}/${i + 1}`,
+                        issueNo: `${currentIndentNumber}/${i + 1}`,
+                        productName: product.productName || '',
                         issueDate: product.issueDate ? formatDate(new Date(product.issueDate)) : issueDate,
                         indenterName: data.indenterName || '',
                         indentType: data.indentType || 'Store Out',
@@ -282,7 +258,6 @@ export default () => {
                         planned7: timestamp, // planned_7 in SQL
                         status: 'Pending'
                     };
-
 
                     storeOutRows.push(storeOutRow);
                 }
@@ -352,6 +327,47 @@ export default () => {
 
                 if (res.success) {
                     toast.success(`Purchase indent created! Indent No: ${indentRows.map(r => r.indentNumber).join(', ')}`);
+
+                    // AUTOMATIC INVENTORY REGISTRATION:
+                    // Check if unique products already exist in inventory, if not, add them.
+                    const uniqueProductNames = Array.from(new Set(data.products.map(p => p.productName?.trim()).filter(Boolean)));
+                    const inventoryRowsToInsert: Partial<InventorySheet>[] = [];
+
+                    for (const prodName of uniqueProductNames) {
+                        const exists = inventorySheet?.some(inv => inv.itemName?.toLowerCase() === prodName?.toLowerCase());
+                        
+                        if (!exists) {
+                            // Find the product details from the submitted data
+                            const productDetails = data.products.find(p => p.productName?.trim() === prodName);
+                            if (productDetails) {
+                                inventoryRowsToInsert.push({
+                                    groupHead: productDetails.groupHead || productDetails.category || '',
+                                    itemName: prodName || '',
+                                    uom: productDetails.uom || '',
+                                    maxLevel: 0,
+                                    opening: 0,
+                                    individualRate: 0,
+                                    indented: 0,
+                                    approved: 0,
+                                    purchaseQuantity: 0,
+                                    outQuantity: 0,
+                                    currentStock: 0,
+                                    totalPrice: 0,
+                                    colorCode: '#000000'
+                                });
+                            }
+                        }
+                    }
+
+                    if (inventoryRowsToInsert.length > 0) {
+                        try {
+                            await postToSheet(inventoryRowsToInsert, 'insert', 'INVENTORY');
+                            console.log(`Automatically added ${inventoryRowsToInsert.length} new items to inventory.`);
+                            updateInventorySheet();
+                        } catch (invErr) {
+                            console.error("Failed to auto-register inventory items:", invErr);
+                        }
+                    }
 
                     // Submit custom ward names to MASTER Column R if any
                     for (const product of data.products) {

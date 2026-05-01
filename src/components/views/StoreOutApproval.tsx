@@ -119,9 +119,10 @@ export default () => {
         
         const groupItems = (items: StoreOutTableData[]) => {
             return items.reduce((acc, item) => {
-                if (!acc[item.issueNo]) {
-                    acc[item.issueNo] = {
-                        issueNo: item.issueNo,
+                const baseId = item.issueNo.split(/[_/]/)[0];
+                if (!acc[baseId]) {
+                    acc[baseId] = {
+                        issueNo: baseId,
                         issueDate: item.issueDate,
                         requestedBy: item.requestedBy,
                         department: item.department,
@@ -129,7 +130,7 @@ export default () => {
                         items: [],
                     };
                 }
-                acc[item.issueNo].items.push(item);
+                acc[baseId].items.push(item);
                 return acc;
             }, {} as Record<string, GroupedStoreOutData>);
         };
