@@ -123,53 +123,50 @@ export default () => {
     }, [indentSheet, approvedIndentSheet]);
 
     const handleRowSelect = (rowIndex: number, checked: boolean) => {
-        const row = tableData.find(r => r.rowIndex === rowIndex);
-        if (!row) return;
-
-        const baseNo = row.indentNo.split(/[_/]/)[0];
-        const linkedRows = tableData.filter(r => r.indentNo.split(/[_/]/)[0] === baseNo);
-
+        const identifier = String(rowIndex);
+        
         setSelectedRows(prev => {
             const newSet = new Set(prev);
-            linkedRows.forEach(r => {
-                const identifier = String(r.rowIndex);
-                if (checked) newSet.add(identifier);
-                else newSet.delete(identifier);
-            });
+            if (checked) newSet.add(identifier);
+            else newSet.delete(identifier);
             return newSet;
         });
 
         setBulkUpdates(prev => {
             const next = new Map(prev);
-            linkedRows.forEach(r => {
-                const identifier = String(r.rowIndex);
-                if (checked) {
+            if (checked) {
+                const row = tableData.find(r => r.rowIndex === rowIndex);
+                if (row) {
                     next.set(identifier, {
-                        vendorType: r.vendorType, // use r.vendorType instead of row.vendorType
-                        quantity: r.quantity
+                        vendorType: row.vendorType,
+                        quantity: row.quantity,
+                        specifications: row.specifications
                     });
-                } else {
-                    next.delete(identifier);
                 }
-            });
+            } else {
+                next.delete(identifier);
+            }
             return next;
         });
     };
 
 
-    // Add this function to handle select all
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedRows(new Set(tableData.map(row => String(row.rowIndex))));
-            // Initialize bulk updates for all rows
-            const newUpdates = new Map();
-            tableData.forEach(row => {
-                newUpdates.set(String(row.rowIndex), {
-                    vendorType: row.vendorType,
-                    quantity: row.quantity
+            const allIndices = tableData.map(row => String(row.rowIndex));
+            setSelectedRows(new Set(allIndices));
+            
+            setBulkUpdates(prev => {
+                const next = new Map(prev);
+                tableData.forEach(row => {
+                    next.set(String(row.rowIndex), {
+                        vendorType: row.vendorType,
+                        quantity: row.quantity,
+                        specifications: row.specifications
+                    });
                 });
+                return next;
             });
-            setBulkUpdates(newUpdates);
         } else {
             setSelectedRows(new Set());
             setBulkUpdates(new Map());
@@ -177,48 +174,17 @@ export default () => {
     };
 
     const handleBulkUpdate = (
-        identifier: string, // now represents rowIndex
+        identifier: string,
         field: 'vendorType' | 'quantity' | 'specifications',
         value: string | number
     ) => {
         setBulkUpdates((prevUpdates) => {
             const newUpdates = new Map(prevUpdates);
-
-            const currentRow = tableData.find(r => String(r.rowIndex) === identifier);
-            const targetIndentNo = currentRow?.indentNo;
-
-            if (targetIndentNo) {
-                const targetBaseNo = targetIndentNo.split(/[_/]/)[0];
-                
-                if (field === 'vendorType') {
-                    const vendorValue = value as string;
-                    tableData.forEach(row => {
-                        if (row.indentNo.split(/[_/]/)[0] === targetBaseNo) {
-                            const rowId = String(row.rowIndex);
-                            const currentUpdate = newUpdates.get(rowId) || {};
-                            newUpdates.set(rowId, {
-                                ...currentUpdate,
-                                vendorType: vendorValue,
-                            });
-                        }
-                    });
-                } else if (field === 'quantity') {
-                    const qtyValue = value as number;
-                    const currentUpdate = newUpdates.get(identifier) || {};
-                    newUpdates.set(identifier, {
-                        ...currentUpdate,
-                        quantity: qtyValue,
-                    });
-                } else if (field === 'specifications') {
-                    const specValue = value as string;
-                    const currentUpdate = newUpdates.get(identifier) || {};
-                    newUpdates.set(identifier, {
-                        ...currentUpdate,
-                        specifications: specValue,
-                    });
-                }
-            }
-
+            const currentUpdate = newUpdates.get(identifier) || {};
+            newUpdates.set(identifier, {
+                ...currentUpdate,
+                [field]: value,
+            });
             return newUpdates;
         });
     };
@@ -1027,27 +993,7 @@ export default () => {
                 <TabsContent value="pending" className="w-full">
                     <div className="space-y-4">
                         {selectedRows.size > 0 && (
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 sm:p-4 bg-primary/10 rounded-lg gap-2 sm:gap-4 border border-primary/20">
-                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 w-full">
-                                    <span className="text-sm font-medium whitespace-nowrap">
-                                        {selectedRows.size} row(s) selected
-                                    </span>
-                                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                                        <span className="text-xs text-muted-foreground whitespace-nowrap">Set all to:</span>
-                                        <Select onValueChange={(val) => {
-                                            selectedRows.forEach(id => handleBulkUpdate(id, 'vendorType', val));
-                                        }}>
-                                            <SelectTrigger className="w-full sm:w-[150px] h-9 text-xs">
-                                                <SelectValue placeholder="Select Type" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Regular">Regular</SelectItem>
-                                                <SelectItem value="Three Party">Three Party</SelectItem>
-                                                <SelectItem value="Reject">Reject</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
+                            <div className="flex justify-end">
                                 <Button
                                     onClick={handleSubmitBulkUpdates}
                                     disabled={submitting}

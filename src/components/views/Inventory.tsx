@@ -200,7 +200,7 @@ export default () => {
         { accessorKey: 'opening', header: 'Opening' },
         { accessorKey: 'purchaseQuantity', header: 'Purchased' },
         { accessorKey: 'outQuantity', header: 'Issued' },
-        { accessorKey: 'currentStock', header: 'Quantity' },
+        { accessorKey: 'currentStock', header: 'Current Quantity' },
         {
             accessorKey: 'totalPrice',
             header: 'Total Price',

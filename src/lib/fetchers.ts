@@ -86,7 +86,7 @@ const INDENT_COLUMNS = [
     'uom', 'specifications', 'indent_approved_by', 'indent_type', 
     'attachment', 'planned_1', 'status', 'actual_2', 'vendor_name_1',
     'rate_1', 'payment_term_1', 'approved_vendor_name', 'approved_rate',
-    'approved_payment_term', 'vendor_name_2', 'rate_2', 'payment_term_2',
+    'approved_quantity', 'approved_payment_term', 'vendor_name_2', 'rate_2', 'payment_term_2',
     'vendor_name_3', 'rate_3', 'payment_term_3', 'comparison_sheet'
 ];
 

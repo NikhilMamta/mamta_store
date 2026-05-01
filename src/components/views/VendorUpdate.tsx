@@ -79,12 +79,12 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                 {fields.map((_, i) => <TabsTrigger key={i} value={`${i}`} className="px-2 text-[10px]">V{i + 1}</TabsTrigger>)}
             </TabsList>
             {fields.map((field, vIndex) => (
-                <TabsContent key={field.id} value={`${vIndex}`} className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3">
+                <TabsContent key={field.id} value={`${vIndex}`} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr] gap-3 pt-3 items-end">
                     <FormField
                         control={form.control}
                         name={`updates.${index}.vendors.${vIndex}.vendorName`}
                         render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="min-w-0">
                                 <FormLabel className="text-[10px]">Vendor {vIndex + 1}</FormLabel>
                                 <Select
                                     onValueChange={(val) => {
@@ -95,7 +95,13 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                                     }}
                                     value={field.value}
                                 >
-                                    <FormControl><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Vendor" /></SelectTrigger></FormControl>
+                                    <FormControl>
+                                        <SelectTrigger className="h-8 text-xs w-full overflow-hidden">
+                                            <div className="truncate text-left flex-1">
+                                                <SelectValue placeholder="Vendor" />
+                                            </div>
+                                        </SelectTrigger>
+                                    </FormControl>
                                     <SelectContent>
                                         {vendors?.map((v: any, i: number) => <SelectItem key={i} value={v.vendorName}>{v.vendorName}</SelectItem>)}
                                     </SelectContent>
@@ -117,7 +123,7 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                         control={form.control}
                         name={`updates.${index}.vendors.${vIndex}.paymentTerm`}
                         render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="min-w-0">
                                 <FormLabel className="text-[10px]">Term</FormLabel>
                                 <Select
                                     onValueChange={(val) => {
@@ -128,7 +134,13 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                                     }}
                                     value={field.value}
                                 >
-                                    <FormControl><SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Term" /></SelectTrigger></FormControl>
+                                    <FormControl>
+                                        <SelectTrigger className="h-8 text-xs w-full overflow-hidden">
+                                            <div className="truncate text-left flex-1">
+                                                <SelectValue placeholder="Term" />
+                                            </div>
+                                        </SelectTrigger>
+                                    </FormControl>
                                     <SelectContent>
                                         {options?.paymentTerms?.map((term: string, i: number) => <SelectItem key={i} value={term}>{term}</SelectItem>)}
                                     </SelectContent>
@@ -346,71 +358,83 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                             </div>
 
                             {!isThreeParty ? (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <FormField
-                                        control={form.control}
-                                        name={`updates.${index}.vendorName`}
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-xs">Vendor</FormLabel>
-                                                <Select
-                                                    onValueChange={(val) => {
-                                                        field.onChange(val);
-                                                        form.getValues('updates').forEach((_: any, i: number) => {
-                                                            form.setValue(`updates.${i}.vendorName`, val);
-                                                        });
-                                                    }}
-                                                    value={field.value}
-                                                    onOpenChange={(open) => !open && setVendorSearch("")}
-                                                >
-                                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Vendor" /></SelectTrigger></FormControl>
-                                                    <SelectContent>
-                                                        <div className="px-2 py-1">
-                                                            <Input placeholder="Search..." className="h-8" value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} />
-                                                        </div>
-                                                        <div className="max-h-[150px] overflow-y-auto">
-                                                            {vendors?.filter((v: any) => v.vendorName.toLowerCase().includes(vendorSearch.toLowerCase())).map((v: any, i: number) => (
-                                                                <SelectItem key={i} value={v.vendorName}>{v.vendorName}</SelectItem>
-                                                            ))}
-                                                        </div>
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name={`updates.${index}.rate`}
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-xs">Rate</FormLabel>
-                                                <FormControl><Input type="number" {...field} className="h-9" /></FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name={`updates.${index}.paymentTerm`}
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel className="text-xs">Term</FormLabel>
-                                                <Select
-                                                    onValueChange={(val) => {
-                                                        field.onChange(val);
-                                                        form.getValues('updates').forEach((_: any, i: number) => {
-                                                            form.setValue(`updates.${i}.paymentTerm`, val);
-                                                        });
-                                                    }}
-                                                    value={field.value}
-                                                >
-                                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="Terms" /></SelectTrigger></FormControl>
-                                                    <SelectContent>
-                                                        {options?.paymentTerms?.map((term: string, i: number) => <SelectItem key={i} value={term}>{term}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
-                                            </FormItem>
-                                        )}
-                                    />
+                                <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr] gap-4 items-end">
+                                     <FormField
+                                         control={form.control}
+                                         name={`updates.${index}.vendorName`}
+                                         render={({ field }) => (
+                                             <FormItem className="min-w-0">
+                                                 <FormLabel className="text-xs">Vendor</FormLabel>
+                                                 <Select
+                                                     onValueChange={(val) => {
+                                                         field.onChange(val);
+                                                         form.getValues('updates').forEach((_: any, i: number) => {
+                                                             form.setValue(`updates.${i}.vendorName`, val);
+                                                         });
+                                                     }}
+                                                     value={field.value}
+                                                     onOpenChange={(open) => !open && setVendorSearch("")}
+                                                 >
+                                                     <FormControl>
+                                                         <SelectTrigger className="h-9 w-full overflow-hidden">
+                                                             <div className="truncate text-left flex-1">
+                                                                 <SelectValue placeholder="Vendor" />
+                                                             </div>
+                                                         </SelectTrigger>
+                                                     </FormControl>
+                                                     <SelectContent>
+                                                         <div className="px-2 py-1">
+                                                             <Input placeholder="Search..." className="h-8" value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} />
+                                                         </div>
+                                                         <div className="max-h-[150px] overflow-y-auto">
+                                                             {vendors?.filter((v: any) => v.vendorName.toLowerCase().includes(vendorSearch.toLowerCase())).map((v: any, i: number) => (
+                                                                 <SelectItem key={i} value={v.vendorName}>{v.vendorName}</SelectItem>
+                                                             ))}
+                                                         </div>
+                                                     </SelectContent>
+                                                 </Select>
+                                             </FormItem>
+                                         )}
+                                     />
+                                     <FormField
+                                         control={form.control}
+                                         name={`updates.${index}.rate`}
+                                         render={({ field }) => (
+                                             <FormItem>
+                                                 <FormLabel className="text-xs">Rate</FormLabel>
+                                                 <FormControl><Input type="number" {...field} className="h-9" /></FormControl>
+                                             </FormItem>
+                                         )}
+                                     />
+                                     <FormField
+                                         control={form.control}
+                                         name={`updates.${index}.paymentTerm`}
+                                         render={({ field }) => (
+                                             <FormItem className="min-w-0">
+                                                 <FormLabel className="text-xs">Term</FormLabel>
+                                                 <Select
+                                                     onValueChange={(val) => {
+                                                         field.onChange(val);
+                                                         form.getValues('updates').forEach((_: any, i: number) => {
+                                                             form.setValue(`updates.${i}.paymentTerm`, val);
+                                                         });
+                                                     }}
+                                                     value={field.value}
+                                                 >
+                                                     <FormControl>
+                                                         <SelectTrigger className="h-9 w-full overflow-hidden">
+                                                             <div className="truncate text-left flex-1">
+                                                                 <SelectValue placeholder="Terms" />
+                                                             </div>
+                                                         </SelectTrigger>
+                                                     </FormControl>
+                                                     <SelectContent>
+                                                         {options?.paymentTerms?.map((term: string, i: number) => <SelectItem key={i} value={term}>{term}</SelectItem>)}
+                                                     </SelectContent>
+                                                 </Select>
+                                             </FormItem>
+                                         )}
+                                     />
                                 </div>
                             ) : (
                                 <ThreePartyFields index={index} form={form} vendors={vendors} options={options} />

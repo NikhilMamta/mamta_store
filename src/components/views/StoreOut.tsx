@@ -48,7 +48,7 @@ interface GroupedStoreOutStatusData {
 }
 
 export default () => {
-    const { storeOutSheet, storeOutLoading, updateStoreOutSheet, indentSheet } = useSheets();
+    const { storeOutSheet, storeOutLoading, updateStoreOutSheet, indentSheet, storeOutApprovalSheet } = useSheets();
 
     const [pendingData, setPendingData] = useState<GroupedStoreOutStatusData[]>([]);
     const [historyData, setHistoryData] = useState<GroupedStoreOutStatusData[]>([]);
@@ -56,21 +56,35 @@ export default () => {
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutStatusData | null>(null);
 
     const mapRowToTableData = (row: any): StoreOutTableData => {
-        // Find indent details to get more info if needed, though most should be in row now
-        const indentDetail = indentSheet?.find(i => i.indentNumber === row.indentNumber);
+        // Smarter lookup for missing data from indentSheet and storeOutApprovalSheet
+        const lookupId = (row.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+        
+        const indentDetail = indentSheet?.find(i => {
+            if (row.searialNumber && i.searialNumber) {
+                return String(i.searialNumber) === String(row.searialNumber);
+            }
+            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            return lookupId === itemBaseId;
+        });
+
+        // Fallback to storeOutApprovalSheet (STORE OUT REQUEST)
+        const requestDetail = !indentDetail ? storeOutApprovalSheet?.find(r => {
+             const requestId = (r.issueNo || r.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+             return lookupId === requestId;
+        }) : null;
 
         return {
             id: row.id,
             issueNo: row.indentNumber || 'N/A',
-            requestedBy: indentDetail?.indenterName || 'N/A',
-            product: indentDetail?.productName || 'N/A',
-            category: indentDetail?.groupHead || '',
+            requestedBy: row.requestedBy || indentDetail?.indenterName || requestDetail?.requestedBy || 'N/A',
+            product: row.productName || row.product || row.itemName || row.item || indentDetail?.productName || requestDetail?.productName || requestDetail?.product || requestDetail?.category || 'N/A',
+            category: indentDetail?.groupHead || requestDetail?.category || '',
             qty: Number(row.approveQty || 0),
-            unit: indentDetail?.uom || '',
+            unit: indentDetail?.uom || requestDetail?.unit || '',
             storeOutStatus: row.status || 'Pending',
             slip: row.slip || '',
-            wardName: indentDetail?.wardName || '',
-            floor: indentDetail?.floor || '',
+            wardName: indentDetail?.wardName || requestDetail?.wardName || '',
+            floor: indentDetail?.floor || requestDetail?.floor || '',
             searialNumber: row.searialNumber,
             storeOutActual: row.timestamp ? formatDate(new Date(row.timestamp)) : '',
             originalRow: row,
@@ -88,7 +102,13 @@ export default () => {
             return items.reduce((acc, item) => {
                 const key = item.issueNo;
                 if (!acc[key]) {
-                    const indent = indentSheet?.find(i => i.indentNumber === item.issueNo);
+                    // Smart lookup for department
+                    const lookupId = (key || '').split(/[_/]/)[0].toLowerCase();
+                    const indent = indentSheet?.find(i => {
+                        const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+                        return lookupId === itemBaseId;
+                    });
+
                     acc[key] = {
                         issueNo: item.issueNo,
                         indenterName: item.requestedBy,
@@ -124,6 +144,14 @@ export default () => {
         { accessorKey: 'department', header: 'Department' },
         { accessorKey: 'wardName', header: 'Ward Name' },
         {
+            header: 'Products',
+            cell: ({ row }) => (
+                <div className="max-w-[200px] break-words text-xs">
+                    {row.original.items.map(i => i.product).join(', ')}
+                </div>
+            )
+        },
+        {
             header: 'Slip',
             cell: ({ row }) => row.original.slip ? (
                 <a href={row.original.slip} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
@@ -146,6 +174,14 @@ export default () => {
         { accessorKey: 'issueNo', header: 'Issue No.' },
         { accessorKey: 'indenterName', header: 'Indenter' },
         { accessorKey: 'department', header: 'Department' },
+        {
+            header: 'Products',
+            cell: ({ row }) => (
+                <div className="max-w-[200px] break-words text-xs">
+                    {row.original.items.map(i => i.product).join(', ')}
+                </div>
+            )
+        },
         {
             header: 'Slip',
             cell: ({ row }) => row.original.slip ? (

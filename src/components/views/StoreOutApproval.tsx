@@ -77,22 +77,34 @@ export default () => {
     const [loading, setLoading] = useState(false);
 
     const mapRowToTableData = (row: any): StoreOutTableData => {
+        // Smarter lookup for missing data from indentSheet
+        // Prioritize indentNumber as the link, then issueNo
+        const lookupId = (row.indentNumber || row.issueNo || '').split(/[_/]/)[0].toLowerCase();
+        
+        const indentDetail = indentSheet?.find(i => {
+            if (row.searialNumber && i.searialNumber) {
+                return String(i.searialNumber) === String(row.searialNumber);
+            }
+            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            return lookupId === itemBaseId;
+        });
+
         return {
             issueNo: row.issueNo || row.indentNumber || 'N/A',
             issueDate: row.issueDate || formatDate(new Date(row.timestamp)),
-            requestedBy: row.requestedBy || row.indenterName || 'N/A',
-            department: row.department || 'N/A',
-            product: row.productName || 'N/A',
-            groupHead: row.category || '',
+            requestedBy: row.requestedBy || indentDetail?.indenterName || row.indenterName || 'N/A',
+            department: row.department || row.dept || indentDetail?.department || 'N/A',
+            product: row.productName || row.product || row.itemName || row.item || row.category || indentDetail?.productName || 'N/A',
+            groupHead: row.category || indentDetail?.groupHead || '',
             qty: Number(row.qty || row.approveQty || 0),
-            unit: row.unit || '',
+            unit: row.unit || indentDetail?.uom || '',
             status: row.status || '',
             planned: row.planned7 || row.planned8 || '',
             actual: '',
             approveQty: Number(row.qty || row.approveQty || 0),
-            indenterName: row.indenterName || '',
-            indentType: row.indentType || '',
-            wardName: row.wardName || '',
+            indenterName: row.indenterName || indentDetail?.indenterName || '',
+            indentType: row.indentType || indentDetail?.indentType || '',
+            wardName: row.wardName || indentDetail?.wardName || '',
             searialNumber: row.searialNumber,
             originalRow: row
         };

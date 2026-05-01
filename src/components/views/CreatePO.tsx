@@ -414,26 +414,60 @@ export default () => {
     };
     // Helper to find indent across sheets
     const findIndentWithFallback = (id: string, serial?: number | string) => {
+        const hasSerial = serial !== undefined && serial !== null && String(serial).trim() !== '';
+        const targetBaseId = (id || '').split(/[_/]/)[0].toLowerCase();
+        
+        // 1. Search in master Indent Sheet
         let found = indentSheet.find((i) => {
-            if (serial) return String(i.searialNumber) === String(serial);
-            return i.indentNumber?.trim().toLowerCase() === id.trim().toLowerCase();
+            if (hasSerial && i.searialNumber) return String(i.searialNumber) === String(serial);
+            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            return itemBaseId === targetBaseId;
         });
 
-        if (!found) {
-            const approved = approvedIndentSheet.find((i) => {
-                if (serial) return String(i.searialNumber) === String(serial);
-                return i.indentNumber?.trim().toLowerCase() === id.trim().toLowerCase();
-            });
-            if (approved) {
-                found = {
-                    ...approved,
-                    indenterName: (approved as any).indenterName || '',
-                    department: (approved as any).department || '',
-                    groupHead: (approved as any).groupHead || '',
-                    uom: approved.uom,
-                } as any;
-            }
+        // 2. Search in Approved Indent Sheet (often contains updated quantities)
+        const approved = approvedIndentSheet.find((i) => {
+            if (hasSerial && i.searialNumber) return String(i.searialNumber) === String(serial);
+            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            return itemBaseId === targetBaseId;
+        });
+
+        // 3. Search in Three Party Approval (contains the final approved rate and vendor)
+        const tpa = threePartyApprovalSheet.find((i) => {
+            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            return itemBaseId === targetBaseId;
+        });
+
+        // 4. Search in Vendor Rate Update (fallback for rates)
+        const vru = vendorRateUpdateSheet.find((i) => {
+            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            return itemBaseId === targetBaseId;
+        });
+
+        if (found || approved || tpa || vru) {
+            // Merge data from all sources
+            const merged = {
+                ...(found || {}),
+                ...(approved || {}),
+                ...(tpa || {}),
+                ...(vru || {}),
+            } as any;
+
+            // Ensure we use the correct field names
+            return {
+                ...merged,
+                indentNumber: found?.indentNumber || approved?.indentNumber || tpa?.indentNumber || vru?.indentNumber || id,
+                productName: merged.productName || merged.product || '',
+                specifications: merged.specifications || merged.description || '',
+                approvedQuantity: Number(approved?.approvedQuantity || found?.approvedQuantity || found?.quantity || 0),
+                approvedRate: Number(tpa?.approvedRate || merged.approvedRate || merged.rate || vru?.rate1 || found?.approvedRate || 0),
+                uom: merged.uom || merged.unit || '',
+                indenterName: merged.indenterName || found?.indenterName || '',
+                department: merged.department || found?.department || '',
+                groupHead: merged.groupHead || merged.category || found?.groupHead || '',
+                searialNumber: merged.searialNumber || serial,
+            };
         }
+
         return found;
     };
 
@@ -450,7 +484,7 @@ export default () => {
         }
         
         console.log('--- handleIndentSelect starting ---');
-        console.log('Selected Indent Number:', selectedIndentNumber);
+        console.log('Selected Indent Number (Base):', selectedIndentNumber);
 
         // Update the main indentNumber field immediately
         form.setValue('indentNumber', selectedIndentNumber);
@@ -467,9 +501,7 @@ export default () => {
                 (i) => (i.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
             );
             if (approvedItems.length > 0) {
-                // Map approved items to match the expected structure
-                const mappedItems = approvedItems.map(ai => findIndentWithFallback(ai.indentNumber, ai.searialNumber)!) as any;
-                items.push(...mappedItems);
+                items.push(...(approvedItems as any[]));
             }
         }
 
@@ -505,7 +537,6 @@ export default () => {
                        v.status?.trim().toLowerCase() === 'approved'
             );
             if (vru) {
-                // Check if it's actually a regular indent
                 const approvedRecord = approvedIndentSheet.find(
                     (approved) => (approved.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
                 );
@@ -518,54 +549,39 @@ export default () => {
             }
         }
 
-        console.log('Final vendor name to look up in Supabase master:', vendorName);
+        console.log('Final vendor name:', vendorName);
 
         // 3. Auto-fill supplier name
         form.setValue('supplierName', vendorName);
 
-        // 4. Fetch vendor details DIRECTLY from Supabase master table
+        // 4. Fetch vendor details
         if (vendorName) {
             try {
-                console.log(`Fetching details for vendor: "${vendorName}" from Supabase...`);
                 const vendorDetails = await fetchVendorDetails(vendorName);
-                
                 if (vendorDetails) {
-                    console.log('Successfully fetched vendor details from Supabase:', vendorDetails);
                     form.setValue('supplierAddress', vendorDetails.address || '');
                     form.setValue('gstin', vendorDetails.gstin || '');
                 } else {
-                    console.warn(`Vendor "${vendorName}" not found in Supabase "master" table. Checking local cache...`);
                     const localVendor = details?.vendors.find(
                         (v) => v.vendorName && v.vendorName.trim().toLowerCase() === vendorName.toLowerCase()
                     );
                     if (localVendor) {
-                        console.log('Found vendor details in local cache:', localVendor);
                         form.setValue('supplierAddress', localVendor.address || '');
                         form.setValue('gstin', localVendor.gstin || '');
-                    } else {
-                        console.error('Vendor details not found anywhere. Clearing address/GSTIN.');
-                        form.setValue('supplierAddress', '');
-                        form.setValue('gstin', '');
                     }
                 }
             } catch (err) {
-                console.error('Error in fetchVendorDetails execution:', err);
-                form.setValue('supplierAddress', '');
-                form.setValue('gstin', '');
+                console.error('Error fetching vendor details:', err);
             }
-        } else {
-            console.warn('No approved vendor name found for this indent. Clearing details.');
-            form.setValue('supplierAddress', '');
-            form.setValue('gstin', '');
         }
 
-        // 5. Populate items table
+        // 5. Populate items table - Use FULL indentNumber for precise lookup
         if (items.length > 0) {
             console.log(`Populating PO items table with ${items.length} rows.`);
             form.setValue(
                 'indents',
                 items.map((i) => ({
-                    indentNumber: (i.indentNumber || '').split('_')[0],
+                    indentNumber: i.indentNumber, // KEEP FULL NUMBER (e.g. 123_1)
                     gst: 18,
                     discount: 0,
                     searialNumber: i.searialNumber,
