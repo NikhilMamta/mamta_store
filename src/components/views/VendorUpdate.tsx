@@ -243,89 +243,66 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                 }
             });
 
-            // 2. Prepare payload for VENDOR_RATE_UPDATE table insert
-            const vendorRateUpdatePayload: any = {
-                timestamp: now,
-                indent_number: indentNumber || '',
-                comparison_sheet: commonUrl || '',
-                delay: 'None',
-                planned_3: now,
-                status: 'Approved', // Directly set to Approved
-            };
+            // 2. Prepare payloads for VENDOR_RATE_UPDATE table (one per item)
+            const vendorRateUpdatePayloads = values.updates.map((update: any) => {
+                const payload: any = {
+                    timestamp: now,
+                    indent_number: update.indentNumber || '',
+                    comparison_sheet: commonUrl || '',
+                    delay: 'None',
+                    planned_3: now,
+                    status: 'Approved',
+                };
 
-            if (isThreeParty) {
-                // For three party, save all vendor details
-                values.updates.forEach((update: any, idx: number) => {
+                if (isThreeParty) {
                     if (update.vendors && Array.isArray(update.vendors)) {
                         update.vendors.forEach((v: any, vIndex: number) => {
                             if (v.vendorName && vIndex < 3) {
-                                vendorRateUpdatePayload[`vendor_name_${vIndex + 1}`] = v.vendorName || '';
-                                vendorRateUpdatePayload[`rate_${vIndex + 1}`] = v.rate || 0;
-                                vendorRateUpdatePayload[`payment_term_${vIndex + 1}`] = v.paymentTerm || '';
+                                payload[`vendor_name_${vIndex + 1}`] = v.vendorName || '';
+                                payload[`rate_${vIndex + 1}`] = v.rate || 0;
+                                payload[`payment_term_${vIndex + 1}`] = v.paymentTerm || '';
                             }
                         });
                     }
-                });
-            } else {
-                // For regular, save single vendor details
-                const firstUpdate = values.updates[0];
-                if (firstUpdate) {
-                    vendorRateUpdatePayload.vendor_name_1 = firstUpdate.vendorName || '';
-                    vendorRateUpdatePayload.rate_1 = firstUpdate.rate || 0;
-                    vendorRateUpdatePayload.payment_term_1 = firstUpdate.paymentTerm || '';
+                } else {
+                    payload.vendor_name_1 = update.vendorName || '';
+                    payload.rate_1 = update.rate || 0;
+                    payload.payment_term_1 = update.paymentTerm || '';
                 }
-            }
-
-            // Remove any undefined or null values from payload
-            Object.keys(vendorRateUpdatePayload).forEach(key => {
-                if (vendorRateUpdatePayload[key] === undefined || vendorRateUpdatePayload[key] === null) {
-                    delete vendorRateUpdatePayload[key];
-                }
+                return payload;
             });
 
-            console.log('📦 Final vendorRateUpdatePayload:', JSON.stringify(vendorRateUpdatePayload, null, 2));
+            console.log('📦 Final vendorRateUpdatePayloads count:', vendorRateUpdatePayloads.length);
 
-            // 3. Prepare payload for APPROVED_INDENT table update (set status to 'Approved')
-            const approvedIndentUpdatePayload = {
-                indent_number: indentNumber,
-                status: 'Approved',
-                planned2: now,
-            };
+            // Execute all updates
+            console.log('📝 Step 1: Updating INDENT table...');
+            await postToSheet(indentPayload, 'update', 'INDENT');
+            console.log('✅ INDENT table updated successfully');
 
-            console.log('🚀 Updating INDENT table:', indentPayload);
-            console.log('🚀 Inserting into VENDOR_RATE_UPDATE:', vendorRateUpdatePayload);
-            console.log('🚀 Updating APPROVED_INDENT status:', approvedIndentUpdatePayload);
-
+            console.log('📝 Step 2: Inserting into VENDOR_RATE_UPDATE table...');
             try {
-                // Execute all updates
-                console.log('📝 Step 1: Updating INDENT table...');
-                await postToSheet(indentPayload, 'update', 'INDENT');
-                console.log('✅ INDENT table updated successfully');
-
-                console.log('📝 Step 2: Inserting into VENDOR_RATE_UPDATE table...');
-                try {
-                    await postToSheet([vendorRateUpdatePayload], 'insert', 'VENDOR RATE UPDATE');
-                    console.log('✅ VENDOR_RATE_UPDATE table inserted successfully');
-                } catch (vendorError) {
-                    console.error('⚠️ VENDOR_RATE_UPDATE insert failed, but continuing:', vendorError);
-                    // Don't throw - continue with the rest
-                }
+                await postToSheet(vendorRateUpdatePayloads, 'insert', 'VENDOR RATE UPDATE');
+                console.log('✅ VENDOR_RATE_UPDATE table inserted successfully');
+            } catch (vendorError) {
+                console.error('⚠️ VENDOR_RATE_UPDATE insert failed, but continuing:', vendorError);
+            }
                 
-                // Update approved_indent status to 'Approved'
-                const approvedIndentRecord = approvedIndentSheet.find(
-                    (record: any) => record.indentNumber === indentNumber
-                );
-                
-                if (approvedIndentRecord) {
-                    console.log('📝 Step 3: Updating APPROVED_INDENT status...');
-                    await postToSheet([{
-                        id: approvedIndentRecord.id,
+                // Update ALL approved_indent records sharing this base indent number
+                const baseIndentNo = indentNumber.split(/[_/]/)[0];
+                const aiUpdates = approvedIndentSheet
+                    .filter((record: any) => (record.indentNumber || '').split(/[_/]/)[0] === baseIndentNo && record.status !== 'Approved')
+                    .map((record: any) => ({
+                        id: record.id,
                         status: 'Approved',
                         planned2: now,
-                    }], 'update', 'APPROVED INDENT');
-                    console.log('✅ APPROVED_INDENT status updated successfully');
+                    }));
+                
+                if (aiUpdates.length > 0) {
+                    console.log(`📝 Step 3: Updating ${aiUpdates.length} APPROVED_INDENT status records...`);
+                    await postToSheet(aiUpdates, 'update', 'APPROVED INDENT');
+                    console.log('✅ APPROVED_INDENT statuses updated successfully');
                 } else {
-                    console.warn('⚠️ No approved indent record found for:', indentNumber);
+                    console.warn('⚠️ No pending approved indent records found for:', baseIndentNo);
                 }
 
                 toast.success(`Updated ${items.length} items successfully`);
@@ -334,17 +311,12 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                 console.error('❌ Error during database operations:', error);
                 const errorMessage = error?.message || error?.error?.message || 'Unknown error occurred';
                 console.error('Error details:', errorMessage);
-                toast.error(`Failed to update: ${errorMessage}`);
+                
+                if (!errorMessage.includes('Failed to update:')) {
+                    toast.error(`Failed to update: ${errorMessage}`);
+                }
                 throw error;
             }
-        } catch (e: any) {
-            console.error('❌ Error in vendor update:', e);
-            const errorMessage = e?.message || e?.error?.message || 'Failed to update';
-            // Only show toast if it wasn't already shown in the inner catch
-            if (!e.message?.includes('Failed to update:')) {
-                toast.error(errorMessage);
-            }
-        }
     };
 
     return (
@@ -530,16 +502,17 @@ export default () => {
             });
 
         const groupedPending = pendingItems.reduce((acc, item) => {
-            if (!acc[item.indentNo]) {
-                acc[item.indentNo] = {
-                    indentNo: item.indentNo,
+            const baseNo = item.indentNo.split(/[_/]/)[0];
+            if (!acc[baseNo]) {
+                acc[baseNo] = {
+                    indentNo: baseNo,
                     indenter: item.indenter,
                     department: item.department,
                     vendorType: item.vendorType,
                     items: [],
                 };
             }
-            acc[item.indentNo].items.push(item);
+            acc[baseNo].items.push(item);
             return acc;
         }, {} as Record<string, GroupedVendorUpdateData>);
 
@@ -572,16 +545,17 @@ export default () => {
             }));
 
         const groupedHistory = historyItems.reduce((acc, item) => {
-            if (!acc[item.indentNo]) {
-                acc[item.indentNo] = {
-                    indentNo: item.indentNo,
+            const baseNo = item.indentNo.split(/[_/]/)[0];
+            if (!acc[baseNo]) {
+                acc[baseNo] = {
+                    indentNo: baseNo,
                     indenter: item.indenter,
                     department: item.department,
                     date: item.date,
                     items: [],
                 };
             }
-            acc[item.indentNo].items.push(item);
+            acc[baseNo].items.push(item);
             return acc;
         }, {} as Record<string, GroupedHistoryData>);
 
@@ -604,7 +578,15 @@ export default () => {
                 },
             ]
             : []),
-        { accessorKey: 'indentNo', header: 'Indent No.' },
+        {
+            accessorKey: 'indentNo',
+            header: 'Indent No.',
+            cell: ({ getValue }) => (
+                <div className="font-medium text-xs sm:text-sm">
+                    {(getValue() as string).split(/[_/]/)[0]}
+                </div>
+            ),
+        },
         { accessorKey: 'indenter', header: 'Indenter' },
         { accessorKey: 'department', header: 'Department' },
         {
@@ -642,7 +624,15 @@ export default () => {
             },
         ] : []),
         { accessorKey: 'date', header: 'Date' },
-        { accessorKey: 'indentNo', header: 'Indent No.' },
+        {
+            accessorKey: 'indentNo',
+            header: 'Indent No.',
+            cell: ({ getValue }) => (
+                <div className="font-medium text-xs sm:text-sm">
+                    {(getValue() as string).split(/[_/]/)[0]}
+                </div>
+            ),
+        },
         { accessorKey: 'indenter', header: 'Indenter' },
         { accessorKey: 'department', header: 'Department' },
         {

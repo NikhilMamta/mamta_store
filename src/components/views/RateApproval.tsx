@@ -122,9 +122,10 @@ export default () => {
         console.log('RateApproval Pending Items:', pendingItems.length);
 
         const groupedPending = pendingItems.reduce((acc, item) => {
-            if (!acc[item.indentNo]) {
-                acc[item.indentNo] = {
-                    indentNo: item.indentNo,
+            const baseNo = item.indentNo.split('_')[0];
+            if (!acc[baseNo]) {
+                acc[baseNo] = {
+                    indentNo: baseNo,
                     indenter: item.indenter,
                     department: item.department,
                     comparisonSheet: item.comparisonSheet,
@@ -132,7 +133,7 @@ export default () => {
                     items: [],
                 };
             }
-            acc[item.indentNo].items.push(item);
+            acc[baseNo].items.push(item);
             return acc;
         }, {} as Record<string, GroupedRateApprovalData>);
 
@@ -183,7 +184,16 @@ export default () => {
                 },
             ]
             : []),
-        { accessorKey: 'indentNo', header: 'Indent No.' },
+        {
+            accessorKey: 'indentNo',
+            header: 'Indent No.',
+            cell: ({ getValue }) => (
+                <div className="font-medium text-xs sm:text-sm">
+                    {(getValue() as string).split(/[_/]/)[0]}
+                </div>
+            ),
+            size: 100,
+        },
         { accessorKey: 'indenter', header: 'Indenter' },
         { accessorKey: 'department', header: 'Department' },
         {
@@ -207,7 +217,15 @@ export default () => {
 
     const historyColumns: ColumnDef<GroupedHistoryData>[] = [
         { accessorKey: 'date', header: 'Date' },
-        { accessorKey: 'indentNo', header: 'Indent No.' },
+        {
+            accessorKey: 'indentNo',
+            header: 'Indent No.',
+            cell: ({ getValue }) => (
+                <div className="font-medium text-xs sm:text-sm">
+                    {(getValue() as string).split(/[_/]/)[0]}
+                </div>
+            ),
+        },
         { accessorKey: 'indenter', header: 'Indenter' },
         { accessorKey: 'department', header: 'Department' },
         {
@@ -394,22 +412,25 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                         planned3: formattedDateTime,
                     }], 'update', 'VENDOR RATE UPDATE');
                     console.log('✅ VENDOR_RATE_UPDATE status updated successfully');
-                } else {
-                    console.warn('⚠️ No vendor_rate_update record found for:', indentNumber);
+                }
+                
+                const approvedIndentRecord = approvedIndentSheet.find(
+                    (ai) => ai.indent_number === indentNumber && ai.status?.trim().toLowerCase() === 'pending'
+                );
+                if (approvedIndentRecord && approvedIndentRecord.id) {
+                    await postToSheet([{
+                        id: approvedIndentRecord.id,
+                        status: 'Approved'
+                    }], 'update', 'APPROVED INDENT');
                 }
             }
 
             // 3. Insert into THREE_PARTY_APPROVAL table
             const threePartyPayload = values.approvals.map((appr, index) => {
-                // Try to find by searialNumber first, fallback to index
                 let originalItem = items.find(i => String(i.searialNumber) === String(appr.searialNumber));
+                if (!originalItem) originalItem = items[index];
                 
                 if (!originalItem) {
-                    originalItem = items[index];
-                }
-
-                if (!originalItem) {
-                    console.error(`❌ Could not find item for three_party_approval ${index}`);
                     throw new Error(`Item not found`);
                 }
 
@@ -423,19 +444,15 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                     approved_payment_term: selectedVendor[2] || '',
                     approved_date: formattedDate,
                     planned_4: formattedDate,
+                    status: 'Approved'
                 };
             });
 
             console.log('📝 Step 3: Inserting into THREE_PARTY_APPROVAL table:', threePartyPayload);
-            try {
-                await postToSheet(threePartyPayload, 'insert', 'THREE PARTY APPROVAL');
-                console.log('✅ THREE_PARTY_APPROVAL table inserted successfully');
-            } catch (threePartyError) {
-                console.error('⚠️ THREE_PARTY_APPROVAL insert failed (table may not exist):', threePartyError);
-                // Don't fail the entire approval if this table doesn't exist yet
-            }
+            await postToSheet(threePartyPayload, 'insert', 'THREE PARTY APPROVAL');
 
             toast.success(`Approved ${items.length} items`);
+            updateApprovedIndentSheet();
             onSuccess();
         } catch (error) {
             console.error('Approval failed:', error);

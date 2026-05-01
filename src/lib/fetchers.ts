@@ -59,7 +59,7 @@ const toSnakeCase = (obj: any): any => {
                     .replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
                     // Automatically add underscore for numbered fields like planned1 -> planned_1, planned5 -> planned_5
                     // BUT skip planned2 because in the DB it's 'planned2' (no underscore)
-                    .replace(/(planned)([13456789])/g, '$1_$2')
+                    .replace(/(planned|term)([13456789]|10)/g, '$1_$2')
                     .replace(/(actual)(\d)/g, '$1_$2');
                 
                 let value = obj[key];
@@ -96,7 +96,7 @@ const APPROVED_INDENT_COLUMNS = [
 
 const THREE_PARTY_APPROVAL_COLUMNS = [
     'id', 'timestamp', 'indent_number', 'approved_vendor_name', 'approved_rate',
-    'approved_payment_term', 'approved_date', 'planned_4', 'delay'
+    'approved_payment_term', 'approved_date', 'planned_4', 'delay', 'status'
 ];
 
 const VENDOR_RATE_UPDATE_COLUMNS = [
@@ -110,7 +110,7 @@ const PO_HISTORY_COLUMNS = [
     'quotation_date', 'enquiry_number', 'enquiry_date', 'internal_code', 'product',
     'description', 'quantity', 'unit', 'rate', 'gst_percent', 'discount_percent',
     'amount', 'total_po_amount', 'prepared_by', 'approved_by', 'pdf',
-    'term1', 'term2', 'term3', 'term4', 'term5', 'term6', 'term7', 'term8', 'term9', 'term10',
+    'term_1', 'term_2', 'term_3', 'term_4', 'term_5', 'term_6', 'term_7', 'term_8', 'term_9', 'term_10',
     'status', 'planned_4', 'delay'
 ];
 

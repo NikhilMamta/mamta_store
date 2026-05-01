@@ -123,34 +123,37 @@ export default () => {
     }, [indentSheet, approvedIndentSheet]);
 
     const handleRowSelect = (rowIndex: number, checked: boolean) => {
-        const identifier = String(rowIndex);
-        
+        const row = tableData.find(r => r.rowIndex === rowIndex);
+        if (!row) return;
+
+        const baseNo = row.indentNo.split(/[_/]/)[0];
+        const linkedRows = tableData.filter(r => r.indentNo.split(/[_/]/)[0] === baseNo);
+
         setSelectedRows(prev => {
             const newSet = new Set(prev);
-            if (checked) newSet.add(identifier);
-            else newSet.delete(identifier);
+            linkedRows.forEach(r => {
+                const identifier = String(r.rowIndex);
+                if (checked) newSet.add(identifier);
+                else newSet.delete(identifier);
+            });
             return newSet;
         });
 
-        if (checked) {
-            const row = tableData.find(r => r.rowIndex === rowIndex);
-            if (row) {
-                setBulkUpdates(prev => {
-                    const next = new Map(prev);
+        setBulkUpdates(prev => {
+            const next = new Map(prev);
+            linkedRows.forEach(r => {
+                const identifier = String(r.rowIndex);
+                if (checked) {
                     next.set(identifier, {
-                        vendorType: row.vendorType,
-                        quantity: row.quantity
+                        vendorType: r.vendorType, // use r.vendorType instead of row.vendorType
+                        quantity: r.quantity
                     });
-                    return next;
-                });
-            }
-        } else {
-            setBulkUpdates(prev => {
-                const next = new Map(prev);
-                next.delete(identifier);
-                return next;
+                } else {
+                    next.delete(identifier);
+                }
             });
-        }
+            return next;
+        });
     };
 
 
@@ -181,14 +184,16 @@ export default () => {
         setBulkUpdates((prevUpdates) => {
             const newUpdates = new Map(prevUpdates);
 
-            if (field === 'vendorType') {
-                const vendorValue = value as string;
-                const currentRow = tableData.find(r => String(r.rowIndex) === identifier);
-                const targetIndentNo = currentRow?.indentNo;
+            const currentRow = tableData.find(r => String(r.rowIndex) === identifier);
+            const targetIndentNo = currentRow?.indentNo;
 
-                if (targetIndentNo) {
+            if (targetIndentNo) {
+                const targetBaseNo = targetIndentNo.split(/[_/]/)[0];
+                
+                if (field === 'vendorType') {
+                    const vendorValue = value as string;
                     tableData.forEach(row => {
-                        if (row.indentNo === targetIndentNo) {
+                        if (row.indentNo.split(/[_/]/)[0] === targetBaseNo) {
                             const rowId = String(row.rowIndex);
                             const currentUpdate = newUpdates.get(rowId) || {};
                             newUpdates.set(rowId, {
@@ -197,21 +202,21 @@ export default () => {
                             });
                         }
                     });
+                } else if (field === 'quantity') {
+                    const qtyValue = value as number;
+                    const currentUpdate = newUpdates.get(identifier) || {};
+                    newUpdates.set(identifier, {
+                        ...currentUpdate,
+                        quantity: qtyValue,
+                    });
+                } else if (field === 'specifications') {
+                    const specValue = value as string;
+                    const currentUpdate = newUpdates.get(identifier) || {};
+                    newUpdates.set(identifier, {
+                        ...currentUpdate,
+                        specifications: specValue,
+                    });
                 }
-            } else if (field === 'quantity') {
-                const qtyValue = value as number;
-                const currentUpdate = newUpdates.get(identifier) || {};
-                newUpdates.set(identifier, {
-                    ...currentUpdate,
-                    quantity: qtyValue,
-                });
-            } else if (field === 'specifications') {
-                const specValue = value as string;
-                const currentUpdate = newUpdates.get(identifier) || {};
-                newUpdates.set(identifier, {
-                    ...currentUpdate,
-                    specifications: specValue,
-                });
             }
 
             return newUpdates;
@@ -615,7 +620,7 @@ export default () => {
             header: 'Indent No.',
             cell: ({ getValue }) => (
                 <div className="font-medium text-xs sm:text-sm">
-                    {getValue() as string}
+                    {(getValue() as string).split(/[_/]/)[0]}
                 </div>
             ),
             size: 100,
@@ -785,7 +790,7 @@ export default () => {
             header: 'Indent No.',
             cell: ({ getValue }) => (
                 <div className="font-medium text-xs sm:text-sm">
-                    {getValue() as string}
+                    {(getValue() as string).split(/[_/]/)[0]}
                 </div>
             ),
             size: 100,
@@ -1010,15 +1015,16 @@ export default () => {
     ], [editingRow, editValues, user.indentApprovalAction]);
 
     return (
-        <div className="w-full overflow-hidden">
-            <Tabs defaultValue="pending" className="w-full">
-                <Heading
-                    heading="Approve Indent"
-                    subtext="Update Indent status to Approve or Reject them"
-                    tabs
-                >
-                    <ClipboardCheck size={50} className="text-primary" />
-                </Heading>
+        <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">
+            <Heading
+                heading="Approve Indent"
+                subtext="Update Indent status to Approve or Reject them"
+                tabs
+            >
+                <ClipboardCheck size={50} className="text-primary" />
+            </Heading>
+
+            <Tabs defaultValue="pending" className="w-full flex-1 flex flex-col min-h-0">
                 <TabsContent value="pending" className="w-full">
                     <div className="space-y-4">
                         {selectedRows.size > 0 && (
@@ -1060,13 +1066,14 @@ export default () => {
                             </div>
                         )}
 
-                        <div className="w-full overflow-x-auto">
+                        <div className="w-full overflow-x-auto overflow-y-hidden">
                             <DataTable
                                 data={tableData}
                                 columns={columns}
                                 searchFields={['product', 'department', 'indenter', 'vendorType']}
                                 dataLoading={indentLoading}
                                 onRowClick={(row) => handleRowSelect(row.rowIndex, !selectedRows.has(String(row.rowIndex)))}
+                                className="h-[74dvh]"
                                 extraActions={
                                     <Button
                                         variant="default"
@@ -1090,13 +1097,14 @@ export default () => {
                         </div>
                     </div>
                 </TabsContent>
-                <TabsContent value="history" className="w-full">
-                    <div className="w-full overflow-x-auto">
+                <TabsContent value="history" className="flex-1 min-h-0 w-full">
+                    <div className="w-full overflow-x-auto overflow-y-hidden">
                         <DataTable
                             data={historyData}
                             columns={historyColumns}
                             searchFields={['product', 'department', 'indenter', 'vendorType']}
                             dataLoading={indentLoading}
+                            className="h-[74dvh]"
                         />
                     </div>
                 </TabsContent>

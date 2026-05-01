@@ -21,6 +21,9 @@ interface HistoryData {
     status: 'Revised' | 'Not Recieved' | 'Recieved';
     indentNumber: string;
     rowIndex: number;
+    product: string;
+    quantity: number;
+    rate: number;
 }
 
 
@@ -35,30 +38,27 @@ export default () => {
     useEffect(() => {
         if (!poHistorySheet) return;
 
-        // Group rows by poNumber since po_history has one row per product
-        const groupedMap = new Map<string, HistoryData>();
+        // map all rows without grouping to show every product individually
+        const allRows: HistoryData[] = poHistorySheet.map((row, index) => ({
+            approvedBy: row.approvedBy || '',
+            poCopy: row.pdf || '',
+            poNumber: row.poNumber || '',
+            preparedBy: row.preparedBy || '',
+            totalAmount: row.totalPoAmount || 0,
+            vendorName: row.partyName || '',
+            indentNumber: row.internalCode || row.indentNumber || '',
+            rowIndex: (row as any).id || index, // Use database ID or index
+            status: (indentSheet.map((s) => s.poNumber).includes(row.poNumber || '')
+                ? receivedSheet.map((r) => r.poNumber).includes(row.poNumber || '')
+                    ? 'Recieved'
+                    : 'Not Recieved'
+                : 'Revised') as 'Revised' | 'Not Recieved' | 'Recieved',
+            product: row.product || '', // Add product field to interface if needed
+            quantity: row.quantity || 0,
+            rate: row.rate || 0,
+        }));
 
-        poHistorySheet.forEach((row, index) => {
-            if (!groupedMap.has(row.poNumber || '')) {
-                groupedMap.set(row.poNumber || '', {
-                    approvedBy: row.approvedBy || '',
-                    poCopy: row.pdf || '',
-                    poNumber: row.poNumber || '',
-                    preparedBy: row.preparedBy || '',
-                    totalAmount: row.totalPoAmount || 0,
-                    vendorName: row.partyName || '',
-                    indentNumber: row.internalCode || row.indentNumber || '',
-                    rowIndex: (row as any).id || index, // Use database ID or index
-                    status: (indentSheet.map((s) => s.poNumber).includes(row.poNumber || '')
-                        ? receivedSheet.map((r) => r.poNumber).includes(row.poNumber || '')
-                            ? 'Recieved'
-                            : 'Not Recieved'
-                        : 'Revised') as 'Revised' | 'Not Recieved' | 'Recieved',
-                });
-            }
-        });
-
-        setHistoryData(Array.from(groupedMap.values()).reverse());
+        setHistoryData([...allRows].reverse());
     }, [poHistorySheet, indentSheet, receivedSheet]);
 
 
@@ -104,7 +104,11 @@ export default () => {
     // Creating table columns
     const historyColumns: ColumnDef<HistoryData>[] = [
         { accessorKey: 'poNumber', header: 'PO Number' },
-        { accessorKey: 'indentNumber', header: 'Indent Number' },
+        { 
+            accessorKey: 'indentNumber', 
+            header: 'Indent Number',
+            cell: ({ getValue }) => (getValue() as string || '').split(/[_/]/)[0]
+        },
         {
             accessorKey: 'poCopy',
             header: 'PO Copy',
@@ -120,6 +124,17 @@ export default () => {
             },
         },
         { accessorKey: 'vendorName', header: 'Vendor Name' },
+        { 
+            accessorKey: 'product', 
+            header: 'Product',
+            cell: ({ getValue }) => <div className="max-w-[200px] truncate">{getValue() as string}</div>
+        },
+        { accessorKey: 'quantity', header: 'Qty' },
+        { 
+            accessorKey: 'rate', 
+            header: 'Rate',
+            cell: ({ getValue }) => `₹${getValue()}`
+        },
         { accessorKey: 'preparedBy', header: 'Prepared By' },
         { accessorKey: 'approvedBy', header: 'Approved By' },
         {
@@ -156,19 +171,20 @@ export default () => {
 
 
     return (
-        <div>
+        <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">
             <Heading heading="PO History" subtext="View purchase orders">
                 <Package2 size={50} className="text-primary" />
             </Heading>
 
-
-            <DataTable
-                data={historyData}
-                columns={historyColumns}
-                searchFields={['vendorName', 'poNumber', 'indentNumber']}
-                dataLoading={poHistoryLoading}
-                className='h-[80dvh]'
-            />
+            <div className="w-full flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
+                <DataTable
+                    data={historyData}
+                    columns={historyColumns}
+                    searchFields={['vendorName', 'poNumber', 'indentNumber', 'product']}
+                    dataLoading={poHistoryLoading}
+                    className='h-[74dvh]'
+                />
+            </div>
         </div>
     );
 };

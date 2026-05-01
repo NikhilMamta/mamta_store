@@ -122,10 +122,10 @@ export default () => {
     useEffect(() => {
         const indentNumbers = new Set<string>();
 
-        // 0. Indent numbers that already have a PO in history
+        // 0. Indent numbers that already have a PO in history (check base numbers)
         const existingPoIndents = new Set(
             poHistorySheet
-                .map(p => p.indentNumber?.trim())
+                .map(p => (p.indentNumber || '').trim().split(/[_/]/)[0])
                 .filter(Boolean) as string[]
         );
 
@@ -133,8 +133,9 @@ export default () => {
         indentSheet
             .filter((sheet) => sheet.planned4 !== '' && sheet.actual4 === '')
             .forEach((sheet) => {
-                if (!existingPoIndents.has(sheet.indentNumber)) {
-                    indentNumbers.add(sheet.indentNumber);
+                const baseNo = sheet.indentNumber?.split(/[_/]/)[0];
+                if (baseNo && !existingPoIndents.has(baseNo)) {
+                    indentNumbers.add(baseNo);
                 }
             });
 
@@ -142,8 +143,9 @@ export default () => {
         threePartyApprovalSheet
             .filter((tpa) => !tpa.status || tpa.status?.trim().toLowerCase() === 'pending')
             .forEach((tpa) => {
-                if (!existingPoIndents.has(tpa.indentNumber)) {
-                    indentNumbers.add(tpa.indentNumber);
+                const baseNo = tpa.indentNumber?.split(/[_/]/)[0];
+                if (baseNo && !existingPoIndents.has(baseNo)) {
+                    indentNumbers.add(baseNo);
                 }
             });
 
@@ -152,14 +154,15 @@ export default () => {
             .filter((vru) => {
                 const isApproved = vru.status?.trim().toLowerCase() === 'approved';
                 const approvedRecord = approvedIndentSheet.find(
-                    (approved) => approved.indentNumber === vru.indentNumber
+                    (approved) => (approved.indentNumber || '').split(/[_/]/)[0] === (vru.indentNumber || '').split(/[_/]/)[0]
                 );
                 const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
                 return isApproved && isRegular;
             })
             .forEach((vru) => {
-                if (!existingPoIndents.has(vru.indentNumber)) {
-                    indentNumbers.add(vru.indentNumber);
+                const baseNo = (vru.indentNumber || '').split(/[_/]/)[0];
+                if (baseNo && !existingPoIndents.has(baseNo)) {
+                    indentNumbers.add(baseNo);
                 }
             });
 
@@ -452,20 +455,21 @@ export default () => {
         // Update the main indentNumber field immediately
         form.setValue('indentNumber', selectedIndentNumber);
 
-        // 1. Find the indent items in indentSheet (trim and case-insensitive to be safe)
-        let items = indentSheet.filter(
-            (i) => i.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+        // 1. Filter all items for this indent number (handling hidden suffixes)
+        const items = indentSheet.filter(
+            (i) => (i.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
         );
 
         // Fallback: If not in indentSheet, check approvedIndentSheet
         if (items.length === 0) {
             console.log('No items in indentSheet, checking approvedIndentSheet...');
             const approvedItems = approvedIndentSheet.filter(
-                (i) => i.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+                (i) => (i.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
             );
             if (approvedItems.length > 0) {
                 // Map approved items to match the expected structure
-                items = approvedItems.map(ai => findIndentWithFallback(ai.indentNumber, ai.searialNumber)!) as any;
+                const mappedItems = approvedItems.map(ai => findIndentWithFallback(ai.indentNumber, ai.searialNumber)!) as any;
+                items.push(...mappedItems);
             }
         }
 
@@ -486,7 +490,7 @@ export default () => {
         // Source B: Three Party Approval sheet
         if (!vendorName) {
             const tpa = threePartyApprovalSheet.find(
-                (t) => t.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+                (t) => (t.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
             );
             if (tpa) {
                 vendorName = (tpa.approvedVendorName || '').trim();
@@ -497,13 +501,13 @@ export default () => {
         // Source C: Vendor Rate Update sheet (for Regular vendors)
         if (!vendorName) {
             const vru = vendorRateUpdateSheet.find(
-                (v) => v.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase() &&
+                (v) => (v.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase() &&
                        v.status?.trim().toLowerCase() === 'approved'
             );
             if (vru) {
                 // Check if it's actually a regular indent
                 const approvedRecord = approvedIndentSheet.find(
-                    (approved) => approved.indentNumber?.trim().toLowerCase() === selectedIndentNumber.trim().toLowerCase()
+                    (approved) => (approved.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
                 );
                 const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
                 
@@ -561,7 +565,7 @@ export default () => {
             form.setValue(
                 'indents',
                 items.map((i) => ({
-                    indentNumber: i.indentNumber,
+                    indentNumber: (i.indentNumber || '').split('_')[0],
                     gst: 18,
                     discount: 0,
                     searialNumber: i.searialNumber,
@@ -745,9 +749,13 @@ export default () => {
             });
 
             try {
+                // Save to PO_HISTORY table (Maps to po_history in Supabase)
                 await postToPoHistory(historyRows);
+
+                // Note: No need to update actual4 in INDENT table if it doesn't exist in Supabase schema.
+                // The dropdown logic already filters out indents that have a matching record in po_history.
             } catch (histErr) {
-                console.error('PO HISTORY save failed (non-critical):', histErr);
+                console.error('PO HISTORY save failed:', histErr);
             }
             toast.success(`Successfully ${mode}d purchase order`);
             form.reset();
@@ -1293,7 +1301,7 @@ export default () => {
                                                         {/* Index */}
                                                         <TableCell>{index + 1}</TableCell>
                                                         <TableCell>
-                                                            {indent?.indentNumber}
+                                                            {indent?.indentNumber?.split(/[_/]/)[0]}
                                                         </TableCell>
                                                         <TableCell>{indent?.productName}</TableCell>
                                                         <TableCell>

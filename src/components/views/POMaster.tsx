@@ -144,7 +144,11 @@ export default () => {
         { accessorKey: 'quotationDate', header: 'Quotation Date' },
         { accessorKey: 'enquiryNumber', header: 'Enquiry Number' },
         { accessorKey: 'enquiryDate', header: 'Enquiry Date' },
-        { accessorKey: 'internalCode', header: 'Internal Code' },
+        { 
+            accessorKey: 'internalCode', 
+            header: 'Internal Code',
+            cell: ({ getValue }) => (getValue() as string || '').split(/[_/]/)[0]
+        },
         { accessorKey: 'product', header: 'Product' },
         { accessorKey: 'description', header: 'Description' },
         { accessorKey: 'quantity', header: 'Quantity' },

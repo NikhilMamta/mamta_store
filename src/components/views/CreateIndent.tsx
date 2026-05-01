@@ -318,7 +318,7 @@ export default () => {
 
                     const row: Partial<IndentSheet> = {
                         timestamp: timestamp,
-                        indentNumber: data.products.length > 1 ? `${currentIndentNumber}/${i + 1}` : currentIndentNumber,
+                        indentNumber: `${currentIndentNumber}_${i + 1}`,
                         indenterName: data.indenterName || '',
                         department: product.department || '',
                         areaOfUse: product.areaOfUse || '',

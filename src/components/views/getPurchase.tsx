@@ -262,6 +262,7 @@ export default () => {
         {
             accessorKey: 'indentNo',
             header: 'Indent No.',
+            cell: ({ getValue }) => (getValue() as string || '').split(/[_/]/)[0]
         },
         {
             accessorKey: 'indenter',
@@ -428,6 +429,7 @@ export default () => {
         {
             accessorKey: 'indentNo',
             header: 'Indent No.',
+            cell: ({ getValue }) => (getValue() as string || '').split(/[_/]/)[0]
         },
         {
             accessorKey: 'indenter',
@@ -955,9 +957,9 @@ export default () => {
 
 
     return (
-        <div>
+        <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">
             <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                <Tabs defaultValue="pending">
+                <Tabs defaultValue="pending" className="w-full flex-1 flex flex-col min-h-0">
                     <Heading
                         heading="Get Purchase"
                         subtext="Manage purchase bill details and status"
@@ -966,22 +968,27 @@ export default () => {
                         <ShoppingCart size={50} className="text-primary" />
                     </Heading>
 
-
-                    <TabsContent value="pending">
-                        <DataTable
-                            data={tableData}
-                            columns={columns}
-                            searchFields={['product', 'department', 'indenter', 'poNumber']}
-                            dataLoading={indentLoading}
-                        />
+                    <TabsContent value="pending" className="flex-1 min-h-0 w-full overflow-hidden">
+                        <div className="w-full h-full overflow-x-auto overflow-y-hidden">
+                            <DataTable
+                                data={tableData}
+                                columns={columns}
+                                searchFields={['product', 'department', 'indenter', 'poNumber']}
+                                dataLoading={indentLoading}
+                                className='h-[74dvh]'
+                            />
+                        </div>
                     </TabsContent>
-                    <TabsContent value="history">
-                        <DataTable
-                            data={historyData}
-                            columns={historyColumns}
-                            searchFields={['product', 'department', 'indenter', 'poNumber']}
-                            dataLoading={indentLoading}
-                        />
+                    <TabsContent value="history" className="flex-1 min-h-0 w-full overflow-hidden">
+                        <div className="w-full h-full overflow-x-auto overflow-y-hidden">
+                            <DataTable
+                                data={historyData}
+                                columns={historyColumns}
+                                searchFields={['product', 'department', 'indenter', 'poNumber']}
+                                dataLoading={indentLoading}
+                                className='h-[74dvh]'
+                            />
+                        </div>
                     </TabsContent>
                 </Tabs>
 

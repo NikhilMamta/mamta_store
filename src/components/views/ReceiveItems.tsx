@@ -1379,7 +1379,7 @@ export default () => {
     }
 
     return (
-        <div>
+        <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">
             <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                 <Tabs defaultValue="pending">
                     <Heading
@@ -1390,12 +1390,14 @@ export default () => {
                         <Truck size={50} className="text-primary" />
                     </Heading>
 
-                    <TabsContent value="pending">
+                <TabsContent value="pending" className="flex-1 min-h-0 w-full overflow-hidden">
+                    <div className="w-full h-full overflow-x-auto overflow-y-hidden">
                         <DataTable
                             data={tableData}
                             columns={columns}
-                            searchFields={['product', 'department', 'indenter', 'vendorType']}
+                            searchFields={['product', 'poNumber', 'indentNumber', 'vendor']}
                             dataLoading={poApprovalLoading}
+                            className="h-[74dvh]"
                             extraActions={
                                 <Button
                                     variant="default"
@@ -1417,9 +1419,11 @@ export default () => {
                                 </Button>
                             }
                         />
-                    </TabsContent>
+                    </div>
+                </TabsContent>
 
-                    <TabsContent value="history">
+                <TabsContent value="history" className="flex-1 min-h-0 w-full overflow-hidden">
+                    <div className="w-full h-full overflow-x-auto overflow-y-hidden">
                         <DataTable
                             data={historyData}
                             columns={historyColumns}
@@ -1427,12 +1431,14 @@ export default () => {
                                 'receiveStatus',
                                 'poNumber',
                                 'indentNumber',
-                                'poDate',
                                 'product',
+                                'vendor'
                             ]}
                             dataLoading={receivedLoading}
+                            className="h-[74dvh]"
                         />
-                    </TabsContent>
+                    </div>
+                </TabsContent>
                 </Tabs>
 
                 {selectedIndent && (

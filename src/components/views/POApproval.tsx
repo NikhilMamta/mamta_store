@@ -142,23 +142,34 @@ export default () => {
         // Map all valid rows first
         const allMapped = validRows.map(mapRowToTableData);
 
-        // Pending: Status is not 'Approved' or 'Rejected' (or use actual date)
-        const pending = allMapped.filter(item => !item.status || (item.status.trim().toLowerCase() !== 'approved' && item.status.trim().toLowerCase() !== 'rejected'));
+        // Pending: Status is 'Pending' or empty
+        const pending = allMapped.filter(item => 
+            !item.status || 
+            item.status.trim().toLowerCase() === 'pending' ||
+            (item.status.trim().toLowerCase() !== 'approved' && item.status.trim().toLowerCase() !== 'rejected')
+        );
 
         // History: Status is 'Approved' or 'Rejected'
         const history = allMapped.filter(item => item.status && (item.status.trim().toLowerCase() === 'approved' || item.status.trim().toLowerCase() === 'rejected'));
 
-        // Grouping logic for pending (for display)
-        const groupedPending: PoTableData[] = [];
-        const seenPending = new Set<string>();
+        // Grouping logic for pending (group by base Indent Number and concatenate products)
+        const groupedMap = new Map<string, PoTableData>();
         pending.forEach(item => {
-            if (!seenPending.has(item.poNumber)) {
-                seenPending.add(item.poNumber);
-                groupedPending.push(item);
+            const baseIndent = (item.internalCode || item.indentNumber || '').split(/[_/]/)[0];
+            if (baseIndent) {
+                if (!groupedMap.has(baseIndent)) {
+                    groupedMap.set(baseIndent, { ...item });
+                } else {
+                    const existing = groupedMap.get(baseIndent)!;
+                    const existingProducts = existing.product.split(', ').map(p => p.trim());
+                    if (!existingProducts.includes(item.product.trim())) {
+                        existing.product = `${existing.product}, ${item.product.trim()}`;
+                    }
+                }
             }
         });
 
-        setTableData(groupedPending);
+        setTableData(Array.from(groupedMap.values()));
         setHistoryData(history);
     }, [poHistorySheet]);
 
@@ -184,8 +195,16 @@ export default () => {
         { accessorKey: 'quotationDate', header: 'Quotation Date' },
         { accessorKey: 'enquiryNumber', header: 'Enquiry Number' },
         { accessorKey: 'enquiryDate', header: 'Enquiry Date' },
-        { accessorKey: 'internalCode', header: 'Internal Code' },
-        { accessorKey: 'product', header: 'Product' },
+        { 
+            accessorKey: 'internalCode', 
+            header: 'Internal Code',
+            cell: ({ getValue }) => (getValue() as string || '').split(/[_/]/)[0]
+        },
+        { 
+            accessorKey: 'product', 
+            header: 'Product',
+            cell: ({ getValue }) => <div className="max-w-[300px] break-words whitespace-normal">{getValue() as string}</div>
+        },
         { accessorKey: 'description', header: 'Description' },
         { accessorKey: 'quantity', header: 'Quantity' },
         { accessorKey: 'unit', header: 'Unit' },
@@ -255,8 +274,11 @@ export default () => {
         const formattedDate = formatDate(new Date());
 
         try {
-            // NEW: Get all items for this PO to update from po_history
-            const poItemsToUpdate = poHistorySheet.filter(p => p.poNumber === selectedItem.poNumber);
+            // NEW: Get all items for this base indent to update from po_history
+            const baseIndent = (selectedItem.internalCode || selectedItem.indentNumber || '').split(/[_/]/)[0];
+            const poItemsToUpdate = poHistorySheet.filter(p => 
+                (p.internalCode || p.indentNumber || '').split(/[_/]/)[0] === baseIndent
+            );
             const todayStr = new Date().toISOString().split('T')[0];
 
             const updates = poItemsToUpdate.map(({ ...item }) => ({
@@ -295,7 +317,7 @@ export default () => {
     // if (poMasterLoading) return <div className="h-screen w-full grid place-items-center"><Loader color="red" /></div>;
 
     return (
-        <div className="flex flex-col gap-5 h-full">
+        <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">
             <Heading
                 heading="PO Approval"
                 subtext="Approve or Reject Purchase Orders"
@@ -303,18 +325,22 @@ export default () => {
                 <PackageCheck size={50} className="text-primary" />
             </Heading>
 
-            <Tabs defaultValue="pending" className="w-full h-full flex flex-col">
-                <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+            <Tabs defaultValue="pending" className="w-full flex-1 flex flex-col min-h-0">
+                <TabsList className="grid w-full grid-cols-2 max-w-[400px] shrink-0">
                     <TabsTrigger value="pending">Pending ({tableData.length})</TabsTrigger>
                     <TabsTrigger value="history">History ({historyData.length})</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="pending" className="flex-1 overflow-auto">
-                    <DataTable columns={columns} data={tableData} searchFields={['partyName', 'poNumber']} />
+                <TabsContent value="pending" className="flex-1 min-h-0 w-full overflow-hidden">
+                    <div className="w-full h-full overflow-x-auto overflow-y-hidden">
+                        <DataTable columns={columns} data={tableData} searchFields={['partyName', 'poNumber']} />
+                    </div>
                 </TabsContent>
 
-                <TabsContent value="history" className="flex-1 overflow-auto">
-                    <DataTable columns={historyColumns} data={historyData} searchFields={['partyName', 'poNumber']} />
+                <TabsContent value="history" className="flex-1 min-h-0 w-full overflow-hidden">
+                    <div className="w-full h-full overflow-x-auto overflow-y-hidden">
+                        <DataTable columns={historyColumns} data={historyData} searchFields={['partyName', 'poNumber']} />
+                    </div>
                 </TabsContent>
             </Tabs>
 
@@ -346,7 +372,11 @@ export default () => {
                                     </thead>
                                     <tbody>
                                         {poHistorySheet
-                                            .filter(p => p.poNumber === selectedItem.poNumber)
+                                            .filter(p => {
+                                                const pBase = (p.internalCode || p.indentNumber || '').split(/[_/]/)[0];
+                                                const sBase = (selectedItem.internalCode || selectedItem.indentNumber || '').split(/[_/]/)[0];
+                                                return pBase === sBase && (!p.status || (p.status.trim().toLowerCase() !== 'approved' && p.status.trim().toLowerCase() !== 'rejected'));
+                                            })
                                             .map((item, idx) => (
                                                 <tr key={idx}>
                                                     <td className="border p-1 font-medium">{item.product}</td>
