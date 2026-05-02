@@ -57,6 +57,7 @@ export type ThreePartyApprovalSheet = {
 };
 
 export type IndentSheet = {
+    id?: number;
     rowIndex?: number;
     timestamp: string;
     indentNumber: string;

@@ -387,7 +387,6 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                 return {
                     rowIndex: originalItem.rowIndex,
                     indentNumber: appr.indentNumber,
-                    actual3: formattedDateTime,
                     approvedVendorName: selectedVendor[0] || '',
                     approvedRate: parseFloat(selectedVendor[1]) || 0,
                     approvedPaymentTerm: selectedVendor[2] || '',
@@ -409,7 +408,6 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                     await postToSheet([{
                         id: vendorUpdateRecord.id,
                         status: 'Approved',
-                        planned3: formattedDateTime,
                     }], 'update', 'VENDOR RATE UPDATE');
                     console.log('✅ VENDOR_RATE_UPDATE status updated successfully');
                 }
@@ -443,7 +441,6 @@ const RateApprovalForm = ({ items, onSuccess }: { items: RateApprovalData[], onS
                     approved_rate: parseFloat(selectedVendor[1]) || 0,
                     approved_payment_term: selectedVendor[2] || '',
                     approved_date: formattedDate,
-                    planned_4: formattedDate,
                     status: 'Approved'
                 };
             });

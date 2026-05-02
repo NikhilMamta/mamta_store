@@ -129,38 +129,11 @@ export default () => {
                 .filter(Boolean) as string[]
         );
 
-        // 1. Original indent data (planned4 !== '' && actual4 === '')
-        indentSheet
-            .filter((sheet) => sheet.planned4 !== '' && sheet.actual4 === '')
-            .forEach((sheet) => {
-                const baseNo = sheet.indentNumber?.split(/[_/]/)[0];
-                if (baseNo && !existingPoIndents.has(baseNo)) {
-                    indentNumbers.add(baseNo);
-                }
-            });
-
-        // 2. Three Party Approval data with Pending status
-        threePartyApprovalSheet
-            .filter((tpa) => !tpa.status || tpa.status?.trim().toLowerCase() === 'pending')
-            .forEach((tpa) => {
-                const baseNo = tpa.indentNumber?.split(/[_/]/)[0];
-                if (baseNo && !existingPoIndents.has(baseNo)) {
-                    indentNumbers.add(baseNo);
-                }
-            });
-
-        // 3. Vendor Rate Update data where status is 'Approved' and vendor type is 'Regular'
-        vendorRateUpdateSheet
-            .filter((vru) => {
-                const isApproved = vru.status?.trim().toLowerCase() === 'approved';
-                const approvedRecord = approvedIndentSheet.find(
-                    (approved) => (approved.indentNumber || '').split(/[_/]/)[0] === (vru.indentNumber || '').split(/[_/]/)[0]
-                );
-                const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
-                return isApproved && isRegular;
-            })
-            .forEach((vru) => {
-                const baseNo = (vru.indentNumber || '').split(/[_/]/)[0];
+        // 1. Filter Approved Indents from APPROVED_INDENT table where status is 'Approved'
+        approvedIndentSheet
+            .filter((approved) => approved.status?.trim().toLowerCase() === 'approved')
+            .forEach((approved) => {
+                const baseNo = (approved.indentNumber || '').split(/[_/]/)[0];
                 if (baseNo && !existingPoIndents.has(baseNo)) {
                     indentNumbers.add(baseNo);
                 }

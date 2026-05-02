@@ -302,11 +302,10 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                 // Update ALL approved_indent records sharing this base indent number
                 const baseIndentNo = indentNumber.split(/[_/]/)[0];
                 const aiUpdates = approvedIndentSheet
-                    .filter((record: any) => (record.indentNumber || '').split(/[_/]/)[0] === baseIndentNo && record.status !== 'Approved')
+                    .filter((record: any) => (record.indentNumber || '').split(/[_/]/)[0] === baseIndentNo && record.status === 'Pending')
                     .map((record: any) => ({
                         id: record.id,
                         status: 'Approved',
-                        planned2: now,
                     }));
                 
                 if (aiUpdates.length > 0) {
@@ -487,7 +486,7 @@ export default () => {
 
         // Get all approved indents that need vendor update
         const pendingApprovedIndents = approvedIndentSheet.filter(
-            (approved) => approved.status?.trim().toLowerCase() === 'pending' && approved.vendorType !== 'Three Party'
+            (approved) => approved.status?.trim().toLowerCase() === 'pending' && approved.vendorType === 'Regular'
         );
 
         const pendingItems = indentSheet

@@ -233,28 +233,26 @@ export default () => {
                 if (!update) return;
 
                 allRowsForIndent.forEach(originalSheet => {
-                    const rowIndex = (originalSheet as any).rowIndex;
-                    
-                    // 1. Prepare Update for INDENT table
+                    const vendorType = update.vendorType || originalSheet.vendorType || 'Regular';
+                    const isRejected = vendorType === 'Reject';
+
+                    // 1. Prepare Update for INDENT table (Always Approved to move to History)
                     indentUpdates.push({
-                        rowIndex: rowIndex,
+                        id: originalSheet.id, // CRITICAL: Need ID for Supabase Update
                         indentNumber: originalSheet.indentNumber,
-                        vendorType: update.vendorType || originalSheet.vendorType,
+                        vendorType: vendorType,
                         approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
                         specifications: update.specifications !== undefined ? update.specifications : originalSheet.specifications,
-                        status: 'Approved',
-                        actual1: formattedDate,
+                        status: 'Approved', // Move to History
                     });
 
                     // 2. Prepare Insert for APPROVED INDENT table
                     approvedRecords.push({
                         timestamp: formattedDate,
                         indentNumber: originalSheet.indentNumber,
-                        vendorType: update.vendorType || 'Regular',
+                        vendorType: vendorType,
                         approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
-                        delay: 'None',
-                        planned2: formattedDate,
-                        status: 'Pending',
+                        status: isRejected ? 'Rejected' : 'Pending', // Pending triggers next step
                     });
                 });
             });
