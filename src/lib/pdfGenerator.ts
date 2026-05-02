@@ -44,7 +44,7 @@ export const generateStoreOutSlip = async (data: SlipData): Promise<Blob> => {
     doc.setLineWidth(0.5);
     doc.line(10, 25, pageWidth - 10, 25);
 
-    // 3. Info Section (Row 1)
+    // Info Section (Row 1)
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text('Issue No -', 15, 35);
@@ -56,10 +56,7 @@ export const generateStoreOutSlip = async (data: SlipData): Promise<Blob> => {
     doc.setFont('helvetica', 'normal');
     doc.text(data.date, pageWidth / 2 - 5, 35);
     
-    doc.setFont('helvetica', 'bold');
-    doc.text('Area Of Use -', pageWidth - 70, 35);
-    doc.setFont('helvetica', 'normal');
-    doc.text(data.areaOfUse || 'N/A', pageWidth - 45, 35);
+    // Removed Area Of Use row
 
     // Row 2
     doc.setFont('helvetica', 'bold');
@@ -83,19 +80,19 @@ export const generateStoreOutSlip = async (data: SlipData): Promise<Blob> => {
     doc.setTextColor(255, 0, 0); // Red for Category
     doc.text(data.category, pageWidth / 2 + 5, 55);
 
-    // 4. Title
+    // Title
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Store Out Slip', pageWidth / 2, 65, { align: 'center' });
     doc.line(pageWidth / 2 - 20, 67, pageWidth / 2 + 20, 67); // Underline
 
-    // 5. Table
+    // Table
     autoTable(doc, {
         startY: 75,
-        head: [['Serial Number', 'Product Name', 'Quantity']],
-        body: data.items.map(item => [
-            item.searialNumber,
+        head: [['Serial No.', 'Product Name', 'Quantity']],
+        body: data.items.map((item, index) => [
+            index + 1,
             item.productName,
             `${item.quantity} ${item.unit}`
         ]),
@@ -120,8 +117,9 @@ export const generateStoreOutSlip = async (data: SlipData): Promise<Blob> => {
         }
     });
 
-    // 6. Footer
-    const finalY = (doc as any).lastAutoTable.finalY + 20;
+    // Footer
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text('Prepared By', 15, finalY);
     doc.setFont('helvetica', 'normal');

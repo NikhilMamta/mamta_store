@@ -54,6 +54,7 @@ export default () => {
         approvedIndentSheet,
         receivedSheet,
         storeOutSheet,
+        storeOutApprovalSheet,
         vendorRateUpdateSheet
     } = useSheets();
  
@@ -68,11 +69,21 @@ export default () => {
     });
  
     useEffect(() => {
-        // 1. Create a mapping of indentNumber -> itemName from indentSheet
+        // 1. Create a mapping of indentNumber -> itemName from indentSheet and storeOutApprovalSheet
         const indentToItem: Record<string, string> = {};
+        
+        // Add Purchase indents
         indentSheet.forEach(row => {
             if (row.indentNumber && row.productName) {
                 indentToItem[row.indentNumber] = row.productName.trim().toLowerCase();
+            }
+        });
+
+        // Add Store Out requests (storeOutApprovalSheet corresponds to STORE OUT REQUEST table)
+        storeOutApprovalSheet.forEach(row => {
+            if ((row.indentNumber || row.issueNo) && row.productName) {
+                const id = row.indentNumber || row.issueNo;
+                indentToItem[id] = row.productName.trim().toLowerCase();
             }
         });
 
@@ -102,11 +113,12 @@ export default () => {
         });
 
         const outTotals: Record<string, number> = {};
+        // storeOutSheet corresponds to STORE OUT APPROVAL table (final issued items)
         storeOutSheet.forEach(curr => {
-            // Some store out records might have productName directly, some might have indentNumber
-            const name = (curr.productName || (curr.indentNumber ? indentToItem[curr.indentNumber] : '') || '').trim().toLowerCase();
+            const id = curr.indentNumber || curr.issueNo;
+            const name = (curr.productName || (id ? indentToItem[id] : '') || '').trim().toLowerCase();
             if (name) {
-                // 'approveQty' in storeOutSheet typically represents the issued quantity
+                // Sum up items from STORE OUT APPROVAL that are ready to be issued or already issued
                 outTotals[name] = (outTotals[name] || 0) + (Number(curr.approveQty || curr.qty) || 0);
             }
         });
