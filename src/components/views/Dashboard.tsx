@@ -42,7 +42,7 @@ function CustomChartTooltipContent({
     );
 }
 export default function UsersTable() {
-    const { receivedSheet, indentSheet, inventorySheet, inventoryLoading } = useSheets();
+    const { receivedSheet, indentSheet, inventorySheet, storeOutSheet, inventoryLoading } = useSheets();
     const [chartData, setChartData] = useState<
         {
             name: string;
@@ -57,23 +57,24 @@ export default function UsersTable() {
             quantity: number;
         }[]
     >([]);
-
+ 
     // Items
     const [indent, setIndent] = useState({ count: 0, quantity: 0 });
     const [purchase, setPurchase] = useState({ count: 0, quantity: 0 });
     const [out, setOut] = useState({ count: 0, quantity: 0 });
     const [alerts, setAlerts] = useState({ lowStock: 0, outOfStock: 0 });
-
+ 
     const [startDate, setStartDate] = useState<Date>();
     const [endDate, setEndDate] = useState<Date>();
     const [filteredVendors, setFilteredVendors] = useState<string[]>([]);
     const [filteredProducts, setFilteredProducts] = useState<string[]>([]);
     const [allVendors, setAllVendors] = useState<string[]>([]);
     const [allProducts, setAllProducts] = useState<string[]>([]);
-
+ 
     useEffect(() => {
         setAllVendors(Array.from(new Set(indentSheet.map((item) => item.approvedVendorName))));
         setAllProducts(Array.from(new Set(indentSheet.map((item) => item.productName))));
+        
         const {
             topVendors,
             topProducts,
@@ -84,7 +85,7 @@ export default function UsersTable() {
             totalApprovedQuantity,
             totalPurchasedQuantity,
         } = analyzeData(
-            { receivedSheet, indentSheet },
+            { receivedSheet, indentSheet, storeOutSheet },
             {
                 startDate: startDate?.toISOString(),
                 endDate: endDate?.toISOString(),
@@ -92,7 +93,7 @@ export default function UsersTable() {
                 products: filteredProducts,
             }
         );
-
+ 
         setChartData(
             topProducts.map((p) => ({ frequency: p.freq, quantity: p.quantity, name: p.name }))
         );
@@ -100,7 +101,22 @@ export default function UsersTable() {
         setIndent({ quantity: totalApprovedQuantity, count: approvedIndentCount });
         setPurchase({ quantity: totalPurchasedQuantity, count: receivedPurchaseCount });
         setOut({ quantity: totalIssuedQuantity, count: issuedIndentCount });
-    }, [startDate, endDate, filteredProducts, filteredVendors, indentSheet, receivedSheet]);
+
+        // Calculate Stock Alerts
+        let low = 0;
+        let outStock = 0;
+        inventorySheet.forEach(item => {
+            const stock = Number(item.currentStock || item.opening || 0);
+            const status = item.colorCode?.toLowerCase() || '';
+            if (stock === 0) {
+                outStock++;
+            } else if (status === 'red') {
+                low++;
+            }
+        });
+        setAlerts({ lowStock: low, outOfStock: outStock });
+
+    }, [startDate, endDate, filteredProducts, filteredVendors, indentSheet, receivedSheet, storeOutSheet, inventorySheet]);
 
 
 

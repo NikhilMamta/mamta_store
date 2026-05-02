@@ -121,12 +121,23 @@ export const generateStoreOutSlip = async (data: SlipData): Promise<Blob> => {
     const finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
+    
+    // Prepared By (Left)
     doc.text('Prepared By', 15, finalY);
     doc.setFont('helvetica', 'normal');
     doc.text(data.preparedBy, 15, finalY + 5);
     
+    // Approved By (Center)
     doc.setFont('helvetica', 'bold');
-    doc.text('Approved By', pageWidth - 40, finalY);
+    doc.text('Approved By', pageWidth / 2, finalY, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(data.approvedBy, pageWidth / 2, finalY + 5, { align: 'center' });
+
+    // Final Approved By (Right)
+    doc.setFont('helvetica', 'bold');
+    doc.text('Final Approved By', pageWidth - 15, finalY, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.text('Dr. Sunil Ramnani', pageWidth - 15, finalY + 5, { align: 'right' });
 
     return doc.output('blob');
 };

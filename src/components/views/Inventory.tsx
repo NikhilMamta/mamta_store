@@ -1,6 +1,7 @@
 import Heading from '../element/Heading';
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSheets } from '@/context/SheetsContext';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pill } from '../ui/pill';
@@ -58,6 +59,8 @@ export default () => {
         vendorRateUpdateSheet
     } = useSheets();
  
+    const navigate = useNavigate();
+
     const [tableData, setTableData] = useState<InventoryTable[]>([]);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,7 +82,7 @@ export default () => {
             }
         });
 
-        // Add Store Out requests (storeOutApprovalSheet corresponds to STORE OUT REQUEST table)
+        // Add Store Out requests
         storeOutApprovalSheet.forEach(row => {
             if ((row.indentNumber || row.issueNo) && row.productName) {
                 const id = row.indentNumber || row.issueNo;
@@ -87,7 +90,7 @@ export default () => {
             }
         });
 
-        // 2. Calculate dynamic totals
+        // 2. Calculate dynamic totals by Item Name (Normalized)
         const indentTotals: Record<string, number> = {};
         indentSheet.forEach(curr => {
             const name = curr.productName?.trim().toLowerCase();
@@ -113,23 +116,18 @@ export default () => {
         });
 
         const outTotals: Record<string, number> = {};
-        // storeOutSheet corresponds to STORE OUT APPROVAL table (final issued items)
         storeOutSheet.forEach(curr => {
             const id = curr.indentNumber || curr.issueNo;
             const name = (curr.productName || (id ? indentToItem[id] : '') || '').trim().toLowerCase();
             if (name) {
-                // Sum up items from STORE OUT APPROVAL that are ready to be issued or already issued
                 outTotals[name] = (outTotals[name] || 0) + (Number(curr.approveQty || curr.qty) || 0);
             }
         });
 
-        // 3. Calculate latest rates from vendorRateUpdateSheet
         const latestRates: Record<string, number> = {};
-        // Sort by timestamp (newest first) to easily get the latest rate
         const sortedVendorUpdates = [...vendorRateUpdateSheet].sort((a, b) => 
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
-        
         sortedVendorUpdates.forEach(curr => {
             const name = indentToItem[curr.indentNumber];
             if (name && !latestRates[name] && curr.rate1) {
@@ -137,8 +135,21 @@ export default () => {
             }
         });
 
+        // 3. Group the inventorySheet items uniquely by name
+        const uniqueInventory: Record<string, any> = {};
+        inventorySheet.forEach(i => {
+            const name = i.itemName?.trim().toLowerCase();
+            if (!name) return;
+            if (!uniqueInventory[name]) {
+                uniqueInventory[name] = { ...i, opening: Number(i.opening || 0) };
+            } else {
+                // If duplicate item exists in inventory sheet, sum the opening
+                uniqueInventory[name].opening += Number(i.opening || 0);
+            }
+        });
+
         setTableData(
-            inventorySheet.map((i) => {
+            Object.values(uniqueInventory).map((i: any) => {
                 const itemName = i.itemName?.trim().toLowerCase();
                 const indented = itemName ? (indentTotals[itemName] || 0) : 0;
                 const approved = itemName ? (approvedTotals[itemName] || 0) : 0;
@@ -146,10 +157,7 @@ export default () => {
                 const issued = itemName ? (outTotals[itemName] || 0) : 0;
                 const opening = i.opening || 0;
                 
-                // Current Stock calculation: Opening + Purchased - Issued
                 const currentStock = opening + purchased - issued;
-
-                // Rate from Vendor Rate Update table
                 const rate = itemName ? (latestRates[itemName] || i.individualRate || 0) : (i.individualRate || 0);
                 const totalPrice = currentStock * rate;
 
@@ -170,14 +178,15 @@ export default () => {
             })
             .reverse()
         );
-    }, [inventorySheet, indentSheet, approvedIndentSheet, receivedSheet, storeOutSheet, vendorRateUpdateSheet]);
+    }, [inventorySheet, indentSheet, approvedIndentSheet, receivedSheet, storeOutSheet, storeOutApprovalSheet, vendorRateUpdateSheet]);
+
     const columns: ColumnDef<InventoryTable>[] = [
         {
             accessorKey: 'itemName',
             header: 'Item',
             cell: ({ row }) => {
                 return (
-                    <div className="text-wrap max-w-40 text-center">{row.original.itemName}</div>
+                    <div className="text-wrap max-w-40 text-center font-medium">{row.original.itemName}</div>
                 );
             },
         },
@@ -216,7 +225,6 @@ export default () => {
         {
             accessorKey: 'totalPrice',
             header: 'Total Price',
-
             cell: ({ row }) => {
                 return <>&#8377;{row.original.totalPrice}</>;
             },

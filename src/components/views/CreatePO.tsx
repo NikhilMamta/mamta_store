@@ -91,14 +91,14 @@ function filterUniquePoNumbers(data: PoMasterSheet[]): PoMasterSheet[] {
 }
 
 export default () => {
-    const { 
-        indentSheet, 
-        poMasterSheet, 
-        updateIndentSheet, 
-        updatePoMasterSheet, 
-        masterSheet: details, 
-        threePartyApprovalSheet, 
-        vendorRateUpdateSheet, 
+    const {
+        indentSheet,
+        poMasterSheet,
+        updateIndentSheet,
+        updatePoMasterSheet,
+        masterSheet: details,
+        threePartyApprovalSheet,
+        vendorRateUpdateSheet,
         approvedIndentSheet,
         poHistorySheet,
         updatePoHistorySheet,
@@ -318,19 +318,19 @@ export default () => {
             const items = indentSheet.filter(
                 (i) => pendingIndentNumbers.has(i.indentNumber) && i.approvedVendorName === vendor
             );
-            
+
             // Find vendor details from master table and fill address & GSTIN
             if (vendor && details?.vendors) {
                 const vendorDetails = details.vendors.find(
                     (v) => v.vendorName && v.vendorName.toLowerCase() === vendor.toLowerCase()
                 );
-                
+
                 if (vendorDetails) {
                     form.setValue('supplierAddress', vendorDetails.address || '');
                     form.setValue('gstin', vendorDetails.gstin || '');
                 }
             }
-            
+
             form.setValue(
                 'indents',
                 items.map((i) => ({
@@ -347,12 +347,12 @@ export default () => {
     useEffect(() => {
         if (mode === 'create' && !indentNumber) {
             const supplierName = form.getValues('supplierName');
-            
+
             if (supplierName && details?.vendors) {
                 const vendorDetails = details.vendors.find(
                     (v) => v.vendorName && v.vendorName.toLowerCase() === supplierName.toLowerCase()
                 );
-                
+
                 if (vendorDetails) {
                     form.setValue('supplierAddress', vendorDetails.address || '');
                     form.setValue('gstin', vendorDetails.gstin || '');
@@ -416,7 +416,7 @@ export default () => {
     const findIndentWithFallback = (id: string, serial?: number | string) => {
         const hasSerial = serial !== undefined && serial !== null && String(serial).trim() !== '';
         const targetBaseId = (id || '').split(/[_/]/)[0].toLowerCase();
-        
+
         // 1. Search in master Indent Sheet
         let found = indentSheet.find((i) => {
             if (hasSerial && i.searialNumber) return String(i.searialNumber) === String(serial);
@@ -482,7 +482,7 @@ export default () => {
             form.setValue('indents', []);
             return;
         }
-        
+
         console.log('--- handleIndentSelect starting ---');
         console.log('Selected Indent Number (Base):', selectedIndentNumber);
 
@@ -509,7 +509,7 @@ export default () => {
 
         // 2. Determine the vendor name for this indent from all possible sources
         let vendorName = '';
-        
+
         // Source A: Approved vendor in the collected items
         if (items.length > 0) {
             const firstWithVendor = items.find(i => i.approvedVendorName && i.approvedVendorName.trim() !== '');
@@ -534,14 +534,14 @@ export default () => {
         if (!vendorName) {
             const vru = vendorRateUpdateSheet.find(
                 (v) => (v.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase() &&
-                       v.status?.trim().toLowerCase() === 'approved'
+                    v.status?.trim().toLowerCase() === 'approved'
             );
             if (vru) {
                 const approvedRecord = approvedIndentSheet.find(
                     (approved) => (approved.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
                 );
                 const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
-                
+
                 if (isRegular) {
                     vendorName = (vru.vendorName1 || '').trim();
                     if (vendorName) console.log('Vendor name found in vendorRateUpdateSheet (Regular):', vendorName);
@@ -591,7 +591,7 @@ export default () => {
             console.error('Critical: Indent selected from dropdown but not found in any sheet.');
             form.setValue('indents', []);
         }
-        
+
         console.log('--- handleIndentSelect finished ---');
     };
 
@@ -692,7 +692,7 @@ export default () => {
                 preparedBy: values.preparedBy,
                 approvedBy: values.approvedBy,
                 indentBy: values.indentBy,
-                finalApproved: '',
+                finalApproved: 'Dr. Sunil Ramnani',
             };
 
             const blob = await pdf(<POPdf {...pdfProps} />).toBlob();
@@ -705,7 +705,7 @@ export default () => {
             try {
                 // Upload to Supabase Bucket 'pdf' as requested
                 url = await uploadFileToSupabase(file, 'pdf');
-                
+
                 if (email) {
                     console.log(`PO PDF uploaded to Supabase: ${url}. Email sending to ${email} would happen here.`);
                     toast.success('PO created and PDF saved to Supabase');

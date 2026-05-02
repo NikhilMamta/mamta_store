@@ -1,4 +1,4 @@
-import type { IndentSheet, ReceivedSheet } from '@/types';
+import type { IndentSheet, ReceivedSheet, StoreOutSheet } from '@/types';
 
 type Filters = {
     startDate?: string; // ISO date string
@@ -11,9 +11,11 @@ export function analyzeData(
     {
         indentSheet,
         receivedSheet,
+        storeOutSheet = [],
     }: {
         indentSheet: IndentSheet[];
         receivedSheet: ReceivedSheet[];
+        storeOutSheet?: StoreOutSheet[];
     },
     filters: Filters = {}
 ) {
@@ -24,35 +26,37 @@ export function analyzeData(
     const productSet = new Set(filters.products ?? []);
 
     const isWithinDate = (dateStr: string) => {
+        if (!dateStr) return false;
         const d = new Date(dateStr);
         return d.toString() !== 'Invalid Date' && (!start || d >= start) && (!end || d <= end);
     };
 
-    const isVendorMatch = (name: string) => vendorSet.size === 0 || vendorSet.has(name);
-    const isProductMatch = (name: string) => productSet.size === 0 || productSet.has(name);
+    const isVendorMatch = (name: string) => !name || vendorSet.size === 0 || vendorSet.has(name);
+    const isProductMatch = (name: string) => !name || productSet.size === 0 || productSet.has(name);
 
-    // Map from indentNumber to productName
+    // Map from indentNumber to productName (from Purchase Indents)
     const indentProductMap = new Map<string, string>();
     for (const indent of indentSheet) {
-        indentProductMap.set(indent.indentNumber, indent.productName);
+        if (indent.indentNumber && indent.productName) {
+            indentProductMap.set(indent.indentNumber, indent.productName);
+        }
     }
 
     // -------------------------------
-    // Approved Indents
+    // 1. Total Indents (Purchase Type)
     const approvedIndents = indentSheet.filter(
         (i) =>
-            ["three party", "regular"].includes((i.vendorType ?? "").toLowerCase()) &&
             isWithinDate(i.timestamp) &&
             isProductMatch(i.productName)
     );
 
     const totalApprovedQuantity = approvedIndents.reduce(
-        (sum, i) => sum + (i.approvedQuantity ?? 0),
+        (sum, i) => sum + (Number(i.approvedQuantity) || 0),
         0
     );
 
     // -------------------------------
-    // Purchases
+    // 2. Total Purchases (Received)
     const receivedPurchases = receivedSheet.filter((r) => {
         const productName = indentProductMap.get(r.indentNumber);
         return (
@@ -63,28 +67,28 @@ export function analyzeData(
     });
 
     const totalPurchasedQuantity = receivedPurchases.reduce(
-        (sum, r) => sum + (r.receivedQuantity ?? 0),
+        (sum, r) => sum + (Number(r.receivedQuantity) || 0),
         0
     );
 
     // -------------------------------
-  const issuedIndents = indentSheet.filter(
-    (i) =>
-        ((i.issueStatus ?? "").toLowerCase() === 'issued') &&
-        isWithinDate(i.timestamp) &&
-        isProductMatch(i.productName)
-);
+    // 3. Total Issued (Store Out Approval / Store Out)
+    const issuedItems = storeOutSheet.filter(
+        (i) =>
+            isWithinDate(i.timestamp) &&
+            isProductMatch(i.productName || indentProductMap.get(i.indentNumber || ''))
+    );
 
-
-    const totalIssuedQuantity = issuedIndents.reduce(
-        (sum, i) => sum + (i.issuedQuantity ?? 0),
+    const totalIssuedQuantity = issuedItems.reduce(
+        (sum, i) => sum + (Number(i.approveQty || i.qty) || 0),
         0
     );
 
     // -------------------------------
-    // Top 10 Products
+    // Top 10 Products (By frequency in Purchases and Store Out)
     const productFrequencyMap = new Map<string, { freq: number; quantity: number }>();
 
+    // From Purchases
     for (const r of receivedSheet) {
         if (!isWithinDate(r.timestamp)) continue;
         const productName = indentProductMap.get(r.indentNumber);
@@ -95,7 +99,21 @@ export function analyzeData(
         }
         const entry = productFrequencyMap.get(productName)!;
         entry.freq += 1;
-        entry.quantity += r.receivedQuantity;
+        entry.quantity += Number(r.receivedQuantity) || 0;
+    }
+
+    // From Store Out
+    for (const i of storeOutSheet) {
+        if (!isWithinDate(i.timestamp)) continue;
+        const productName = i.productName || indentProductMap.get(i.indentNumber || '');
+        if (!productName || !isProductMatch(productName)) continue;
+
+        if (!productFrequencyMap.has(productName)) {
+            productFrequencyMap.set(productName, { freq: 0, quantity: 0 });
+        }
+        const entry = productFrequencyMap.get(productName)!;
+        entry.freq += 1;
+        entry.quantity += Number(i.approveQty || i.qty) || 0;
     }
 
     const topProducts = [...productFrequencyMap.entries()]
@@ -115,7 +133,7 @@ export function analyzeData(
         }
         const entry = vendorMap.get(r.vendor)!;
         entry.orders += 1;
-        entry.quantity += r.receivedQuantity;
+        entry.quantity += Number(r.receivedQuantity) || 0;
     }
 
     const topVendors = [...vendorMap.entries()]
@@ -129,7 +147,7 @@ export function analyzeData(
         totalApprovedQuantity,
         receivedPurchaseCount: receivedPurchases.length,
         totalPurchasedQuantity,
-        issuedIndentCount: issuedIndents.length,
+        issuedIndentCount: issuedItems.length,
         totalIssuedQuantity,
         topProducts,
         topVendors,

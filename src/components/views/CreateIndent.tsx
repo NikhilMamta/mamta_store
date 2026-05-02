@@ -24,6 +24,7 @@ import type { IndentSheet, StoreOutSheet, InventorySheet } from '@/types';
 import { useSheets } from '@/context/SheetsContext';
 import Heading from '../element/Heading';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { formatDate } from '@/lib/utils';
 
 
@@ -93,13 +94,35 @@ export default () => {
     });
 
 
+    const [searchParams] = useSearchParams();
+    const typeParam = searchParams.get('type');
+    const itemParam = searchParams.get('item');
+    const uomParam = searchParams.get('uom');
+    const groupParam = searchParams.get('group');
+
     const form = useForm({
         resolver: zodResolver(schema),
         defaultValues: {
             indenterName: '',
             indentApproveBy: '',
-            indentType: '' as any, // Change from undefined to ''
-            products: [
+            indentType: (typeParam as any) || 'Purchase',
+            products: itemParam ? [
+                {
+                    productName: itemParam || '',
+                    uom: uomParam || '',
+                    groupHead: groupParam || '',
+                    category: groupParam || '',
+                    quantity: 1 as any,
+                    department: '',
+                    areaOfUse: '',
+                    wardName: '',
+                    specifications: '',
+                    floor: '',
+                    issueDate: new Date().toISOString().split('T')[0],
+                    requestedBy: '',
+                    attachment: undefined,
+                }
+            ] : [
                 {
                     attachment: undefined,
                     uom: '',
