@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ChartContainer, ChartTooltip, type ChartConfig } from '../ui/chart';
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from 'recharts';
 import { useEffect, useState } from 'react';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import DataTable from '../element/DataTable';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Button } from '../ui/button';
@@ -42,7 +42,7 @@ function CustomChartTooltipContent({
     );
 }
 export default function UsersTable() {
-    const { receivedSheet, indentSheet, inventorySheet, storeOutSheet, inventoryLoading } = useSheets();
+    const { receivedData, indentData, inventoryData, storeOutData, inventoryLoading } = useDatabase();
     const [chartData, setChartData] = useState<
         {
             name: string;
@@ -72,8 +72,8 @@ export default function UsersTable() {
     const [allProducts, setAllProducts] = useState<string[]>([]);
  
     useEffect(() => {
-        setAllVendors(Array.from(new Set(indentSheet.map((item) => item.approvedVendorName))));
-        setAllProducts(Array.from(new Set(indentSheet.map((item) => item.productName))));
+        setAllVendors(Array.from(new Set(indentData.map((item) => item.approvedVendorName))));
+        setAllProducts(Array.from(new Set(indentData.map((item) => item.productName))));
         
         const {
             topVendors,
@@ -85,7 +85,7 @@ export default function UsersTable() {
             totalApprovedQuantity,
             totalPurchasedQuantity,
         } = analyzeData(
-            { receivedSheet, indentSheet, storeOutSheet },
+            { receivedData, indentData, storeOutData },
             {
                 startDate: startDate?.toISOString(),
                 endDate: endDate?.toISOString(),
@@ -105,7 +105,7 @@ export default function UsersTable() {
         // Calculate Stock Alerts
         let low = 0;
         let outStock = 0;
-        inventorySheet.forEach(item => {
+        inventoryData.forEach(item => {
             const stock = Number(item.currentStock || item.opening || 0);
             const status = item.colorCode?.toLowerCase() || '';
             if (stock === 0) {
@@ -116,7 +116,7 @@ export default function UsersTable() {
         });
         setAlerts({ lowStock: low, outOfStock: outStock });
 
-    }, [startDate, endDate, filteredProducts, filteredVendors, indentSheet, receivedSheet, storeOutSheet, inventorySheet]);
+    }, [startDate, endDate, filteredProducts, filteredVendors, indentData, receivedData, storeOutData, inventoryData]);
 
 
 
@@ -128,7 +128,7 @@ export default function UsersTable() {
     } satisfies ChartConfig;
     return (
         <div>
-            <Heading heading="Dashboard" subtext="View you analytics">
+            <Heading heading="Dashboard" subtext="View your analytics">
                 <LayoutDashboard size={50} className="text-primary" />
             </Heading>
 

@@ -1,4 +1,4 @@
-import type { IndentSheet, ReceivedSheet, StoreOutSheet } from '@/types';
+import type { IndentData, ReceivedData, StoreOutData } from '@/types';
 
 type Filters = {
     startDate?: string; // ISO date string
@@ -9,13 +9,13 @@ type Filters = {
 
 export function analyzeData(
     {
-        indentSheet,
-        receivedSheet,
-        storeOutSheet = [],
+        indentData,
+        receivedData,
+        storeOutData = [],
     }: {
-        indentSheet: IndentSheet[];
-        receivedSheet: ReceivedSheet[];
-        storeOutSheet?: StoreOutSheet[];
+        indentData: IndentData[];
+        receivedData: ReceivedData[];
+        storeOutData?: StoreOutData[];
     },
     filters: Filters = {}
 ) {
@@ -36,7 +36,7 @@ export function analyzeData(
 
     // Map from indentNumber to productName (from Purchase Indents)
     const indentProductMap = new Map<string, string>();
-    for (const indent of indentSheet) {
+    for (const indent of indentData) {
         if (indent.indentNumber && indent.productName) {
             indentProductMap.set(indent.indentNumber, indent.productName);
         }
@@ -44,7 +44,7 @@ export function analyzeData(
 
     // -------------------------------
     // 1. Total Indents (Purchase Type)
-    const approvedIndents = indentSheet.filter(
+    const approvedIndents = indentData.filter(
         (i) =>
             isWithinDate(i.timestamp) &&
             isProductMatch(i.productName)
@@ -57,7 +57,7 @@ export function analyzeData(
 
     // -------------------------------
     // 2. Total Purchases (Received)
-    const receivedPurchases = receivedSheet.filter((r) => {
+    const receivedPurchases = receivedData.filter((r) => {
         const productName = indentProductMap.get(r.indentNumber);
         return (
             isWithinDate(r.timestamp) &&
@@ -73,7 +73,7 @@ export function analyzeData(
 
     // -------------------------------
     // 3. Total Issued (Store Out Approval / Store Out)
-    const issuedItems = storeOutSheet.filter(
+    const issuedItems = storeOutData.filter(
         (i) =>
             isWithinDate(i.timestamp) &&
             isProductMatch(i.productName || indentProductMap.get(i.indentNumber || ''))
@@ -89,7 +89,7 @@ export function analyzeData(
     const productFrequencyMap = new Map<string, { freq: number; quantity: number }>();
 
     // From Purchases
-    for (const r of receivedSheet) {
+    for (const r of receivedData) {
         if (!isWithinDate(r.timestamp)) continue;
         const productName = indentProductMap.get(r.indentNumber);
         if (!productName || !isProductMatch(productName)) continue;
@@ -103,7 +103,7 @@ export function analyzeData(
     }
 
     // From Store Out
-    for (const i of storeOutSheet) {
+    for (const i of storeOutData) {
         if (!isWithinDate(i.timestamp)) continue;
         const productName = i.productName || indentProductMap.get(i.indentNumber || '');
         if (!productName || !isProductMatch(productName)) continue;
@@ -125,7 +125,7 @@ export function analyzeData(
     // Top 10 Vendors
     const vendorMap = new Map<string, { orders: number; quantity: number }>();
 
-    for (const r of receivedSheet) {
+    for (const r of receivedData) {
         if (!isWithinDate(r.timestamp) || !isVendorMatch(r.vendor)) continue;
 
         if (!vendorMap.has(r.vendor)) {

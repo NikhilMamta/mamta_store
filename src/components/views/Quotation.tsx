@@ -11,10 +11,10 @@ import { SidebarTrigger } from '../ui/sidebar';
 import { useFieldArray, useForm, type Control, type FieldValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
-import type { PoMasterSheet, QuotationHistorySheet } from '@/types';
-import { postToSheet, uploadFile, fetchSheet } from '@/lib/fetchers';
+import type { PoMasterData, QuotationHistoryData } from '@/types';
+import { postToDB, uploadFileToSupabase, fetchFromDB } from '@/lib/fetchers';
 import { useEffect, useMemo, useState } from 'react';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { cn, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -37,8 +37,8 @@ interface SupplierInfo {
 }
 
 
-// MASTER Sheet interface for suppliers
-interface MasterSheetSupplier {
+// MASTER Table interface for suppliers
+interface MasterDataSupplier {
   supplierName: string;      // Column A
   vendorGstin: string;       // Column B  
   vendorAddress: string;     // Column C
@@ -46,7 +46,7 @@ interface MasterSheetSupplier {
 }
 
 
-function filterUniqueQuotationNumbers(data: PoMasterSheet[]): string[] {
+function filterUniqueQuotationNumbers(data: PoMasterData[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const row of data) {
@@ -110,12 +110,12 @@ const Badge = ({ children, variant, className, onClick }: {
 
 
 export default function QuotationPage() {
-  const { indentSheet, poMasterSheet, updateIndentSheet, updatePoMasterSheet, masterSheet: details } = useSheets();
+  const { indentData, poMasterData, updateIndentData, updatePoMasterData, masterData: details } = useDatabase();
   const [mode, setMode] = useState<Mode>('create');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [supplierInfos, setSupplierInfos] = useState<SupplierInfo[]>([]);
-  const [masterSuppliers, setMasterSuppliers] = useState<MasterSheetSupplier[]>([]);
+  const [masterSuppliers, setMasterSuppliers] = useState<MasterDataSupplier[]>([]);
   const [latestQuotationNumbers, setLatestQuotationNumbers] = useState<string[]>([]);
 
 
@@ -134,11 +134,11 @@ export default function QuotationPage() {
   }, [details]);
 
 
-  // Fetch latest quotation numbers from QUOTATION HISTORY sheet
+  // Fetch latest quotation numbers from QUOTATION HISTORY database
   useEffect(() => {
     const fetchLatestQuotationNumbers = async () => {
       try {
-        const quotationHistory = await fetchSheet('QUOTATION HISTORY');
+        const quotationHistory = await fetchFromDB('QUOTATION HISTORY');
         console.log('Fetched QUOTATION HISTORY:', quotationHistory);
 
         if (Array.isArray(quotationHistory)) {
@@ -158,7 +158,7 @@ export default function QuotationPage() {
   }, []);
 
 
-  // Fetch suppliers from MASTER sheet using existing fetchSheet function
+  // Fetch suppliers from MASTER database using existing fetchFromDB function
   useEffect(() => {
     function hasVendors(data: any): data is { vendors: any[] } {
       return data && typeof data === 'object' && 'vendors' in data;
@@ -166,11 +166,11 @@ export default function QuotationPage() {
 
     const fetchMasterSuppliers = async () => {
       try {
-        console.log('Fetching MASTER sheet data...');
+        console.log('Fetching MASTER database data...');
 
-        const masterData = await fetchSheet('MASTER');
+        const masterData = await fetchFromDB('MASTER');
 
-        console.log('MASTER sheet raw data:', masterData);
+        console.log('MASTER database raw data:', masterData);
 
         // Use type guard to safely access vendors
         let vendorsArray: any[] = [];
@@ -181,7 +181,7 @@ export default function QuotationPage() {
           vendorsArray = masterData;
         }
 
-        const suppliers: MasterSheetSupplier[] = vendorsArray
+        const suppliers: MasterDataSupplier[] = vendorsArray
           .map((vendor: any) => ({
             supplierName: vendor.vendorName || vendor.supplierName || '',
             vendorGstin: vendor.gstin || vendor.vendorGstin || '',
@@ -197,16 +197,15 @@ export default function QuotationPage() {
         setMasterSuppliers(suppliers);
 
         if (suppliers.length === 0) {
-          console.warn('No suppliers found in MASTER sheet');
-          toast.warning('No suppliers found in MASTER sheet');
+          console.warn('No suppliers found in MASTER database');
+          toast.warning('No suppliers found in MASTER database');
         } else {
-          console.log(`Successfully loaded ${suppliers.length} suppliers from MASTER sheet`);
+          console.log(`Successfully loaded ${suppliers.length} suppliers from MASTER database`);
           toast.success(`Loaded ${suppliers.length} suppliers`);
         }
-
       } catch (error) {
-        console.error('Error fetching MASTER sheet suppliers:', error);
-        toast.error('Failed to load suppliers from MASTER sheet');
+        console.error('Error fetching MASTER database suppliers:', error);
+        toast.error('Failed to load suppliers from MASTER database');
       }
     };
 
@@ -216,9 +215,9 @@ export default function QuotationPage() {
 
   // Filter eligible items - planned2 NOT NULL and actual2 NULL
   const eligibleItems = useMemo(() => {
-    console.log('Total indentSheet items:', indentSheet.length);
+    console.log('Total indentData items:', indentData.length);
 
-    const filtered = indentSheet.filter(item => {
+    const filtered = indentData.filter(item => {
       const planned2NotNull = item.planned2 !== null && item.planned2 !== undefined && item.planned2 !== '';
       const actual2IsNull = item.actual2 === null || item.actual2 === undefined || item.actual2 === '';
 
@@ -227,7 +226,7 @@ export default function QuotationPage() {
 
     console.log('Filtered eligible items:', filtered.length);
     return filtered;
-  }, [indentSheet]);
+  }, [indentData]);
 
 
   const form = useForm<QuotationForm>({
@@ -251,19 +250,19 @@ export default function QuotationPage() {
   }, [details]);
 
 
-  // Handle indent number selection from PO MASTER sheet
+  // Handle indent number selection from PO MASTER database
   const handleIndentSelect = (indentNumber: string) => {
     form.setValue('indentNumber', indentNumber);
     
     // Auto-fill related data from PO MASTER
-    const selectedIndent = poMasterSheet.find(item => item.internalCode === indentNumber);
+    const selectedIndent = poMasterData.find(item => item.internalCode === indentNumber);
     if (selectedIndent) {
       console.log('Auto-filled indent data:', selectedIndent);
     }
   };
 
 
-  // Handle multiple supplier selection from MASTER sheet
+  // Handle multiple supplier selection from MASTER database
   const handleSupplierSelect = (supplierName: string) => {
     setSelectedSuppliers(prev => {
       const newSuppliers = prev.includes(supplierName)
@@ -272,7 +271,7 @@ export default function QuotationPage() {
 
       form.setValue('suppliers', newSuppliers);
 
-      // Fetch supplier info from MASTER sheet data
+      // Fetch supplier info from MASTER database data
       const infos = newSuppliers.map(name => {
         const masterSupplier = masterSuppliers.find(s => s.supplierName === name);
         return {
@@ -351,10 +350,10 @@ export default function QuotationPage() {
         reader.readAsDataURL(logoBlob);
       });
 
-      const allQuotationRows: QuotationHistorySheet[] = [];
+      const allQuotationRows: QuotationHistoryData[] = [];
 
       // Get all existing quotation numbers to generate unique ones - FIXED
-      const allNumbers = [...filterUniqueQuotationNumbers(poMasterSheet), ...latestQuotationNumbers];
+      const allNumbers = [...filterUniqueQuotationNumbers(poMasterData), ...latestQuotationNumbers];
       let currentMaxNumber = allNumbers
         .map(num => {
           const match = num.match(/QT-(\d+)/);
@@ -415,15 +414,17 @@ export default function QuotationPage() {
           continue;
         }
 
-        const pdfUrl = await uploadFile(
-          file,
-          import.meta.env.VITE_PURCHASE_ORDERS_FOLDER,
-          'email',
-          supplierInfo.email
-        );
+        let pdfUrl = '';
+        try {
+          pdfUrl = await uploadFileToSupabase(file, 'pdf');
+        } catch (err) {
+          console.error("Supabase Storage upload error:", err);
+          toast.error(`Failed to upload quotation PDF for ${supplierInfo.name} to Supabase.`);
+          continue; // Skip this supplier if upload fails
+        }
 
-        // Type-safe mapping to QuotationHistorySheet
-        const quotationHistoryRows: QuotationHistorySheet[] = selectedItemsData.map(item => ({
+        // Type-safe mapping to QuotationHistoryData
+        const quotationHistoryRows: QuotationHistoryData[] = selectedItemsData.map(item => ({
           timestamp: (values.quotationDate || new Date()).toISOString(),
           quatationNo: uniqueQuotationNumber,
           supplierName: supplierInfo.name,
@@ -444,7 +445,7 @@ export default function QuotationPage() {
       console.log('Total rows:', allQuotationRows.length);
       console.log('First row:', allQuotationRows[0]);
 
-      await postToSheet(allQuotationRows, 'insert', 'QUOTATION HISTORY');
+      await postToDB(allQuotationRows, 'insert', 'QUOTATION HISTORY');
 
       toast.success(`Successfully created ${selectedSuppliers.length} unique quotation(s) for ${selectedSuppliers.length} supplier(s)`);
       form.reset();
@@ -453,8 +454,8 @@ export default function QuotationPage() {
       setSupplierInfos([]);
 
       setTimeout(() => {
-        updatePoMasterSheet();
-        updateIndentSheet();
+        updatePoMasterData();
+        updateIndentData();
       }, 1000);
     } catch (e) {
       console.error('Submit error:', e);
@@ -474,7 +475,7 @@ export default function QuotationPage() {
     </Button>
   );
 
-  const quotationNumbers = useMemo(() => filterUniqueQuotationNumbers(poMasterSheet), [poMasterSheet]);
+  const quotationNumbers = useMemo(() => filterUniqueQuotationNumbers(poMasterData), [poMasterData]);
 
   return (
     <div className="w-full h-screen overflow-hidden bg-gradient-to-br from-green-100 via-amber-50 to-green-50 rounded-md flex flex-col">
@@ -526,20 +527,20 @@ export default function QuotationPage() {
                       name="indentNumber"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Indent Number (From PO MASTER)</FormLabel>
+                          <FormLabel>Indent Number (From PO MASTER Table)</FormLabel>
                           <FormControl>
                             <Select onValueChange={handleIndentSelect} value={field.value}>
                               <SelectTrigger size="sm" className="w-full">
                                 <SelectValue placeholder="Select indent number from PO MASTER" />
                               </SelectTrigger>
                               <SelectContent className="z-[100] max-h-[300px]">
-                                {poMasterSheet.length === 0 ? (
+                                {poMasterData.length === 0 ? (
                                   <SelectItem value="no-data" disabled>
-                                    No data found in PO MASTER sheet
+                                    No data found in PO MASTER table
                                   </SelectItem>
                                 ) : (
                                   // Get unique indent numbers from PO MASTER
-                                  Array.from(new Set(poMasterSheet.map(item => item.internalCode))).map((indentNum, k) => (
+                                  Array.from(new Set(poMasterData.map(item => item.internalCode))).map((indentNum, k) => (
                                     <SelectItem key={k} value={indentNum}>
                                       {indentNum}
                                     </SelectItem>
@@ -580,17 +581,17 @@ export default function QuotationPage() {
                       name="suppliers"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Suppliers (From MASTER Sheet)</FormLabel>
+                          <FormLabel>Suppliers (From MASTER Database)</FormLabel>
                           <FormControl>
                             <div className="space-y-2">
                               <Select onValueChange={handleSupplierSelect}>
                                 <SelectTrigger size="sm" className="w-full">
-                                  <SelectValue placeholder="Select suppliers from MASTER sheet" />
+                                  <SelectValue placeholder="Select suppliers from MASTER database" />
                                 </SelectTrigger>
                                 <SelectContent className="z-[100] max-h-[300px]">
                                   {masterSuppliers.length === 0 ? (
                                     <SelectItem value="no-suppliers" disabled>
-                                      No suppliers found in MASTER sheet
+                                      No suppliers found in MASTER database
                                     </SelectItem>
                                   ) : (
                                     masterSuppliers.map((supplier, k) => (
@@ -628,7 +629,7 @@ export default function QuotationPage() {
                     {/* Display supplier details from MASTER sheet */}
                     {supplierInfos.length > 0 && (
                       <div className="space-y-2">
-                        <h4 className="font-medium">Selected Supplier Details (From MASTER Sheet):</h4>
+                        <h4 className="font-medium">Selected Supplier Details (From MASTER Database):</h4>
                         {supplierInfos.map((supplier, index) => (
                           <div key={index} className="bg-gray-50 p-3 rounded border text-sm">
                             <div className="grid grid-cols-3 gap-x-4">

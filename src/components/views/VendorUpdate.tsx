@@ -1,4 +1,4 @@
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { useEffect, useState } from 'react';
 import DataTable from '../element/DataTable';
@@ -13,7 +13,7 @@ import {
     DialogFooter,
     DialogClose,
 } from '../ui/dialog';
-import { postToSheet, uploadFile, fetchVendors } from '@/lib/fetchers';
+import { postToDB, uploadFileToSupabase, fetchVendors } from '@/lib/fetchers';
 import { z } from 'zod';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,6 +28,7 @@ import { useAuth } from '@/context/AuthContext';
 import Heading from '../element/Heading';
 import { Pill } from '../ui/pill';
 import { formatDate } from '@/lib/utils';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 
 interface VendorUpdateData {
     indentNo: string;
@@ -74,18 +75,30 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
     const { fields } = useFieldArray({ control: form.control, name: `updates.${index}.vendors` });
 
     return (
-        <Tabs defaultValue="0" className="border rounded-md p-3 bg-background">
-            <TabsList className="bg-muted overflow-x-auto h-9 w-full justify-start">
-                {fields.map((_, i) => <TabsTrigger key={i} value={`${i}`} className="px-2 text-[10px]">V{i + 1}</TabsTrigger>)}
+        <Tabs defaultValue="0" className="border rounded-lg p-4 bg-background shadow-sm">
+            <TabsList className="bg-muted/50 overflow-x-auto h-10 w-full justify-start p-1">
+                {fields.map((_, i) => (
+                    <TabsTrigger 
+                        key={i} 
+                        value={`${i}`} 
+                        className="px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-primary"
+                    >
+                        Vendor {i + 1}
+                    </TabsTrigger>
+                ))}
             </TabsList>
             {fields.map((field, vIndex) => (
-                <TabsContent key={field.id} value={`${vIndex}`} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr] gap-3 pt-3 items-end">
+                <TabsContent 
+                    key={field.id} 
+                    value={`${vIndex}`} 
+                    className="grid grid-cols-1 md:grid-cols-[3.5fr_1.5fr_2fr] gap-4 pt-4 items-end animate-in fade-in-50 duration-200"
+                >
                     <FormField
                         control={form.control}
                         name={`updates.${index}.vendors.${vIndex}.vendorName`}
                         render={({ field }) => (
                             <FormItem className="min-w-0">
-                                <FormLabel className="text-[10px]">Vendor {vIndex + 1}</FormLabel>
+                                <FormLabel className="text-xs font-semibold text-muted-foreground">Select Vendor {vIndex + 1}</FormLabel>
                                 <Select
                                     onValueChange={(val) => {
                                         field.onChange(val);
@@ -96,14 +109,16 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                                     value={field.value}
                                 >
                                     <FormControl>
-                                        <SelectTrigger className="h-8 text-xs w-full overflow-hidden">
+                                        <SelectTrigger className="h-10 text-sm w-full overflow-hidden bg-white">
                                             <div className="truncate text-left flex-1">
-                                                <SelectValue placeholder="Vendor" />
+                                                <SelectValue placeholder="Select Vendor" />
                                             </div>
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        {vendors?.map((v: any, i: number) => <SelectItem key={i} value={v.vendorName}>{v.vendorName}</SelectItem>)}
+                                        {vendors?.map((v: any, i: number) => (
+                                            <SelectItem key={i} value={v.vendorName}>{v.vendorName}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </FormItem>
@@ -114,8 +129,15 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                         name={`updates.${index}.vendors.${vIndex}.rate`}
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel className="text-[10px]">Rate</FormLabel>
-                                <FormControl><Input type="number" {...field} className="h-8 text-xs" /></FormControl>
+                                <FormLabel className="text-xs font-semibold text-muted-foreground">Rate (₹)</FormLabel>
+                                <FormControl>
+                                    <Input 
+                                        type="number" 
+                                        {...field} 
+                                        className="h-10 text-sm bg-white" 
+                                        placeholder="0.00"
+                                    />
+                                </FormControl>
                             </FormItem>
                         )}
                     />
@@ -124,7 +146,7 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                         name={`updates.${index}.vendors.${vIndex}.paymentTerm`}
                         render={({ field }) => (
                             <FormItem className="min-w-0">
-                                <FormLabel className="text-[10px]">Term</FormLabel>
+                                <FormLabel className="text-xs font-semibold text-muted-foreground">Payment Term</FormLabel>
                                 <Select
                                     onValueChange={(val) => {
                                         field.onChange(val);
@@ -135,14 +157,16 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
                                     value={field.value}
                                 >
                                     <FormControl>
-                                        <SelectTrigger className="h-8 text-xs w-full overflow-hidden">
+                                        <SelectTrigger className="h-10 text-sm w-full overflow-hidden bg-white">
                                             <div className="truncate text-left flex-1">
-                                                <SelectValue placeholder="Term" />
+                                                <SelectValue placeholder="Select Term" />
                                             </div>
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        {options?.paymentTerms?.map((term: string, i: number) => <SelectItem key={i} value={term}>{term}</SelectItem>)}
+                                        {options?.paymentTerms?.map((term: string, i: number) => (
+                                            <SelectItem key={i} value={term}>{term}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </FormItem>
@@ -155,7 +179,7 @@ const ThreePartyFields = ({ index, form, vendors, options }: any) => {
 };
 
 const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: any) => {
-    const { indentSheet, approvedIndentSheet, updateIndentSheet, updateApprovedIndentSheet, vendorRateUpdateSheet, updateVendorRateUpdateSheet } = useSheets();
+    const { indentData, approvedIndentData, updateIndentData, updateApprovedIndentData, vendorRateUpdateData, updateVendorRateUpdateData } = useDatabase();
     const [vendorSearch, setVendorSearch] = useState('');
 
     const regularSchema = z.object({
@@ -204,7 +228,13 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
         try {
             let commonUrl = '';
             if (isThreeParty && values.comparisonSheet) {
-                commonUrl = await uploadFile(values.comparisonSheet, import.meta.env.VITE_COMPARISON_SHEET_FOLDER);
+                try {
+                    commonUrl = await uploadFileToSupabase(values.comparisonSheet, 'pdf');
+                } catch (err) {
+                    console.error("Supabase Storage upload error:", err);
+                    toast.error("Failed to upload comparison sheet to Supabase.");
+                    return;
+                }
             }
 
             const now = formatDate(new Date());
@@ -212,17 +242,17 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
 
             // 1. Prepare payload for INDENT table update (set actual2 date)
             const indentPayload = values.updates.map((update: any) => {
-                // Find the item from indentSheet directly using serialNumber
-                const sheetItem = indentSheet.find(s => String(s.searialNumber) === String(update.searialNumber));
-                const rowIndex = sheetItem?.rowIndex;
+                // Find the item from indentData directly using serialNumber
+                const sheetItem = indentData.find(s => String(s.searialNumber) === String(update.searialNumber));
+                const id = sheetItem?.id;
 
-                if (!rowIndex && rowIndex !== 0) {
-                    console.warn(`Could not find rowIndex for serialNumber: ${update.searialNumber}`);
+                if (!id) {
+                    console.warn(`Could not find id for serialNumber: ${update.searialNumber}`);
                 }
 
                 if (isThreeParty) {
                     const partyPayload: any = {
-                        rowIndex,
+                        id,
                         indentNumber: update.indentNumber || '',
                         actual2: now,
                         status: 'Approved',
@@ -241,7 +271,7 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                     return partyPayload;
                 } else {
                     return {
-                        rowIndex,
+                        id,
                         indentNumber: update.indentNumber || '',
                         actual2: now,
                         status: 'Approved',
@@ -263,7 +293,7 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                     comparison_sheet: commonUrl || '',
                     delay: 'None',
                     planned_3: now,
-                    status: 'Approved',
+                    status: isThreeParty ? 'Pending' : 'Approved',
                 };
 
                 if (isThreeParty) {
@@ -288,12 +318,12 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
 
             // Execute all updates
             console.log('📝 Step 1: Updating INDENT table...');
-            await postToSheet(indentPayload, 'update', 'INDENT');
+            await postToDB(indentPayload, 'update', 'INDENT');
             console.log('✅ INDENT table updated successfully');
 
             console.log('📝 Step 2: Inserting into VENDOR_RATE_UPDATE table...');
             try {
-                await postToSheet(vendorRateUpdatePayloads, 'insert', 'VENDOR RATE UPDATE');
+                await postToDB(vendorRateUpdatePayloads, 'insert', 'VENDOR RATE UPDATE');
                 console.log('✅ VENDOR_RATE_UPDATE table inserted successfully');
             } catch (vendorError) {
                 console.error('⚠️ VENDOR_RATE_UPDATE insert failed, but continuing:', vendorError);
@@ -301,7 +331,7 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                 
                 // Update ALL approved_indent records sharing this base indent number
                 const baseIndentNo = indentNumber.split(/[_/]/)[0];
-                const aiUpdates = approvedIndentSheet
+                const aiUpdates = approvedIndentData
                     .filter((record: any) => (record.indentNumber || '').split(/[_/]/)[0] === baseIndentNo && record.status === 'Pending')
                     .map((record: any) => ({
                         id: record.id,
@@ -310,7 +340,7 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                 
                 if (aiUpdates.length > 0) {
                     console.log(`📝 Step 3: Updating ${aiUpdates.length} APPROVED_INDENT status records...`);
-                    await postToSheet(aiUpdates, 'update', 'APPROVED INDENT');
+                    await postToDB(aiUpdates, 'update', 'APPROVED INDENT');
                     console.log('✅ APPROVED_INDENT statuses updated successfully');
                 } else {
                     console.warn('⚠️ No pending approved indent records found for:', baseIndentNo);
@@ -348,7 +378,7 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                     </div>
                 )}
 
-                <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+                <div className="space-y-6">
                     {items.map((item: any, index: number) => (
                         <div key={item.searialNumber || index} className="border p-4 rounded-md bg-muted/20 space-y-4">
                             <div className="flex justify-between items-center border-b pb-2">
@@ -357,13 +387,13 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                             </div>
 
                             {!isThreeParty ? (
-                                <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr] gap-4 items-end">
+                                <div className="grid grid-cols-1 md:grid-cols-[3.5fr_1.5fr_2fr] gap-6 items-end p-2">
                                      <FormField
                                          control={form.control}
                                          name={`updates.${index}.vendorName`}
                                          render={({ field }) => (
                                              <FormItem className="min-w-0">
-                                                 <FormLabel className="text-xs">Vendor</FormLabel>
+                                                 <FormLabel className="text-xs font-semibold text-muted-foreground">Select Vendor</FormLabel>
                                                  <Select
                                                      onValueChange={(val) => {
                                                          field.onChange(val);
@@ -375,17 +405,22 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                                                      onOpenChange={(open) => !open && setVendorSearch("")}
                                                  >
                                                      <FormControl>
-                                                         <SelectTrigger className="h-9 w-full overflow-hidden">
+                                                         <SelectTrigger className="h-10 w-full overflow-hidden bg-white">
                                                              <div className="truncate text-left flex-1">
-                                                                 <SelectValue placeholder="Vendor" />
+                                                                 <SelectValue placeholder="Search or select vendor" />
                                                              </div>
                                                          </SelectTrigger>
                                                      </FormControl>
                                                      <SelectContent>
-                                                         <div className="px-2 py-1">
-                                                             <Input placeholder="Search..." className="h-8" value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} />
+                                                         <div className="px-2 py-2">
+                                                             <Input 
+                                                                placeholder="Search vendors..." 
+                                                                className="h-9" 
+                                                                value={vendorSearch} 
+                                                                onChange={(e) => setVendorSearch(e.target.value)} 
+                                                             />
                                                          </div>
-                                                         <div className="max-h-[150px] overflow-y-auto">
+                                                         <div className="max-h-[200px] overflow-y-auto">
                                                              {vendors?.filter((v: any) => v.vendorName.toLowerCase().includes(vendorSearch.toLowerCase())).map((v: any, i: number) => (
                                                                  <SelectItem key={i} value={v.vendorName}>{v.vendorName}</SelectItem>
                                                              ))}
@@ -400,8 +435,15 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                                          name={`updates.${index}.rate`}
                                          render={({ field }) => (
                                              <FormItem>
-                                                 <FormLabel className="text-xs">Rate</FormLabel>
-                                                 <FormControl><Input type="number" {...field} className="h-9" /></FormControl>
+                                                 <FormLabel className="text-xs font-semibold text-muted-foreground">Rate (₹)</FormLabel>
+                                                 <FormControl>
+                                                     <Input 
+                                                        type="number" 
+                                                        {...field} 
+                                                        className="h-10 bg-white" 
+                                                        placeholder="0.00"
+                                                     />
+                                                 </FormControl>
                                              </FormItem>
                                          )}
                                      />
@@ -410,7 +452,7 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                                          name={`updates.${index}.paymentTerm`}
                                          render={({ field }) => (
                                              <FormItem className="min-w-0">
-                                                 <FormLabel className="text-xs">Term</FormLabel>
+                                                 <FormLabel className="text-xs font-semibold text-muted-foreground">Payment Term</FormLabel>
                                                  <Select
                                                      onValueChange={(val) => {
                                                          field.onChange(val);
@@ -421,14 +463,16 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
                                                      value={field.value}
                                                  >
                                                      <FormControl>
-                                                         <SelectTrigger className="h-9 w-full overflow-hidden">
+                                                         <SelectTrigger className="h-10 w-full overflow-hidden bg-white">
                                                              <div className="truncate text-left flex-1">
-                                                                 <SelectValue placeholder="Terms" />
+                                                                 <SelectValue placeholder="Select term" />
                                                              </div>
                                                          </SelectTrigger>
                                                      </FormControl>
                                                      <SelectContent>
-                                                         {options?.paymentTerms?.map((term: string, i: number) => <SelectItem key={i} value={term}>{term}</SelectItem>)}
+                                                         {options?.paymentTerms?.map((term: string, i: number) => (
+                                                            <SelectItem key={i} value={term}>{term}</SelectItem>
+                                                         ))}
                                                      </SelectContent>
                                                  </Select>
                                              </FormItem>
@@ -451,7 +495,7 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
 };
 
 export default () => {
-    const { indentSheet, indentLoading, updateIndentSheet, updateApprovedIndentSheet, approvedIndentSheet, masterSheet: options, vendorRateUpdateSheet, updateVendorRateUpdateSheet } = useSheets();
+    const { indentData, indentLoading, updateIndentData, updateApprovedIndentData, approvedIndentData, masterData: options, vendorRateUpdateData, updateVendorRateUpdateData } = useDatabase();
     const { user } = useAuth();
 
     const [selectedIndent, setSelectedIndent] = useState<GroupedVendorUpdateData | null>(null);
@@ -478,29 +522,29 @@ export default () => {
 
     useEffect(() => {
         // PENDING TAB: Show data where vendor_rate_update status is 'Pending' or doesn't exist yet
-        const pendingVendorUpdates = vendorRateUpdateSheet.filter(
+        const pendingVendorUpdates = vendorRateUpdateData.filter(
             (vru) => vru.status?.trim().toLowerCase() === 'pending' || !vru.status
         );
 
         const pendingIndentNumbers = new Set(pendingVendorUpdates.map(vru => vru.indentNumber));
 
         // Get all approved indents that need vendor update
-        const pendingApprovedIndents = approvedIndentSheet.filter(
+        const pendingApprovedIndents = approvedIndentData.filter(
             (approved) => approved.status?.trim().toLowerCase() === 'pending' && approved.vendorType === 'Regular'
         );
 
-        const pendingItems = indentSheet
+        const pendingItems = indentData
             .filter((sheet) => {
                 // Check if this indent has pending vendor rate update OR needs vendor update
                 const hasPendingVendorUpdate = pendingIndentNumbers.has(sheet.indentNumber);
                 const hasPendingApproval = pendingApprovedIndents.some(
                     (approved) => approved.indentNumber === sheet.indentNumber
                 );
-                // Show in pending if it has pending vendor update OR needs vendor update (not in vendorRateUpdateSheet yet)
+                // Show in pending if it has pending vendor update OR needs vendor update (not in vendorRateUpdateData yet)
                 return hasPendingVendorUpdate || (hasPendingApproval && !pendingIndentNumbers.has(sheet.indentNumber));
             })
             .map((sheet, idx) => {
-                // Get vendorType from approvedIndentSheet if not in indentSheet
+                // Get vendorType from approvedIndentData if not in indentData
                 const approvedRecord = pendingApprovedIndents.find(
                     (approved) => approved.indentNumber === sheet.indentNumber
                 );
@@ -519,8 +563,8 @@ export default () => {
                     uom: sheet.uom,
                     vendorType: vendorType,
                     vendorName: sheet.approvedVendorName || sheet.vendorName1 || '',
-                    searialNumber: sheet.searialNumber,
-                    rowIndex: (sheet as any).rowIndex ?? idx,
+                    searialNumber: sheet.searialNumber || sheet.serialNumber || (sheet.indentNumber?.includes('_') ? sheet.indentNumber.split('_').pop() : sheet.indentNumber?.includes('/') ? sheet.indentNumber.split('/').pop() : '-'),
+                    id: sheet.id || idx,
                 };
             });
 
@@ -542,30 +586,33 @@ export default () => {
         setTableData(Object.values(groupedPending).reverse());
 
         // HISTORY TAB: Show data where vendor_rate_update status is 'Approved'
-        const approvedVendorUpdates = vendorRateUpdateSheet.filter(
+        const approvedVendorUpdates = vendorRateUpdateData.filter(
             (vru) => vru.status?.trim().toLowerCase() === 'approved'
         );
 
         const approvedIndentNumbers = new Set(approvedVendorUpdates.map(vru => vru.indentNumber));
 
-        const historyItems = indentSheet
+        const historyItems = indentData
             .filter((sheet) => {
                 // Check if this indent has an approved vendor rate update
                 return approvedIndentNumbers.has(sheet.indentNumber);
             })
-            .map((sheet) => ({
-                date: formatDate(new Date(sheet.actual2)),
-                indentNo: sheet.indentNumber,
-                indenter: sheet.indenterName,
-                department: sheet.department,
-                product: sheet.productName,
-                quantity: sheet.quantity,
-                uom: sheet.uom,
-                rate: sheet.approvedRate || 0,
-                vendorType: sheet.vendorType as HistoryData['vendorType'],
-                vendorName: sheet.approvedVendorName || sheet.vendorName1 || '',
-                searialNumber: sheet.searialNumber,
-            }));
+            .map((sheet) => {
+                const vru = vendorRateUpdateData.find(v => v.indentNumber === sheet.indentNumber && v.status?.trim().toLowerCase() === 'approved');
+                return {
+                    date: vru ? formatDate(new Date(vru.timestamp)) : (sheet.timestamp ? formatDate(new Date(sheet.timestamp)) : 'N/A'),
+                    indentNo: sheet.indentNumber,
+                    indenter: sheet.indenterName,
+                    department: sheet.department,
+                    product: sheet.productName,
+                    quantity: sheet.quantity,
+                    uom: sheet.uom,
+                    rate: vru?.rate1 || sheet.approvedRate || 0,
+                    vendorType: sheet.vendorType as HistoryData['vendorType'],
+                    vendorName: vru?.vendorName1 || sheet.approvedVendorName || sheet.vendorName1 || '',
+                    searialNumber: sheet.searialNumber || sheet.serialNumber || (sheet.indentNumber?.includes('_') ? sheet.indentNumber.split('_').pop() : sheet.indentNumber?.includes('/') ? sheet.indentNumber.split('/').pop() : '-'),
+                };
+            });
 
         const groupedHistory = historyItems.reduce((acc, item) => {
             const baseNo = item.indentNo.split(/[_/]/)[0];
@@ -583,7 +630,7 @@ export default () => {
         }, {} as Record<string, GroupedHistoryData>);
 
         setHistoryData(Object.values(groupedHistory).reverse());
-    }, [indentSheet, approvedIndentSheet, vendorRateUpdateSheet]);
+    }, [indentData, approvedIndentData, vendorRateUpdateData]);
 
     const columns: ColumnDef<GroupedVendorUpdateData>[] = [
         ...(user.updateVendorAction
@@ -699,17 +746,17 @@ export default () => {
                     </TabsContent>
                 </Tabs>
 
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col p-0 border-none shadow-2xl overflow-hidden rounded-xl">
                     {selectedIndent && (
-                        <>
-                            <DialogHeader>
-                                <DialogTitle>Update Vendor Rates - {selectedIndent.indentNo}</DialogTitle>
-                                <DialogDescription>
+                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                            <DialogHeader className="p-6 bg-primary text-primary-foreground flex-none">
+                                <DialogTitle className="text-2xl font-bold">Update Vendor Rates - {selectedIndent.indentNo}</DialogTitle>
+                                <DialogDescription className="text-primary-foreground/80 font-medium">
                                     {selectedIndent.indenter} | {selectedIndent.department} | {selectedIndent.vendorType}
                                 </DialogDescription>
                             </DialogHeader>
 
-                            <div className="space-y-6 py-4">
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                 <VendorUpdateForm
                                     items={selectedIndent.items}
                                     vendorType={selectedIndent.vendorType}
@@ -718,53 +765,55 @@ export default () => {
                                     onSuccess={() => {
                                         setSelectedIndent(null);
                                         setTimeout(() => {
-                                            updateIndentSheet();
-                                            updateApprovedIndentSheet();
-                                            updateVendorRateUpdateSheet();
+                                            updateIndentData();
+                                            updateApprovedIndentData();
+                                            updateVendorRateUpdateData();
                                         }, 1000);
                                     }}
                                 />
                             </div>
-                        </>
+                        </div>
                     )}
 
                     {selectedHistory && (
-                        <>
-                            <DialogHeader>
-                                <DialogTitle>Indent History - {selectedHistory.indentNo}</DialogTitle>
-                                <DialogDescription>
+                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                            <DialogHeader className="p-6 bg-primary text-primary-foreground flex-none">
+                                <DialogTitle className="text-2xl font-bold">Indent History - {selectedHistory.indentNo}</DialogTitle>
+                                <DialogDescription className="text-primary-foreground/80 font-medium">
                                     {selectedHistory.indenter} | {selectedHistory.department} | {selectedHistory.date}
                                 </DialogDescription>
                             </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-primary">
-                                        <tr className="border-b text-primary-foreground font-bold">
-                                            <th className="text-left py-2">Product</th>
-                                            <th className="text-left py-2">Qty</th>
-                                            <th className="text-left py-2">Rate</th>
-                                            <th className="text-left py-2">Vendor</th>
-                                            <th className="text-left py-2">S.No</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {selectedHistory.items.map((item, idx) => (
-                                            <tr key={idx} className="border-b last:border-0">
-                                                <td className="py-2">{item.product}</td>
-                                                <td className="py-2">{item.quantity} {item.uom}</td>
-                                                <td className="py-2">₹{item.rate}</td>
-                                                <td className="py-2">{item.vendorName}</td>
-                                                <td className="py-2">{item.searialNumber || '-'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                                <div className="border rounded-lg overflow-hidden shadow-sm">
+                                    <Table>
+                                        <TableHeader className="bg-muted/50">
+                                            <TableRow>
+                                                <TableHead className="font-bold text-primary">S.No</TableHead>
+                                                <TableHead className="font-bold text-primary">Product</TableHead>
+                                                <TableHead className="font-bold text-primary">Qty</TableHead>
+                                                <TableHead className="font-bold text-primary">Rate</TableHead>
+                                                <TableHead className="font-bold text-primary">Vendor</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {selectedHistory.items.map((item, idx) => (
+                                                <TableRow key={idx} className="hover:bg-muted/30 transition-colors">
+                                                    <TableCell className="py-3 font-medium">{item.searialNumber || '-'}</TableCell>
+                                                    <TableCell className="py-3">{item.product}</TableCell>
+                                                    <TableCell className="py-3">{item.quantity} {item.uom}</TableCell>
+                                                    <TableCell className="py-3">₹{Number(item.rate).toLocaleString('en-IN')}</TableCell>
+                                                    <TableCell className="py-3">{item.vendorName || <span className="text-muted-foreground italic text-xs">Not specified</span>}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </div>
-                        </>
+                        </div>
                     )}
-                    <DialogFooter>
+                    <DialogFooter className="p-6 bg-muted/20 border-t flex-none">
                         <DialogClose asChild>
-                            <Button variant="outline">Close</Button>
+                            <Button variant="outline" className="px-8">Close</Button>
                         </DialogClose>
                     </DialogFooter>
                 </DialogContent>

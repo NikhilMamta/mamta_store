@@ -5,10 +5,10 @@ export interface RouteAttributes {
     name: string;
     icon?: React.ReactNode;
     gateKey?: string;
-    notifications?: (indentSheet: any[]) => number;
+    notifications?: (indentData: any[]) => number;
 }
 
-export interface PoMasterSheet {
+export interface PoMasterData {
     timestamp: string;
     partyName: string;
     poNumber: string;
@@ -46,7 +46,6 @@ export interface PoMasterSheet {
 }
 
 export type UserPermissions = {
-    rowIndex: number;
     username: string;
     password: string;
     name: string;
@@ -77,7 +76,7 @@ export type UserPermissions = {
 };
 // In @/types.ts - add this interface
 
-export interface QuotationHistorySheet {
+export interface QuotationHistoryData {
     timestamp: string;
     indentNumber: string;
     indenterName: string;

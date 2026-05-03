@@ -1,6 +1,6 @@
 import { ListTodo } from 'lucide-react';
 import Heading from '../element/Heading';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { useEffect, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDate } from '@/lib/utils';
@@ -20,7 +20,7 @@ interface PendingIndentsData {
 }
 
 export default () => {
-    const { indentSheet, indentLoading, threePartyApprovalSheet, vendorRateUpdateSheet, approvedIndentSheet, poHistorySheet } = useSheets();
+    const { indentData, indentLoading, threePartyApprovalData, vendorRateUpdateData, approvedIndentData, poHistoryData } = useDatabase();
 
     const [tableData, setTableData] = useState<PendingIndentsData[]>([]);
 
@@ -30,13 +30,13 @@ export default () => {
 
         // 0. Indent numbers that already have a PO in history
         const existingPoIndents = new Set(
-            poHistorySheet
+            poHistoryData
                 .map(p => p.indentNumber?.trim())
                 .filter(Boolean) as string[]
         );
 
         // 1. Original indent data (planned4 !== '' && actual4 === '')
-        const indentData = indentSheet
+        const filteredIndentData = indentData
             .filter((sheet) => sheet.planned4 !== '' && sheet.actual4 === '' && !existingPoIndents.has(sheet.indentNumber))
             .map((sheet) => ({
                 date: formatDate(new Date(sheet.timestamp)),
@@ -52,7 +52,7 @@ export default () => {
             }));
 
         // 2. Three Party Approval data with Pending status
-        const threePartyData = threePartyApprovalSheet
+        const threePartyData = threePartyApprovalData
             .filter((tpa) => {
                 // Check if status is Pending or doesn't exist
                 const isPending = !tpa.status || tpa.status?.trim().toLowerCase() === 'pending';
@@ -60,7 +60,7 @@ export default () => {
             })
             .map((tpa) => {
                 // Find matching indent to get product details
-                const matchingIndent = indentSheet.find(
+                const matchingIndent = indentData.find(
                     (indent) => indent.indentNumber === tpa.indentNumber
                 );
 
@@ -80,13 +80,13 @@ export default () => {
 
         // 3. Vendor Rate Update data where vendor type is 'Regular' in approved indent
         // Show data that has been approved (status='Approved') and vendor type is 'Regular'
-        const vendorRateData = vendorRateUpdateSheet
+        const vendorRateData = vendorRateUpdateData
             .filter((vru) => {
                 // Check if status is 'Approved'
                 const isApproved = vru.status?.trim().toLowerCase() === 'approved';
                 
                 // Check if approved indent has vendorType = 'Regular'
-                const approvedRecord = approvedIndentSheet.find(
+                const approvedRecord = approvedIndentData.find(
                     (approved) => approved.indentNumber === vru.indentNumber
                 );
                 const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
@@ -96,7 +96,7 @@ export default () => {
             })
             .map((vru) => {
                 // Find matching indent to get product details
-                const matchingIndent = indentSheet.find(
+                const matchingIndent = indentData.find(
                     (indent) => indent.indentNumber === vru.indentNumber
                 );
 
@@ -115,11 +115,11 @@ export default () => {
             });
 
         // Combine all data and sort by indentNo descending
-        combinedData.push(...indentData, ...threePartyData, ...vendorRateData);
+        combinedData.push(...filteredIndentData, ...threePartyData, ...vendorRateData);
         combinedData.sort((a, b) => b.indentNo.localeCompare(a.indentNo));
 
         setTableData(combinedData);
-    }, [indentSheet, threePartyApprovalSheet, vendorRateUpdateSheet, approvedIndentSheet, poHistorySheet]);
+    }, [indentData, threePartyApprovalData, vendorRateUpdateData, approvedIndentData, poHistoryData]);
 
     // Creating table columns with compact Product column
     const columns: ColumnDef<PendingIndentsData>[] = [

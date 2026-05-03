@@ -1,6 +1,6 @@
-export type Sheet = 'INDENT' | 'RECEIVED' | 'MASTER' | 'USER' | 'PO MASTER' | 'PO HISTORY' | 'PO APPROVAL' | 'INVENTORY' | 'QUOTATION HISTORY' | 'STORE OUT' | 'APPROVED INDENT' | 'VENDOR RATE UPDATE' | 'THREE PARTY APPROVAL' | 'STORE OUT REQUEST' | 'STORE OUT APPROVAL' | 'STORE_OUT_REQUEST' | 'STORE_OUT_APPROVAL';
+export type TableName = 'INDENT' | 'RECEIVED' | 'MASTER' | 'USER' | 'PO MASTER' | 'PO HISTORY' | 'PO APPROVAL' | 'INVENTORY' | 'QUOTATION HISTORY' | 'STORE OUT' | 'APPROVED INDENT' | 'VENDOR RATE UPDATE' | 'THREE PARTY APPROVAL' | 'STORE OUT REQUEST' | 'STORE OUT APPROVAL' | 'STORE_OUT_REQUEST' | 'STORE_OUT_APPROVAL';
 
-export type ApprovedIndentSheet = {
+export type ApprovedIndentData = {
     id?: number;
     timestamp: string;
     indentNumber: string;
@@ -13,7 +13,7 @@ export type ApprovedIndentSheet = {
     uom?: string;
 };
 
-export type VendorRateUpdateSheet = {
+export type VendorRateUpdateData = {
     id?: number;
     timestamp: string;
     indentNumber: string;
@@ -32,7 +32,7 @@ export type VendorRateUpdateSheet = {
     status?: string;
 };
 
-export type PoApprovalSheet = {
+export type PoApprovalData = {
     id?: number;
     timestamp: string;
     indentNumber: string;
@@ -43,7 +43,7 @@ export type PoApprovalSheet = {
     status?: string;
 };
 
-export type ThreePartyApprovalSheet = {
+export type ThreePartyApprovalData = {
     id?: number;
     timestamp: string;
     indentNumber: string;
@@ -56,9 +56,8 @@ export type ThreePartyApprovalSheet = {
     status?: string;
 };
 
-export type IndentSheet = {
+export type IndentData = {
     id?: number;
-    rowIndex?: number;
     timestamp: string;
     indentNumber: string;
     indenterName: string;
@@ -132,8 +131,7 @@ export type IndentSheet = {
     floor?: string;
 };
 
-export type StoreOutSheet = {
-    rowIndex?: number;
+export type StoreOutData = {
     timestamp: string;
     issueNo: string;
     indentNumber?: string; // Robustness
@@ -167,8 +165,7 @@ export type StoreOutSheet = {
     // Keeping internal mapped names if needed, but safer to match fetcher keys directly
 };
 
-export type ReceivedSheet = {
-    rowIndex?: number;
+export type ReceivedData = {
     timestamp: string;
     indentNumber: string;
     poDate: string;
@@ -190,8 +187,7 @@ export type ReceivedSheet = {
     searialNumber?: string | number;
 };
 
-export type InventorySheet = {
-    rowIndex?: number;
+export type InventoryData = {
     groupHead: string;
     itemName: string;
     uom: string;
@@ -208,8 +204,7 @@ export type InventorySheet = {
     currentStock?: number;
 };
 
-export type PoMasterSheet = {
-    rowIndex?: number;
+export type PoMasterData = {
     discountPercent: number;
     gstPercent: number;
     timestamp: string;
@@ -249,7 +244,7 @@ export type PoMasterSheet = {
     status: string;
 };
 
-export type PoHistorySheet = {
+export type PoHistoryData = {
     id?: number;
     timestamp?: string;
     indentNumber?: string;
@@ -294,7 +289,7 @@ export type Vendor = {
     email: string;
 };
 
-export type MasterSheet = {
+export type MasterData = {
     vendors: Vendor[];
     paymentTerms: string[];
     departments: string[];
@@ -371,8 +366,7 @@ export const allPermissionKeys = [
 ] as const;
 
 
-export type QuotationHistorySheet = {
-    rowIndex?: number;
+export type QuotationHistoryData = {
     timestamp: string;
     quatationNo: string;      // Note: matches sheet spelling
     supplierName: string;

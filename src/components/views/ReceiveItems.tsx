@@ -1,4 +1,4 @@
-// import { useSheets } from '@/context/SheetsContext';
+// import { useDatabase } from '@/context/DatabaseContext';
 // import type { ColumnDef, Row } from '@tanstack/react-table';
 // import { useEffect, useState } from 'react';
 // import DataTable from '../element/DataTable';
@@ -23,8 +23,8 @@
 // import { toast } from 'sonner';
 // import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 // import { Input } from '../ui/input';
-// import { postToSheet, uploadFile } from '@/lib/fetchers';
-// import type { ReceivedSheet } from '@/types';
+// import { postToDB, uploadFile } from '@/lib/fetchers';
+// import type { ReceivedData } from '@/types';
 // import { Truck } from 'lucide-react';
 // import { Tabs, TabsContent } from '../ui/tabs';
 // import { useAuth } from '@/context/AuthContext';
@@ -66,7 +66,7 @@
 // }
 
 // export default () => {
-//     const { indentSheet, receivedSheet, updateAll, indentLoading, receivedLoading } = useSheets();
+//     const { indentData, receivedData, updateAll, indentLoading, receivedLoading } = useDatabase();
 //     const { user } = useAuth();
 
 //     const [tableData, setTableData] = useState<RecieveItemsData[]>([]);
@@ -78,7 +78,7 @@
 
 //     useEffect(() => {
 //         setTableData(
-//             indentSheet
+//             indentData
 //                 .filter((i) => i.planned5 !== '' && i.actual5 === '')
 //                 .map((i) => ({
 //                     indentNumber: i.indentNumber,
@@ -91,12 +91,12 @@
 //                     product: i.productName,
 //                 }))
 //         );
-//     }, [indentSheet]);
+//     }, [indentData]);
 
 //     useEffect(() => {
 //         setHistoryData(
-//             receivedSheet.map((r) => {
-//                 const indent = indentSheet.find((i) => i.indentNumber === r.indentNumber);
+//             receivedData.map((r) => {
+//                 const indent = indentData.find((i) => i.indentNumber === r.indentNumber);
 //                 return {
 //                     receiveStatus: r.receivedStatus,
 //                     poNumber: r.poNumber,
@@ -122,7 +122,7 @@
 //                 };
 //             })
 //         );
-//     }, [receivedSheet, indentSheet]);
+//     }, [receivedData, indentData]);
 
 //     const handleDownload = (data: any[]) => {
 //         if (!data || data.length === 0) {
@@ -366,7 +366,7 @@
 
 //     async function onSubmit(values: z.infer<typeof schema>) {
 //         try {
-//             const row: Partial<ReceivedSheet> = {
+//             const row: Partial<ReceivedData> = {
 //                 timestamp: new Date().toISOString(),
 //                 indentNumber: selectedIndent?.indentNumber,
 //                 poDate: selectedIndent?.poDate,
@@ -401,23 +401,22 @@
 //                 );
 //             }
 //             console.log('here', 3);
-//             await postToSheet([row], 'insert', 'RECEIVED');
+//             await postToDB([row], 'insert', 'RECEIVED');
 
 //           console.log('here', 4);
 //             // Sirf actual5 (AS column - date) aur AU column (receive status) update karna hai
-//             const indentToUpdate = indentSheet.find((s) => s.indentNumber === selectedIndent?.indentNumber);
+//             const indentToUpdate = indentData.find((s) => s.indentNumber === selectedIndent?.indentNumber);
 
 //             if (indentToUpdate) {
 //                 // Sirf wo fields bhejo jo update karni hain
 //                 const updatePayload: any = {
-//                     rowIndex: (indentToUpdate as any).rowIndex,
 //                     sheetName: 'INDENT',
 //                     indentNumber: indentToUpdate.indentNumber,
 //                     actual5: new Date().toISOString(), // AS column - date
 //                     receiveStatus: values.status, // AU column - receive status
 //                 };
 
-//                 await postToSheet([updatePayload], 'update', 'INDENT');
+//                 await postToDB([updatePayload], 'update', 'INDENT');
 //             }
 //             console.log('here', 5);
 //             toast.success(`Approved vendor for ${selectedIndent?.indentNumber}`);
@@ -879,7 +878,7 @@
 
 
 
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { useEffect, useState } from 'react';
 import DataTable from '../element/DataTable';
@@ -904,8 +903,8 @@ import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Input } from '../ui/input';
-import { postToSheet, uploadFile, uploadFileToSupabase } from '@/lib/fetchers';
-import type { ReceivedSheet } from '@/types';
+import { postToDB, uploadFileToSupabase } from '@/lib/fetchers';
+import type { ReceivedData } from '@/types';
 import { Truck } from 'lucide-react';
 import { Tabs, TabsContent } from '../ui/tabs';
 import { useAuth } from '@/context/AuthContext';
@@ -949,7 +948,7 @@ interface HistoryData {
 }
 
 export default () => {
-    const { indentSheet, receivedSheet, poApprovalSheet, poHistorySheet, updateAll, indentLoading, receivedLoading, poApprovalLoading } = useSheets();
+    const { indentData, receivedData, poApprovalData, poHistoryData, updateAll, indentLoading, receivedLoading, poApprovalLoading } = useDatabase();
     const { user } = useAuth();
 
     const [tableData, setTableData] = useState<RecieveItemsData[]>([]);
@@ -961,14 +960,14 @@ export default () => {
 
     useEffect(() => {
         // Show items from PO APPROVAL table where status is 'Pending'
-        const filteredIndents = poApprovalSheet.filter(
+        const filteredIndents = poApprovalData.filter(
             (i) => i.status === 'Pending'
         );
 
         const grouped = filteredIndents.reduce((acc: { [key: string]: RecieveItemsData }, i) => {
-            // Find full details from poHistorySheet or indentSheet
-            const indentDetail = indentSheet.find(indent => indent.indentNumber === i.indentNumber);
-            const poHistoryDetail = poHistorySheet.find(history => history.indentNumber === i.indentNumber);
+            // Find full details from poHistoryData or indentData
+            const indentDetail = indentData.find(indent => indent.indentNumber === i.indentNumber);
+            const poHistoryDetail = poHistoryData.find(history => history.indentNumber === i.indentNumber);
             
             const poNumber = poHistoryDetail?.poNumber || 'N/A';
             
@@ -992,12 +991,12 @@ export default () => {
         }, {});
 
         setTableData(Object.values(grouped).reverse());
-    }, [poApprovalSheet, indentSheet, poHistorySheet]);
+    }, [poApprovalData, indentData, poHistoryData]);
 
     useEffect(() => {
         setHistoryData(
-            receivedSheet.map((r) => {
-                const indent = indentSheet.find((i) =>
+            receivedData.map((r) => {
+                const indent = indentData.find((i) =>
                     r.searialNumber ? String(i.searialNumber) === String(r.searialNumber) : i.indentNumber === r.indentNumber
                 );
                 return {
@@ -1024,7 +1023,7 @@ export default () => {
             })
                 .reverse()
         );
-    }, [receivedSheet, indentSheet]);
+    }, [receivedData, indentData]);
 
     const handleDownload = (data: any[]) => {
         if (!data || data.length === 0) {
@@ -1239,20 +1238,20 @@ export default () => {
     // Updated useEffect for matching indents
     useEffect(() => {
         if (selectedIndent) {
-            // Filter from poApprovalSheet to get items in this PO
-            const matching: any[] = poApprovalSheet
+            // Filter from poApprovalData to get items in this PO
+            const matching: any[] = poApprovalData
                 .filter(
                     (i) => {
-                        const history = poHistorySheet.find(h => h.indentNumber === i.indentNumber);
+                        const history = poHistoryData.find(h => h.indentNumber === i.indentNumber);
                         return history?.poNumber === selectedIndent.poNumber && i.status === 'Pending';
                     }
                 )
                 .map((i) => {
-                    const indent = indentSheet.find(indent => indent.indentNumber === i.indentNumber);
-                    const history = poHistorySheet.find(h => h.indentNumber === i.indentNumber);
+                    const indent = indentData.find(indent => indent.indentNumber === i.indentNumber);
+                    const history = poHistoryData.find(h => h.indentNumber === i.indentNumber);
                     
                     const orderedQty = indent?.qty || indent?.approvedQuantity || indent?.quantity || 0;
-                    const alreadyReceived = receivedSheet
+                    const alreadyReceived = receivedData
                         .filter(r => r.indentNumber === i.indentNumber)
                         .reduce((sum, r) => sum + (Number(r.receivedQuantity) || 0), 0);
 
@@ -1308,7 +1307,7 @@ export default () => {
                 }
             }
 
-            const rows: Partial<ReceivedSheet>[] = values.items.map((item) => {
+            const rows: Partial<ReceivedData>[] = values.items.map((item) => {
                 const match = (matchingIndents as any[]).find(i =>
                     i.searialNumber ? String(i.searialNumber) === String(item.searialNumber) : i.indentNumber === item.indentNumber
                 );
@@ -1336,7 +1335,7 @@ export default () => {
                 };
             });
 
-            await postToSheet(rows, 'insert', 'RECEIVED');
+            await postToDB(rows, 'insert', 'RECEIVED');
 
             // Update each indent and PO APPROVAL status
             for (const item of values.items) {
@@ -1344,12 +1343,12 @@ export default () => {
                     i.searialNumber ? String(i.searialNumber) === String(item.searialNumber) : i.indentNumber === item.indentNumber
                 );
                 
-                const indentToUpdate = indentSheet.find(
+                const indentToUpdate = indentData.find(
                     (s) => s.searialNumber ? String(s.searialNumber) === String(item.searialNumber) : s.indentNumber === item.indentNumber
                 );
 
                 if (indentToUpdate && match) {
-                    const alreadyReceived = receivedSheet
+                    const alreadyReceived = receivedData
                         .filter(r => r.indentNumber === item.indentNumber)
                         .reduce((sum, r) => sum + (Number(r.receivedQuantity) || 0), 0);
                     
@@ -1357,21 +1356,21 @@ export default () => {
                     const isFullyReceived = newTotalReceived >= match.quantity;
 
                     const updatePayload = {
-                        rowIndex: (indentToUpdate as any).rowIndex,
+                        id: indentToUpdate.id,
                         indentNumber: indentToUpdate.indentNumber,
                         actual5: formatDate(new Date()),
                         receiveStatus: isFullyReceived ? 'Received' : 'Partially Received',
                     };
-                    await postToSheet([updatePayload], 'update', 'INDENT');
+                    await postToDB([updatePayload], 'update', 'INDENT');
 
                     // Update PO APPROVAL table status
-                    const approvalToUpdate = poApprovalSheet.find(a => a.indentNumber === item.indentNumber);
+                    const approvalToUpdate = poApprovalData.find(a => a.indentNumber === item.indentNumber);
                     if (approvalToUpdate) {
                         const approvalUpdate = {
                             id: approvalToUpdate.id,
                             status: isFullyReceived ? 'Received' : 'Pending'
                         };
-                        await postToSheet([approvalUpdate], 'update', 'PO APPROVAL');
+                        await postToDB([approvalUpdate], 'update', 'PO APPROVAL');
                     }
                 }
             }

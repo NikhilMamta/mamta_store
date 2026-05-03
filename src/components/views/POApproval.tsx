@@ -7,7 +7,7 @@ import {
     DialogTitle,
 } from '../ui/dialog';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { Button } from '../ui/button';
 import DataTable from '../element/DataTable';
 import { z } from 'zod';
@@ -16,7 +16,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
-import { postToSheet } from '@/lib/fetchers';
+import { postToDB } from '@/lib/fetchers';
 import { PackageCheck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import Heading from '../element/Heading';
@@ -33,7 +33,7 @@ import {
 import { pdf } from '@react-pdf/renderer';
 import POPdf, { type POPdfProps } from '../element/POPdf';
 import { calculateGrandTotal, calculateSubtotal, calculateTotal, calculateTotalGst } from '@/lib/utils';
-import { uploadFile } from '@/lib/fetchers';
+
 
 interface PoTableData {
     partyName: string;
@@ -73,7 +73,7 @@ interface PoTableData {
 }
 
 export default () => {
-    const { poHistorySheet, updatePoHistorySheet, poHistoryLoading, masterSheet: details } = useSheets();
+    const { poHistoryData, updatePoHistoryData, poHistoryLoading, masterData: details } = useDatabase();
     const [openDialog, setOpenDialog] = useState(false);
     const [tableData, setTableData] = useState<PoTableData[]>([]);
     const [historyData, setHistoryData] = useState<PoTableData[]>([]);
@@ -134,10 +134,10 @@ export default () => {
     });
 
     useEffect(() => {
-        if (!poHistorySheet) return;
+        if (!poHistoryData) return;
 
         // Filter: Keep ANY row that has at least one value
-        const validRows = poHistorySheet.filter(row => {
+        const validRows = poHistoryData.filter(row => {
             return Object.values(row).some(v => v !== null && v !== undefined && String(v).trim() !== '');
         });
 
@@ -173,7 +173,7 @@ export default () => {
 
         setTableData(Array.from(groupedMap.values()));
         setHistoryData(history);
-    }, [poHistorySheet]);
+    }, [poHistoryData]);
 
     const columns: ColumnDef<PoTableData>[] = [
         {
@@ -278,7 +278,7 @@ export default () => {
         try {
             // NEW: Get all items for this base indent to update from po_history
             const baseIndent = (selectedItem.internalCode || selectedItem.indentNumber || '').split(/[_/]/)[0];
-            const poItemsToUpdate = poHistorySheet.filter(p => 
+            const poItemsToUpdate = poHistoryData.filter(p => 
                 (p.internalCode || p.indentNumber || '').split(/[_/]/)[0] === baseIndent
             );
             const todayStr = new Date().toISOString().split('T')[0];
@@ -288,7 +288,7 @@ export default () => {
                 status: values.status           // 'Approved' or 'Rejected'
             }));
 
-            await postToSheet(updates, 'update', 'PO HISTORY');
+            await postToDB(updates, 'update', 'PO HISTORY');
 
             // --- ALSO Save to PO APPROVAL table ---
             const approvalData = poItemsToUpdate.map(item => ({
@@ -301,7 +301,7 @@ export default () => {
             }));
 
             try {
-                await postToSheet(approvalData, 'insert', 'PO APPROVAL');
+                await postToDB(approvalData, 'insert', 'PO APPROVAL');
             } catch (err) {
                 console.error('PO APPROVAL table save failed:', err);
             }
@@ -309,7 +309,7 @@ export default () => {
             toast.success('Submitted successfully');
             setOpenDialog(false);
             // Refresh data
-            updatePoHistorySheet();
+            updatePoHistoryData();
         } catch (error) {
             console.error(error);
             toast.error('Failed to submit');
@@ -373,7 +373,7 @@ export default () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {poHistorySheet
+                                        {poHistoryData
                                             .filter(p => {
                                                 const pBase = (p.internalCode || p.indentNumber || '').split(/[_/]/)[0];
                                                 const sBase = (selectedItem.internalCode || selectedItem.indentNumber || '').split(/[_/]/)[0];

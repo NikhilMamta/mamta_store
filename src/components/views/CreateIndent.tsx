@@ -1,7 +1,3 @@
-
-
-
-
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -19,9 +15,10 @@ import {
 } from '@/components/ui/select';
 import { ClipLoader as Loader } from 'react-spinners';
 import { ClipboardList, Trash, Search, Plus } from 'lucide-react'; // Plus ko import karo
-import { postToSheet, submitToMaster, uploadFile } from '@/lib/fetchers';
-import type { IndentSheet, StoreOutSheet, InventorySheet } from '@/types';
-import { useSheets } from '@/context/SheetsContext';
+import { postToDB, submitToMaster, uploadFileToSupabase } from '@/lib/fetchers';
+import { supabase } from '@/lib/supabase';
+import type { IndentData, StoreOutData, InventoryData } from '@/types';
+import { useDatabase } from '@/context/DatabaseContext';
 import Heading from '../element/Heading';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -29,8 +26,8 @@ import { formatDate } from '@/lib/utils';
 
 
 export default () => {
-    const { indentSheet: sheet, storeOutSheet, inventorySheet, updateIndentSheet, updateStoreOutSheet, updateInventorySheet, masterSheet: options } = useSheets();
-    const [indentSheet, setIndentSheet] = useState<IndentSheet[]>([]);
+    const { indentData: sheet, storeOutData, inventoryData, updateIndentData, updateStoreOutData, updateInventoryData, masterData: options } = useDatabase();
+    const [indentData, setIndentData] = useState<IndentData[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [searchTermGroupHead, setSearchTermGroupHead] = useState("");
     const [searchTermProductName, setSearchTermProductName] = useState("");
@@ -42,7 +39,7 @@ export default () => {
 
 
     useEffect(() => {
-        setIndentSheet(sheet);
+        setIndentData(sheet);
     }, [sheet]);
 
 
@@ -161,8 +158,8 @@ export default () => {
     // Function to generate next indent number
     const getNextIndentNumber = (type: 'Purchase' | 'Store Out' = 'Purchase') => {
         const prefix = type === 'Purchase' ? 'SI-' : 'SO-';
-        const targetSheet = type === 'Purchase' ? indentSheet : (storeOutSheet as any[]);
-        
+        const targetSheet = type === 'Purchase' ? indentData : (storeOutData as any[]);
+
         if (!targetSheet || targetSheet.length === 0) {
             return `${prefix}0001`;
         }
@@ -186,20 +183,24 @@ export default () => {
 
 
     // Better approach using image tag
-    const submitProductToMasterSheet = (productName: string, groupHead: string) => {
-        const MASTER_SHEET_URL = 'https://script.google.com/a/macros/jjspl.in/s/AKfycbyybfRgC2y9wLktUTQ9fTqp-qGMleFrj1c3pQJbLEQiMWr9-hNEaZyoqkWpeV9HF9Az/exec';
+    const submitProductToMasterData = async (productName: string, groupHead: string) => {
+        try {
+            const { error } = await supabase
+                .from('master')
+                .insert([{
+                    item_name: productName,
+                    group_head: groupHead
+                }]);
 
-        const params = new URLSearchParams({
-            sheetName: 'Items And Location',
-            productName: productName,
-            groupHead: groupHead
-        });
-
-        // Use image tag trick (no CORS issue)
-        const img = new Image();
-        img.src = `${MASTER_SHEET_URL}?${params.toString()}`;
-
-        return Promise.resolve(true);
+            if (error) {
+                console.error('Error adding product to master:', error);
+                throw error;
+            }
+            return true;
+        } catch (error) {
+            console.error('Failed to submit product to master sheet:', error);
+            return false;
+        }
     };
 
     // Update addNewProductLocally - sync version
@@ -230,7 +231,7 @@ export default () => {
         setShowAddProduct(prev => ({ ...prev, [index]: false }));
 
         // Submit to master sheet
-        submitProductToMasterSheet(productName, groupHead);
+        submitProductToMasterData(productName, groupHead);
 
         toast.success('Product added successfully');
     };
@@ -288,7 +289,7 @@ export default () => {
                 console.log("=== STORE OUT REQUEST SUBMISSION ===");
                 console.log(JSON.stringify(storeOutRows, null, 2));
 
-                const res = await postToSheet(storeOutRows, 'insert', 'STORE OUT REQUEST');
+                const res = await postToDB(storeOutRows, 'insert', 'STORE OUT REQUEST');
                 console.log("Response:", res);
 
                 if (res.success) {
@@ -302,20 +303,22 @@ export default () => {
                         }
                     }
 
-                    setTimeout(() => updateStoreOutSheet(), 1000);
+                    setTimeout(() => updateStoreOutData(), 1000);
                 } else {
-                    toast.error(res.message || 'Failed to create Store Out');
+                    toast.error('Failed to create Store Out');
                 }
 
             } else {
                 // INDENT sheet submission (Purchase type)
-                const indentRows: Partial<IndentSheet>[] = [];
+                const indentRows: Partial<IndentData>[] = [];
                 let currentIndentNumber = getNextIndentNumber();
+
+                const attachmentCache = new Map<File, string>();
 
                 for (let i = 0; i < data.products.length; i++) {
                     const product = data.products[i];
 
-                    const row: Partial<IndentSheet> = {
+                    const row: Partial<IndentData> = {
                         timestamp: timestamp,
                         indentNumber: `${currentIndentNumber}_${i + 1}`,
                         indenterName: data.indenterName || '',
@@ -334,10 +337,15 @@ export default () => {
                     };
 
                     if (product.attachment !== undefined) {
-                        row.attachment = await uploadFile(
-                            product.attachment,
-                            import.meta.env.VITE_IDENT_ATTACHMENT_FOLDER
-                        );
+                        if (attachmentCache.has(product.attachment)) {
+                            row.attachment = attachmentCache.get(product.attachment)!;
+                        } else {
+                            row.attachment = await uploadFileToSupabase(
+                                product.attachment,
+                                'indent_image'
+                            );
+                            attachmentCache.set(product.attachment, row.attachment);
+                        }
                     }
                     indentRows.push(row);
                 }
@@ -345,7 +353,7 @@ export default () => {
                 console.log("=== INDENT SUBMISSION ===");
                 console.log("Rows to submit:", JSON.stringify(indentRows, null, 2));
 
-                const res = await postToSheet(indentRows, 'insert', 'INDENT');
+                const res = await postToDB(indentRows, 'insert', 'INDENT');
                 console.log("Response:", res);
 
                 if (res.success) {
@@ -354,11 +362,11 @@ export default () => {
                     // AUTOMATIC INVENTORY REGISTRATION:
                     // Check if unique products already exist in inventory, if not, add them.
                     const uniqueProductNames = Array.from(new Set(data.products.map(p => p.productName?.trim()).filter(Boolean)));
-                    const inventoryRowsToInsert: Partial<InventorySheet>[] = [];
+                    const inventoryRowsToInsert: Partial<InventoryData>[] = [];
 
                     for (const prodName of uniqueProductNames) {
-                        const exists = inventorySheet?.some(inv => inv.itemName?.toLowerCase() === prodName?.toLowerCase());
-                        
+                        const exists = inventoryData?.some(inv => inv.itemName?.toLowerCase() === prodName?.toLowerCase());
+
                         if (!exists) {
                             // Find the product details from the submitted data
                             const productDetails = data.products.find(p => p.productName?.trim() === prodName);
@@ -384,9 +392,9 @@ export default () => {
 
                     if (inventoryRowsToInsert.length > 0) {
                         try {
-                            await postToSheet(inventoryRowsToInsert, 'insert', 'INVENTORY');
+                            await postToDB(inventoryRowsToInsert, 'insert', 'INVENTORY');
                             console.log(`Automatically added ${inventoryRowsToInsert.length} new items to inventory.`);
-                            updateInventorySheet();
+                            updateInventoryData();
                         } catch (invErr) {
                             console.error("Failed to auto-register inventory items:", invErr);
                         }
@@ -400,9 +408,9 @@ export default () => {
                         }
                     }
 
-                    setTimeout(() => updateIndentSheet(), 1000);
+                    setTimeout(() => updateIndentData(), 1000);
                 } else {
-                    toast.error(res.message || 'Failed to create indent');
+                    toast.error('Failed to create indent');
                 }
             }
 
@@ -578,12 +586,12 @@ export default () => {
                                                             <SelectContent>
                                                                 <div className="flex items-center border-b px-3 pb-3">
                                                                     <Search className="mr-2 h-4 w-4 opacity-50" />
-                                                                    <input 
-                                                                        placeholder="Search..." 
-                                                                        value={searchTermWard} 
-                                                                        onChange={(e) => setSearchTermWard(e.target.value)} 
-                                                                        onKeyDown={(e) => e.stopPropagation()} 
-                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none" 
+                                                                    <input
+                                                                        placeholder="Search..."
+                                                                        value={searchTermWard}
+                                                                        onChange={(e) => setSearchTermWard(e.target.value)}
+                                                                        onKeyDown={(e) => e.stopPropagation()}
+                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none"
                                                                     />
                                                                 </div>
                                                                 {(options?.wardNames || [])
@@ -612,12 +620,12 @@ export default () => {
                                                             <SelectContent>
                                                                 <div className="flex items-center border-b px-3 pb-3">
                                                                     <Search className="mr-2 h-4 w-4 opacity-50" />
-                                                                    <input 
-                                                                        placeholder="Search..." 
-                                                                        value={searchTermWard} 
-                                                                        onChange={(e) => setSearchTermWard(e.target.value)} 
-                                                                        onKeyDown={(e) => e.stopPropagation()} 
-                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none" 
+                                                                    <input
+                                                                        placeholder="Search..."
+                                                                        value={searchTermWard}
+                                                                        onChange={(e) => setSearchTermWard(e.target.value)}
+                                                                        onKeyDown={(e) => e.stopPropagation()}
+                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none"
                                                                     />
                                                                 </div>
                                                                 {(options?.wardNames || [])

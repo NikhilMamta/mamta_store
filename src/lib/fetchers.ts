@@ -1,8 +1,8 @@
-import type { IndentSheet, MasterSheet, ReceivedSheet, Sheet } from '@/types';
-import type { InventorySheet, PoMasterSheet, PoHistorySheet, QuotationHistorySheet, StoreOutSheet, UserPermissions, Vendor, ThreePartyApprovalSheet } from '@/types/sheets';
+import type { IndentData, MasterData, ReceivedData, TableName } from '@/types';
+import type { InventoryData, PoMasterData, PoHistoryData, QuotationHistoryData, StoreOutData, UserPermissions, Vendor, ThreePartyApprovalData } from '@/types/database';
 import { supabase } from './supabase';
 
-const STORE_HEAD_URL = "https://script.google.com/macros/s/AKfycbz-wbRJYrSa2Fis-nYI0tivRS2Ns6rcXkGc18Wsib6P5Psea0ai8kJ_zPOSHP-oRU6J/exec";
+
 
 // Utility to convert snake_case object to camelCase
 const toCamelCase = (obj: any): any => {
@@ -10,10 +10,13 @@ const toCamelCase = (obj: any): any => {
         return obj.map(v => toCamelCase(v));
     } else if (obj !== null && obj.constructor === Object) {
         return Object.keys(obj).reduce(
-            (result, key) => ({
-                ...result,
-                [key.replace(/(_\w)/g, k => k[1].toUpperCase())]: toCamelCase(obj[key]),
-            }),
+            (result, key) => {
+                const camelKey = key.toLowerCase() === 'id' ? 'id' : key.replace(/(_\w)/g, k => k[1].toUpperCase());
+                return {
+                    ...result,
+                    [camelKey]: toCamelCase(obj[key]),
+                };
+            },
             {},
         );
     }
@@ -57,10 +60,11 @@ const toSnakeCase = (obj: any): any => {
                 // Convert camelCase to snake_case and handle numbers (e.g., planned1 -> planned_1)
                 const snakeKey = key
                     .replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
-                    // Automatically add underscore for numbered fields like planned1 -> planned_1, planned5 -> planned_5
-                    // BUT skip planned2 because in the DB it's 'planned2' (no underscore)
-                    .replace(/(planned|term)([13456789]|10)/g, '$1_$2')
-                    .replace(/(actual)(\d)/g, '$1_$2');
+                    // Add underscore before numbers, except for 'planned2' which is 'planned2' in DB
+                    .replace(/([a-z])(\d+)$/i, (match, p1, p2) => {
+                        if (p1.toLowerCase() === 'planned' && p2 === '2') return match;
+                        return `${p1}_${p2}`;
+                    });
                 
                 let value = obj[key];
                 // Format date strings for Postgres
@@ -84,10 +88,7 @@ const INDENT_COLUMNS = [
     'timestamp', 'indent_number', 'indenter_name', 'department', 
     'area_of_use', 'group_head', 'product_name', 'quantity', 
     'uom', 'specifications', 'indent_approved_by', 'indent_type', 
-    'attachment', 'planned_1', 'status', 'actual_2', 'vendor_name_1',
-    'rate_1', 'payment_term_1', 'approved_vendor_name', 'approved_rate',
-    'approved_quantity', 'approved_payment_term', 'vendor_name_2', 'rate_2', 'payment_term_2',
-    'vendor_name_3', 'rate_3', 'payment_term_3', 'comparison_sheet'
+    'attachment', 'planned_1', 'status'
 ];
 
 const APPROVED_INDENT_COLUMNS = [
@@ -167,58 +168,19 @@ const getTableName = (sheetName: string) => {
     return normalized;
 };
 
-export async function uploadFile(file: File, folderId: string, uploadType: 'upload' | 'email' = 'upload', email?: string): Promise<string> {
-    const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-    if (!scriptUrl) throw new Error('VITE_APP_SCRIPT_URL is missing in .env');
 
-    const base64: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const base64String = (reader.result as string)?.split(',')[1];
-            resolve(base64String);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-
-    const form = new FormData();
-    form.append('action', 'upload');
-    form.append('sheetName', 'PO MASTER');
-    form.append('fileName', file.name);
-    form.append('mimeType', file.type);
-    form.append('fileData', base64);
-    form.append('folderId', folderId);
-    form.append('uploadType', uploadType);
-
-    if (uploadType === "email") {
-        form.append('email', email!);
-        form.append('emailSubject', "Purchase Order");
-        form.append('emailBody', "Please find attached PO.");
-    }
-
-    const response = await fetch(scriptUrl, {
-        method: 'POST',
-        body: form,
-        redirect: 'follow',
-    });
-
-    if (!response.ok) throw new Error('Failed to upload file');
-    const res = await response.json();
-    if (!res.success) throw new Error('Failed to upload data');
-
-    return res.fileUrl as string;
-}
 
 export async function uploadFileToSupabase(file: File | Blob, bucketName: string, customFileName?: string): Promise<string> {
-    // Use customFileName if provided, otherwise fallback to file.name or a default timestamp
     const baseName = customFileName || (file instanceof File ? file.name : `${Date.now()}.pdf`);
-    const fileName = baseName.replace(/[\/\s]+/g, '_');
+    // Ensure uniqueness by prepending a timestamp
+    const timestamp = Date.now();
+    const fileName = `${timestamp}_${baseName.replace(/[\/\s]+/g, '_')}`;
     
     const { data, error } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file, {
             cacheControl: '3600',
-            upsert: false
+            upsert: true // Changed to true to handle potential collisions gracefully
         });
 
     if (error) {
@@ -233,25 +195,18 @@ export async function uploadFileToSupabase(file: File | Blob, bucketName: string
     return publicUrl;
 }
 
-export async function fetchSheet(
-    sheetName: Sheet
-): Promise<MasterSheet | IndentSheet[] | ReceivedSheet[] | UserPermissions[] | PoMasterSheet[] | InventorySheet[] | ThreePartyApprovalSheet[]> {
-    console.log(`Fetching ${sheetName} from Supabase...`);
-    
-    // Check if key looks suspicious (looks like a Stripe key)
-    if (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.startsWith('sb_publishable_')) {
-        console.warn('WARNING: VITE_SUPABASE_PUBLISHABLE_KEY looks like a Stripe key. Please verify it in .env');
-    }
-
+export async function fetchFromDB(
+    tableName: TableName
+): Promise<MasterData | IndentData[] | ReceivedData[] | UserPermissions[] | PoMasterData[] | InventoryData[] | ThreePartyApprovalData[]> {
     // Special handling for MASTER sheet to maintain backward compatibility with the object structure
-    if (sheetName === 'MASTER') {
+    if (tableName === 'MASTER') {
         const { data, error } = await supabase
             .from('master')
             .select('*');
 
         if (error) {
             console.error('Supabase error fetching MASTER:', error);
-            return fetchSheetGAS(sheetName);
+            throw error;
         }
 
         const vendors: Vendor[] = [];
@@ -323,84 +278,19 @@ export async function fetchSheet(
     }
 
     const { data, error } = await supabase
-        .from(getTableName(sheetName))
+        .from(getTableName(tableName))
         .select('*');
 
     if (error) {
-        console.error(`Supabase error fetching ${sheetName}:`, error);
-        return fetchSheetGAS(sheetName);
+        console.error(`Supabase error fetching ${tableName}:`, error);
+        throw error;
     }
 
     // Automatically convert all Supabase data to camelCase to match app expectations
     return toCamelCase(data);
 }
 
-// Internal fallback for GAS
-async function fetchSheetGAS(sheetName: Sheet) {
-    const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-    if (!scriptUrl) {
-        console.error('GAS Fallback failed: VITE_APP_SCRIPT_URL is missing');
-        throw new Error('Supabase failed and GAS fallback is not configured.');
-    }
 
-    const url = `${scriptUrl}?sheetName=${encodeURIComponent(sheetName)}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch data from GAS');
-    const raw = await response.json();
-    if (!raw.success) throw new Error('GAS error: ' + raw.error);
-
-    if (sheetName === 'MASTER') {
-        const data = raw.options;
-        const length = Math.max(...Object.values(data).map((arr: any) => arr.length));
-        const vendors: Vendor[] = [];
-        const groupHeads: Record<string, Set<string>> = {};
-        const departments = new Set<string>();
-        const paymentTerms = new Set<string>();
-        const defaultTerms = new Set<string>();
-        const units = new Set<string>();
-        const wardNames = new Set<string>();
-
-        for (let i = 0; i < length; i++) {
-            const vendorName = data.vendorName?.[i];
-            const gstin = data.vendorGstin?.[i];
-            const address = data.vendorAddress?.[i];
-            const email = data.vendorEmail?.[i];
-            if (vendorName && gstin && address) {
-                vendors.push({ vendorName, gstin, address, email });
-            }
-            if (data.department?.[i]) departments.add(data.department[i]);
-            if (data.paymentTerm?.[i]) paymentTerms.add(data.paymentTerm[i]);
-            if (data.defaultTerms?.[i]) defaultTerms.add(data.defaultTerms[i]);
-            if (data.unitOfMeasurment?.[i]) units.add(data.unitOfMeasurment[i]);
-            if (data.wardName?.[i]) wardNames.add(data.wardName[i]);
-
-            const group = data.groupHead?.[i];
-            const item = data.itemName?.[i];
-            if (group && item) {
-                if (!groupHeads[group]) groupHeads[group] = new Set();
-                groupHeads[group].add(item);
-            }
-        }
-
-        return {
-            vendors,
-            departments: [...departments],
-            paymentTerms: [...paymentTerms],
-            groupHeads: Object.fromEntries(Object.entries(groupHeads).map(([k, v]) => [k, [...v]])),
-            companyPan: data.companyPan,
-            companyName: data.companyName,
-            companyAddress: data.companyAddress,
-            companyPhone: data.companyPhone,
-            companyGstin: data.companyGstin,
-            billingAddress: data.billingAddress,
-            destinationAddress: data.destinationAddress,
-            defaultTerms: [...defaultTerms],
-            units: [...units],
-            wardNames: [...wardNames]
-        };
-    }
-    return raw.rows.filter((r: IndentSheet) => r.timestamp !== '');
-}
 
 export async function postToQuotationHistory(rows: any[]) {
     // Convert to snake_case for Supabase
@@ -411,22 +301,12 @@ export async function postToQuotationHistory(rows: any[]) {
 
     if (error) {
         console.error('Supabase error posting quotation:', error);
-        const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-        if (!scriptUrl) throw new Error('Supabase failed and GAS fallback is not configured.');
-        
-        const formData = new FormData();
-        formData.append('action', 'insertQuotation');
-        formData.append('rows', JSON.stringify(rows));
-        const response = await fetch(scriptUrl, {
-            method: 'POST',
-            body: formData,
-        });
-        return await response.json();
+        throw error;
     }
     return { success: true, data };
 }
 
-export async function postToPoHistory(rows: PoHistorySheet[]) {
+export async function postToPoHistory(rows: PoHistoryData[]) {
     // Manually map camelCase fields to exact snake_case column names in po_history table
     const sRows = rows.map((r) => ({
         timestamp: r.timestamp ? formatToPostgresDate(r.timestamp) : new Date().toISOString(),
@@ -504,12 +384,7 @@ export async function fetchVendors() {
 
     if (error) {
         console.error('Supabase error fetching vendors:', error);
-        const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-        if (!scriptUrl) return [];
-        
-        const response = await fetch(`${scriptUrl}?sheetName=MASTER&fetchType=vendors`);
-        const resData = await response.json();
-        return resData.vendors || [];
+        return [];
     }
 
     return data.map((v: any) => ({
@@ -520,7 +395,7 @@ export async function fetchVendors() {
     }));
 }
 
-export async function postStoreOutToSheet(data: Partial<StoreOutSheet>[]) {
+export async function postStoreOutToDB(data: Partial<StoreOutData>[]) {
     // Convert to snake_case for Supabase
     const sData = toSnakeCase(data);
     const { error } = await supabase
@@ -528,36 +403,25 @@ export async function postStoreOutToSheet(data: Partial<StoreOutSheet>[]) {
         .insert(sData);
 
     if (error) {
-        console.error("Supabase error in postStoreOutToSheet:", error);
-        const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-        if (!scriptUrl) throw new Error('Supabase failed and GAS fallback is not configured.');
-
-        const form = new FormData();
-        form.append('action', 'insert');
-        form.append('sheetName', 'STORE OUT');
-        form.append('rows', JSON.stringify(data));
-        const response = await fetch(scriptUrl, {
-            method: 'POST',
-            body: form,
-        });
-        return await response.json();
+        console.error("Supabase error in postStoreOutToDB:", error);
+        throw error;
     }
     return { success: true };
 }
 
-export async function postToSheet(
+export async function postToDB(
     data: any[],
     action: 'insert' | 'update' | 'delete' | 'insertQuotation' = 'insert',
-    sheet: Sheet = 'INDENT'
+    tableNameParam: TableName = 'INDENT'
 ) {
-    const tableName = getTableName(sheet);
+    const tableName = getTableName(tableNameParam);
     let result;
 
     // Filter out null/undefined items from data array
     const cleanData = data.filter(item => item !== null && item !== undefined);
     
     if (cleanData.length === 0) {
-        console.warn('⚠️ postToSheet called with empty data array');
+        console.warn('⚠️ postToDB called with empty data array');
         return { success: true };
     }
 
@@ -728,19 +592,8 @@ export async function postToSheet(
     }
 
     if (result && 'error' in result && result.error) {
-        console.error(`Supabase error in postToSheet (${action}):`, result.error);
-        const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-        if (!scriptUrl) throw new Error('Supabase failed and GAS fallback is not configured.');
-
-        const form = new FormData();
-        form.append('action', action);
-        form.append('sheetName', sheet);
-        form.append('rows', JSON.stringify(data));
-        const response = await fetch(scriptUrl, {
-            method: 'POST',
-            body: form,
-        });
-        return await response.json();
+        console.error(`Supabase error in postToDB (${action}):`, result.error);
+        throw result.error;
     }
 
     return { success: true };
@@ -753,12 +606,7 @@ export async function submitToMaster(wardName: string) {
 
     if (error) {
         console.error('[submitToMaster] Supabase error:', error);
-        // Fallback to image tag trick (doesn't require GAS URL in env if hardcoded, but better to check)
-        const MASTER_SHEET_URL = 'https://script.google.com/a/macros/jjspl.in/s/AKfycbyybfRgC2y9wLktUTQ9fTqp-qGMleFrj1c3pQJbLEQiMWr9-hNEaZyoqkWpeV9HF9Az/exec';
-        const params = new URLSearchParams({ sheetName: 'MASTER', wardName });
-        const img = new Image();
-        img.src = `${MASTER_SHEET_URL}?${params.toString()}`;
-        return true;
+        throw error;
     }
     return true;
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Heading from '../element/Heading';
 import { Database, Building2, Users, Layers, MapPin, Plus, Trash2, Building, RefreshCw, Pencil } from 'lucide-react';
+import { useDatabase } from '@/context/DatabaseContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface MasterRow {
+    id?: string | number;
     vendor_name?: string;
     vendor_gstin?: string;
     vendor_address?: string;
@@ -49,6 +51,7 @@ interface MasterRow {
 }
 
 export default function MasterData() {
+    const { updateMasterData } = useDatabase();
     const [masterData, setMasterData] = useState<MasterRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [openDialog, setOpenDialog] = useState<string | null>(null);
@@ -69,19 +72,8 @@ export default function MasterData() {
     async function saveRow(fields: Record<string, string>) {
         setSaving(true);
         let res;
-        if (editingRow) {
-            const idField = 
-                editingRow.vendor_name ? 'vendor_name' :
-                editingRow.department ? 'department' :
-                editingRow.item_name ? 'item_name' :
-                editingRow.ward_name ? 'ward_name' :
-                editingRow.company_name ? 'company_name' : null;
-
-            if (idField) {
-                res = await supabase.from('master').update(fields).eq(idField, (editingRow as any)[idField]);
-            } else {
-                res = await supabase.from('master').insert([fields]);
-            }
+        if (editingRow && editingRow.id) {
+            res = await supabase.from('master').update(fields).eq('id', editingRow.id);
         } else {
             res = await supabase.from('master').insert([fields]);
         }
@@ -89,19 +81,24 @@ export default function MasterData() {
         if (res.error) { toast.error('Failed to save: ' + res.error.message); }
         else {
             toast.success(editingRow ? '✅ Updated successfully' : '✅ Saved successfully');
-            setOpenDialog(null);
-            setForm({});
             setEditingRow(null);
             fetchMaster();
+            updateMasterData();
         }
         setSaving(false);
     }
 
-    async function deleteRow(field: string, value: string) {
-        if (!confirm(`Delete "${value}"?`)) return;
-        const { error } = await supabase.from('master').delete().eq(field, value);
+    async function deleteRow(row: MasterRow) {
+        if (!row.id) return;
+        const displayName = row.vendor_name || row.department || row.item_name || row.ward_name || row.company_name || 'this item';
+        if (!confirm(`Delete "${displayName}"?`)) return;
+        const { error } = await supabase.from('master').delete().eq('id', row.id);
         if (error) toast.error('Delete failed');
-        else { toast.success('Deleted'); fetchMaster(); }
+        else { 
+            toast.success('Deleted'); 
+            fetchMaster(); 
+            updateMasterData();
+        }
     }
 
     const unique = (field: keyof MasterRow) =>
@@ -173,7 +170,7 @@ export default function MasterData() {
                                                         <Pencil size={14} />
                                                     </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
-                                                        onClick={() => deleteRow('vendor_name', r.vendor_name!)}>
+                                                        onClick={() => deleteRow(r)}>
                                                         <Trash2 size={14} />
                                                     </Button>
                                                 </TableCell>
@@ -217,7 +214,10 @@ export default function MasterData() {
                                                         <Pencil size={14} />
                                                     </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
-                                                        onClick={() => deleteRow('department', dep)}>
+                                                        onClick={() => {
+                                                            const r = masterData.find(x => x.department === dep);
+                                                            if (r) deleteRow(r);
+                                                        }}>
                                                         <Trash2 size={14} />
                                                     </Button>
                                                 </TableCell>
@@ -262,7 +262,7 @@ export default function MasterData() {
                                                         <Pencil size={14} />
                                                     </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
-                                                        onClick={() => deleteRow('item_name', r.item_name!)}>
+                                                        onClick={() => deleteRow(r)}>
                                                         <Trash2 size={14} />
                                                     </Button>
                                                 </TableCell>
@@ -306,7 +306,10 @@ export default function MasterData() {
                                                         <Pencil size={14} />
                                                     </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
-                                                        onClick={() => deleteRow('ward_name', ward)}>
+                                                        onClick={() => {
+                                                            const r = masterData.find(x => x.ward_name === ward);
+                                                            if (r) deleteRow(r);
+                                                        }}>
                                                         <Trash2 size={14} />
                                                     </Button>
                                                 </TableCell>

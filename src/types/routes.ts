@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { IndentSheet, UserPermissions } from "./sheets";
+import type { IndentData, UserPermissions } from "./database";
 
 export interface RouteAttributes {
     name: string;
@@ -7,5 +7,5 @@ export interface RouteAttributes {
     path: string;
     icon: JSX.Element;
     gateKey?: keyof UserPermissions;
-    notifications: (sheet: IndentSheet[]) => number
+    notifications: (sheet: IndentData[]) => number
 }

@@ -1,14 +1,14 @@
 import { type ColumnDef } from '@tanstack/react-table';
 import DataTable from '../element/DataTable';
 import { useEffect, useState } from 'react';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { Button } from '../ui/button';
-import { postToSheet } from '@/lib/fetchers';
+import { postToDB } from '@/lib/fetchers';
 import { toast } from 'sonner';
 import { PuffLoader as Loader } from 'react-spinners';
 import { ClipboardList, FileText, PackageSearch } from 'lucide-react';
 import Heading from '../element/Heading';
-import type { StoreOutSheet } from '@/types';
+import type { StoreOutData } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
@@ -33,7 +33,7 @@ interface StoreOutTableData {
     floor: string;
     searialNumber?: number | string;
     storeOutActual?: string;
-    originalRow: StoreOutSheet;
+    originalRow: StoreOutData;
 }
 
 interface GroupedStoreOutStatusData {
@@ -48,7 +48,7 @@ interface GroupedStoreOutStatusData {
 }
 
 export default () => {
-    const { storeOutSheet, storeOutLoading, updateStoreOutSheet, indentSheet, storeOutApprovalSheet } = useSheets();
+    const { storeOutData, storeOutLoading, updateStoreOutData, indentData, storeOutApprovalData } = useDatabase();
 
     const [pendingData, setPendingData] = useState<GroupedStoreOutStatusData[]>([]);
     const [historyData, setHistoryData] = useState<GroupedStoreOutStatusData[]>([]);
@@ -56,10 +56,10 @@ export default () => {
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutStatusData | null>(null);
 
     const mapRowToTableData = (row: any): StoreOutTableData => {
-        // Smarter lookup for missing data from indentSheet and storeOutApprovalSheet
+        // Smarter lookup for missing data from indentData and storeOutApprovalData
         const lookupId = (row.indentNumber || '').split(/[_/]/)[0].toLowerCase();
         
-        const indentDetail = indentSheet?.find(i => {
+        const indentDetail = indentData?.find(i => {
             if (row.searialNumber && i.searialNumber) {
                 return String(i.searialNumber) === String(row.searialNumber);
             }
@@ -67,8 +67,8 @@ export default () => {
             return lookupId === itemBaseId;
         });
 
-        // Fallback to storeOutApprovalSheet (STORE OUT REQUEST)
-        const requestDetail = !indentDetail ? storeOutApprovalSheet?.find(r => {
+        // Fallback to storeOutApprovalData (STORE OUT REQUEST)
+        const requestDetail = !indentDetail ? storeOutApprovalData?.find(r => {
              const requestId = (r.issueNo || r.indentNumber || '').split(/[_/]/)[0].toLowerCase();
              return lookupId === requestId;
         }) : null;
@@ -92,9 +92,9 @@ export default () => {
     };
 
     useEffect(() => {
-        if (!storeOutSheet) return;
+        if (!storeOutData) return;
 
-        const allItems = storeOutSheet.map(mapRowToTableData);
+        const allItems = storeOutData.map(mapRowToTableData);
         const pendingItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'pending');
         const historyItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'approved' || row.storeOutStatus?.toLowerCase() === 'rejected');
 
@@ -104,7 +104,7 @@ export default () => {
                 if (!acc[baseId]) {
                     // Smart lookup for department
                     const lookupId = baseId.toLowerCase();
-                    const indent = indentSheet?.find(i => {
+                    const indent = indentData?.find(i => {
                         const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
                         return lookupId === itemBaseId;
                     });
@@ -127,7 +127,7 @@ export default () => {
 
         setPendingData(Object.values(groupItems(pendingItems)).reverse());
         setHistoryData(Object.values(groupItems(historyItems)).reverse());
-    }, [storeOutSheet, indentSheet]);
+    }, [storeOutData, indentData]);
 
     const pendingColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
@@ -194,7 +194,7 @@ export default () => {
 
     return (
         <div className="w-full overflow-hidden">
-            <Heading heading="Store Out" subtext="Finalize store out and update inventory">
+            <Heading heading="Store Out" subtext="Finalize store out and update database inventory">
                 <PackageSearch size={50} className="text-primary" />
             </Heading>
 
@@ -241,7 +241,7 @@ export default () => {
                                     items={selectedGroup.items}
                                     onSuccess={() => {
                                         setSelectedGroup(null);
-                                        setTimeout(() => updateStoreOutSheet(), 1000);
+                                        setTimeout(() => updateStoreOutData(), 1000);
                                     }}
                                 />
                             </div>
@@ -325,7 +325,7 @@ const StoreOutStatusForm = ({ items, onSuccess }: { items: StoreOutTableData[], 
             }));
 
             // 1. Update store_out_approval table
-            await postToSheet(updatePayload, 'update', 'STORE OUT APPROVAL');
+            await postToDB(updatePayload, 'update', 'STORE OUT APPROVAL');
 
             // 2. Insert into final store_out log table
             const insertPayload = values.updates.map(update => {
@@ -338,7 +338,7 @@ const StoreOutStatusForm = ({ items, onSuccess }: { items: StoreOutTableData[], 
                     delay: 0
                 };
             });
-            await postToSheet(insertPayload, 'insert', 'STORE OUT');
+            await postToDB(insertPayload, 'insert', 'STORE OUT');
 
             toast.success(`Confirmed ${items.length} items and saved to store out log`);
             onSuccess();

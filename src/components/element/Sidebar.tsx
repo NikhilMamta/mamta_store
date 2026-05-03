@@ -10,7 +10,7 @@ import {
     SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/context/AuthContext';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import type { RouteAttributes, UserPermissions } from '@/types';
 import { LogOut, RotateCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -20,7 +20,7 @@ import { useMemo } from 'react';
 
 export default ({ items }: { items: RouteAttributes[] }) => {
     const navigate = useNavigate();
-    const { indentSheet, updateAll, allLoading } = useSheets();
+    const { indentData, updateAll, allLoading } = useDatabase();
     const { user, logout } = useAuth();
 
     // Memoize the permission checking function to avoid re-creation on every render
@@ -158,9 +158,9 @@ export default ({ items }: { items: RouteAttributes[] }) => {
                                         {item.icon}
                                         {item.name}
                                     </div>
-                                    {item.notifications && item.notifications(indentSheet || []) !== 0 && (
+                                    {item.notifications && item.notifications(indentData || []) !== 0 && (
                                         <span className="bg-destructive text-secondary w-[1.3rem] h-[1.3rem] rounded-full text-xs grid place-items-center text-center">
-                                            {item.notifications(indentSheet || [])}
+                                            {item.notifications(indentData || [])}
                                         </span>
                                     )}
                                 </SidebarMenuButton>

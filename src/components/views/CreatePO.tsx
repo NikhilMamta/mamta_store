@@ -8,10 +8,10 @@ import { SidebarTrigger } from '../ui/sidebar';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
-import type { PoHistorySheet, PoMasterSheet } from '@/types';
-import { postToSheet, uploadFile, uploadFileToSupabase, postToPoHistory, fetchVendorDetails } from '@/lib/fetchers';
+import type { PoHistoryData, PoMasterData } from '@/types';
+import { postToDB, uploadFileToSupabase, postToPoHistory, fetchVendorDetails } from '@/lib/fetchers';
 import { useEffect, useState } from 'react';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import {
     calculateGrandTotal,
@@ -50,7 +50,7 @@ function generatePoNumber(poNumbers: string[], today = new Date()): string {
     return `${prefix}${next}`;
 }
 
-function incrementPoRevision(poNumber: string, allPOs: PoMasterSheet[]): string {
+function incrementPoRevision(poNumber: string, allPOs: PoMasterData[]): string {
     const parts = poNumber.split('/');
     const lastSegment = parts[parts.length - 1];
 
@@ -76,9 +76,9 @@ function incrementPoRevision(poNumber: string, allPOs: PoMasterSheet[]): string 
     return `${baseKey}-${maxRevision + 1}`;
 }
 
-function filterUniquePoNumbers(data: PoMasterSheet[]): PoMasterSheet[] {
+function filterUniquePoNumbers(data: PoMasterData[]): PoMasterData[] {
     const seen = new Set<string>();
-    const result: PoMasterSheet[] = [];
+    const result: PoMasterData[] = [];
 
     for (const po of data) {
         if (!seen.has(po.poNumber)) {
@@ -92,19 +92,19 @@ function filterUniquePoNumbers(data: PoMasterSheet[]): PoMasterSheet[] {
 
 export default () => {
     const {
-        indentSheet,
-        poMasterSheet,
-        updateIndentSheet,
-        updatePoMasterSheet,
-        masterSheet: details,
-        threePartyApprovalSheet,
-        vendorRateUpdateSheet,
-        approvedIndentSheet,
-        poHistorySheet,
-        updatePoHistorySheet,
-        updateThreePartyApprovalSheet,
-        updateVendorRateUpdateSheet
-    } = useSheets();
+        indentData,
+        poMasterData,
+        updateIndentData,
+        updatePoMasterData,
+        masterData: details,
+        threePartyApprovalData,
+        vendorRateUpdateData,
+        approvedIndentData,
+        poHistoryData,
+        updatePoHistoryData,
+        updateThreePartyApprovalData,
+        updateVendorRateUpdateData
+    } = useDatabase();
     const [readOnly, setReadOnly] = useState(-1);
     const [mode, setMode] = useState<'create' | 'revise'>('create');
     const [isEditingDestination, setIsEditingDestination] = useState(false);
@@ -124,13 +124,13 @@ export default () => {
 
         // 0. Indent numbers that already have a PO in history (check base numbers)
         const existingPoIndents = new Set(
-            poHistorySheet
+            poHistoryData
                 .map(p => (p.indentNumber || '').trim().split(/[_/]/)[0])
                 .filter(Boolean) as string[]
         );
 
         // 1. Filter Approved Indents from APPROVED_INDENT table where status is 'Approved'
-        approvedIndentSheet
+        approvedIndentData
             .filter((approved) => approved.status?.trim().toLowerCase() === 'approved')
             .forEach((approved) => {
                 const baseNo = (approved.indentNumber || '').split(/[_/]/)[0];
@@ -140,7 +140,7 @@ export default () => {
             });
 
         setPendingIndentNumbers(indentNumbers);
-    }, [indentSheet, threePartyApprovalSheet, vendorRateUpdateSheet, approvedIndentSheet, poHistorySheet]);
+    }, [indentData, threePartyApprovalData, vendorRateUpdateData, approvedIndentData, poHistoryData]);
 
     const schema = z.object({
         poNumber: z.string().nonempty(),
@@ -175,7 +175,7 @@ export default () => {
     const form = useForm<FormData>({
         resolver: zodResolver(schema),
         defaultValues: {
-            poNumber: generatePoNumber(poMasterSheet.map((p) => p.poNumber)),
+            poNumber: generatePoNumber(poMasterData.map((p) => p.poNumber)),
             poDate: new Date(),
             supplierName: '',
             supplierAddress: '',
@@ -223,12 +223,12 @@ export default () => {
             form.setValue(
                 'poNumber',
                 generatePoNumber(
-                    poMasterSheet.map((p) => p.poNumber),
+                    poMasterData.map((p) => p.poNumber),
                     poDate
                 )
             );
         }
-    }, [poDate, poMasterSheet, mode]);
+    }, [poDate, poMasterData, mode]);
 
     useEffect(() => {
         if (mode === 'revise') {
@@ -251,7 +251,7 @@ export default () => {
             });
         } else {
             form.reset({
-                poNumber: generatePoNumber(poMasterSheet.map((p) => p.poNumber)),
+                poNumber: generatePoNumber(poMasterData.map((p) => p.poNumber)),
                 poDate: new Date(),
                 supplierName: '',
                 supplierAddress: '',
@@ -288,7 +288,7 @@ export default () => {
     useEffect(() => {
         if (vendor && mode === 'create' && !indentNumber) {
             // Check if this indent is in the pending list
-            const items = indentSheet.filter(
+            const items = indentData.filter(
                 (i) => pendingIndentNumbers.has(i.indentNumber) && i.approvedVendorName === vendor
             );
 
@@ -336,7 +336,7 @@ export default () => {
 
 
     useEffect(() => {
-        const po = poMasterSheet.find((p) => p.poNumber === poNumber)!;
+        const po = poMasterData.find((p) => p.poNumber === poNumber)!;
         if (mode === 'revise' && po) {
             const vendor = details?.vendors.find((v) => v.vendorName === po.partyName);
             form.setValue('poDate', po.timestamp ? new Date(po.timestamp) : new Date());
@@ -353,7 +353,7 @@ export default () => {
             form.setValue('enquiryDate', po.enquiryDate ? new Date(po.enquiryDate) : new Date());
             form.setValue(
                 'indents',
-                poMasterSheet
+                poMasterData
                     .filter((p) => p.poNumber === po.poNumber)
                     .map((po) => ({
                         indentNumber: po.internalCode,
@@ -363,7 +363,7 @@ export default () => {
             );
             const terms = [];
             for (let i = 0; i < 10; i++) {
-                const term = po[`term${i + 1}` as keyof PoMasterSheet] as string;
+                const term = po[`term${i + 1}` as keyof PoMasterData] as string;
                 if (term !== '') {
                     terms.push(term);
                 }
@@ -391,27 +391,27 @@ export default () => {
         const targetBaseId = (id || '').split(/[_/]/)[0].toLowerCase();
 
         // 1. Search in master Indent Sheet
-        let found = indentSheet.find((i) => {
+        let found = indentData.find((i) => {
             if (hasSerial && i.searialNumber) return String(i.searialNumber) === String(serial);
             const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
             return itemBaseId === targetBaseId;
         });
 
         // 2. Search in Approved Indent Sheet (often contains updated quantities)
-        const approved = approvedIndentSheet.find((i) => {
+        const approved = approvedIndentData.find((i) => {
             if (hasSerial && i.searialNumber) return String(i.searialNumber) === String(serial);
             const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
             return itemBaseId === targetBaseId;
         });
 
         // 3. Search in Three Party Approval (contains the final approved rate and vendor)
-        const tpa = threePartyApprovalSheet.find((i) => {
+        const tpa = threePartyApprovalData.find((i) => {
             const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
             return itemBaseId === targetBaseId;
         });
 
         // 4. Search in Vendor Rate Update (fallback for rates)
-        const vru = vendorRateUpdateSheet.find((i) => {
+        const vru = vendorRateUpdateData.find((i) => {
             const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
             return itemBaseId === targetBaseId;
         });
@@ -463,14 +463,14 @@ export default () => {
         form.setValue('indentNumber', selectedIndentNumber);
 
         // 1. Filter all items for this indent number (handling hidden suffixes)
-        const items = indentSheet.filter(
+        const items = indentData.filter(
             (i) => (i.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
         );
 
-        // Fallback: If not in indentSheet, check approvedIndentSheet
+        // Fallback: If not in indentData, check approvedIndentData
         if (items.length === 0) {
-            console.log('No items in indentSheet, checking approvedIndentSheet...');
-            const approvedItems = approvedIndentSheet.filter(
+            console.log('No items in indentData, checking approvedIndentData...');
+            const approvedItems = approvedIndentData.filter(
                 (i) => (i.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
             );
             if (approvedItems.length > 0) {
@@ -494,30 +494,30 @@ export default () => {
 
         // Source B: Three Party Approval sheet
         if (!vendorName) {
-            const tpa = threePartyApprovalSheet.find(
+            const tpa = threePartyApprovalData.find(
                 (t) => (t.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
             );
             if (tpa) {
                 vendorName = (tpa.approvedVendorName || '').trim();
-                if (vendorName) console.log('Vendor name found in threePartyApprovalSheet:', vendorName);
+                if (vendorName) console.log('Vendor name found in threePartyApprovalData:', vendorName);
             }
         }
 
         // Source C: Vendor Rate Update sheet (for Regular vendors)
         if (!vendorName) {
-            const vru = vendorRateUpdateSheet.find(
+            const vru = vendorRateUpdateData.find(
                 (v) => (v.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase() &&
                     v.status?.trim().toLowerCase() === 'approved'
             );
             if (vru) {
-                const approvedRecord = approvedIndentSheet.find(
+                const approvedRecord = approvedIndentData.find(
                     (approved) => (approved.indentNumber || '').split(/[_/]/)[0].toLowerCase() === selectedIndentNumber.toLowerCase()
                 );
                 const isRegular = approvedRecord?.vendorType?.trim().toLowerCase() === 'regular';
 
                 if (isRegular) {
                     vendorName = (vru.vendorName1 || '').trim();
-                    if (vendorName) console.log('Vendor name found in vendorRateUpdateSheet (Regular):', vendorName);
+                    if (vendorName) console.log('Vendor name found in vendorRateUpdateData (Regular):', vendorName);
                 }
             }
         }
@@ -584,7 +584,7 @@ export default () => {
             const poNumber =
                 mode === 'create'
                     ? values.poNumber
-                    : incrementPoRevision(values.poNumber, poMasterSheet);
+                    : incrementPoRevision(values.poNumber, poMasterData);
             const grandTotal = calculateGrandTotal(
                 values.indents.map((indent) => {
                     // Precise match using searialNumber if available
@@ -692,7 +692,7 @@ export default () => {
             }
 
             // Also save to PO HISTORY table for historical tracking (Supabase Only)
-            const historyRows: PoHistorySheet[] = values.indents.map((v) => {
+            const historyRows: PoHistoryData[] = values.indents.map((v) => {
                 const indent = findIndentWithFallback(v.indentNumber, v.searialNumber)!;
 
                 return {
@@ -749,11 +749,11 @@ export default () => {
             toast.success(`Successfully ${mode}d purchase order`);
             form.reset();
             setTimeout(() => {
-                updatePoMasterSheet();
-                updateIndentSheet();
-                updateThreePartyApprovalSheet();
-                updateVendorRateUpdateSheet();
-                updatePoHistorySheet();
+                updatePoMasterData();
+                updateIndentData();
+                updateThreePartyApprovalData();
+                updateVendorRateUpdateData();
+                updatePoHistoryData();
             }, 1000);
         } catch (e) {
             console.log(e);
@@ -852,7 +852,7 @@ export default () => {
                                                             </FormControl>
                                                             <SelectContent>
                                                                 {filterUniquePoNumbers(
-                                                                    poMasterSheet
+                                                                    poMasterData
                                                                 ).map((i, k) => (
                                                                     <SelectItem
                                                                         key={k}
@@ -985,7 +985,7 @@ export default () => {
                                                                 <SelectContent>
                                                                     {[
                                                                         ...new Map(
-                                                                            indentSheet
+                                                                            indentData
                                                                                 .filter(
                                                                                     (i) =>
                                                                                         i.approvedVendorName !== '' &&

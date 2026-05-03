@@ -1,6 +1,6 @@
 import { Toaster } from '@/components/ui/sonner';
-import { fetchSheet } from '@/lib/fetchers';
-import type { UserPermissions } from '@/types/sheets';
+import { fetchFromDB } from '@/lib/fetchers';
+import type { UserPermissions } from '@/types/database';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface AuthState {
@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const stored = localStorage.getItem('auth');
         if (stored) {
             const { username } = JSON.parse(stored);
-            fetchSheet('USER').then((res) => {
+            fetchFromDB('USER').then((res) => {
                 const user = (res as UserPermissions[]).find((user) => user.username === username);
                 if (user) {
                     setUserPermissions(user);
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     async function login(username: string, password: string) {
-        const users = (await fetchSheet('USER')) as UserPermissions[];
+        const users = (await fetchFromDB('USER')) as UserPermissions[];
         const user = users.find((user) => user.username === username && user.password === password);
         if (user === undefined) {
             return false;

@@ -1,8 +1,8 @@
 import { Eye, EyeClosed, Pencil, ShieldUser, Trash, UserPlus, Lock, Shield, Layout, ClipboardList, ShoppingCart, Truck, Package, Key } from 'lucide-react';
 import Heading from '../element/Heading';
 import { useEffect, useState } from 'react';
-import { fetchSheet, postToSheet } from '@/lib/fetchers';
-import { allPermissionKeys, type UserPermissions } from '@/types/sheets';
+import { fetchFromDB, postToDB } from '@/lib/fetchers';
+import { allPermissionKeys, type UserPermissions } from '@/types/database';
 import type { ColumnDef } from '@tanstack/react-table';
 import DataTable from '../element/DataTable';
 import { Button } from '../ui/button';
@@ -90,7 +90,7 @@ export default () => {
 
     function fetchUser() {
         setDataLoading(true);
-        fetchSheet('USER').then((res) => {
+        fetchFromDB('USER').then((res) => {
             setTableData(
                 (res as any[]).map((user) => {
                     const permissionKeys = allPermissionKeys.filter(
@@ -176,7 +176,7 @@ export default () => {
                             disabled={user.username === 'admin'}
                             onClick={async () => {
                                 if (confirm(`Delete ${user.name}?`)) {
-                                    await postToSheet([{ id: user.id }], 'delete', 'USER');
+                                    await postToDB([{ id: user.id }], 'delete', 'USER');
                                     fetchUser();
                                 }
                             }}
@@ -239,7 +239,7 @@ export default () => {
                 row[perm] = value.permissions.includes(perm);
             });
 
-            await postToSheet([row], isEdit ? 'update' : 'insert', 'USER');
+            await postToDB([row], isEdit ? 'update' : 'insert', 'USER');
 
             toast.success(isEdit ? `✅ ${value.name} updated successfully` : `✅ ${value.name} created successfully`);
             setOpenDialog(false);

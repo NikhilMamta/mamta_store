@@ -10,7 +10,7 @@ import {
     DialogTrigger,
 } from '../ui/dialog';
 import type { ColumnDef, Row } from '@tanstack/react-table';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { Button } from '../ui/button';
 import DataTable from '../element/DataTable';
 import { z } from 'zod';
@@ -20,7 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
 import { Input } from '../ui/input';
 import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
-import { postToSheet, uploadFileToSupabase } from '@/lib/fetchers';
+import { postToDB, uploadFileToSupabase } from '@/lib/fetchers';
 import { generateStoreOutSlip } from '@/lib/pdfGenerator';
 import { PackageCheck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -68,7 +68,7 @@ interface GroupedStoreOutData {
 }
 
 export default () => {
-    const { storeOutApprovalSheet, storeOutSheet, indentSheet, poHistorySheet, indentLoading, updateStoreOutApprovalSheet, storeOutApprovalLoading, storeOutLoading } = useSheets();
+    const { storeOutApprovalData, storeOutData, indentData, poHistoryData, indentLoading, updateStoreOutApprovalData, storeOutApprovalLoading, storeOutLoading } = useDatabase();
     const { user } = useAuth();
     const [selectedGroup, setSelectedGroup] = useState<GroupedStoreOutData | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutData | null>(null);
@@ -77,11 +77,11 @@ export default () => {
     const [loading, setLoading] = useState(false);
 
     const mapRowToTableData = (row: any): StoreOutTableData => {
-        // Smarter lookup for missing data from indentSheet
+        // Smarter lookup for missing data from indentData
         // Prioritize indentNumber as the link, then issueNo
         const lookupId = (row.indentNumber || row.issueNo || '').split(/[_/]/)[0].toLowerCase();
         
-        const indentDetail = indentSheet?.find(i => {
+        const indentDetail = indentData?.find(i => {
             if (row.searialNumber && i.searialNumber) {
                 return String(i.searialNumber) === String(row.searialNumber);
             }
@@ -111,9 +111,9 @@ export default () => {
     };
 
     useEffect(() => {
-        if (!storeOutApprovalSheet) return;
+        if (!storeOutApprovalData) return;
 
-        const allItems = storeOutApprovalSheet.map(mapRowToTableData);
+        const allItems = storeOutApprovalData.map(mapRowToTableData);
         const pendingItems = allItems.filter((row) => row.status?.toLowerCase() === 'pending');
         const historyItems = allItems.filter((row) => row.status?.toLowerCase() === 'approved' || row.status?.toLowerCase() === 'rejected');
         
@@ -137,7 +137,7 @@ export default () => {
 
         setTableData(Object.values(groupItems(pendingItems)).reverse());
         setHistoryData(Object.values(groupItems(historyItems)).reverse());
-    }, [storeOutApprovalSheet]);
+    }, [storeOutApprovalData]);
 
     const onDownloadClick = async () => {
         setLoading(true);
@@ -279,7 +279,7 @@ export default () => {
                                     items={selectedGroup.items}
                                     onSuccess={() => {
                                         setSelectedGroup(null);
-                                        setTimeout(() => updateStoreOutApprovalSheet(), 1000);
+                                        setTimeout(() => updateStoreOutApprovalData(), 1000);
                                     }}
                                 />
                             </div>
@@ -330,7 +330,7 @@ export default () => {
 };
 
 const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[], onSuccess: () => void }) => {
-    const { storeOutSheet } = useSheets();
+    const { storeOutData } = useDatabase();
     const schema = z.object({
         approvals: z.array(z.object({
             searialNumber: z.union([z.string(), z.number()]),
@@ -387,7 +387,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                 qty: appr.approveQty,
             }));
 
-            await postToSheet(updatePayload, 'update', 'STORE_OUT_REQUEST');
+            await postToDB(updatePayload, 'update', 'STORE_OUT_REQUEST');
 
             // 2. Insert into store_out_approval table for the final Store Out step
             // Only insert if the status was Approved
@@ -402,7 +402,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                     timestamp: new Date().toISOString(),
                     delay: 0
                 }));
-                await postToSheet(insertPayload, 'insert', 'STORE_OUT_APPROVAL');
+                await postToDB(insertPayload, 'insert', 'STORE_OUT_APPROVAL');
             }
             
             toast.success(`Approved ${items.length} items and generated slip`);

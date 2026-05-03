@@ -1,20 +1,20 @@
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 import DataTable from '../element/DataTable';
 import { useEffect, useState } from 'react';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { DownloadOutlined } from "@ant-design/icons";
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
-import { postToSheet } from '@/lib/fetchers';
+import { postToDB } from '@/lib/fetchers';
 import { toast } from 'sonner';
 import { PuffLoader as Loader } from 'react-spinners';
 import { ClipboardList, PenSquare, Search } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import Heading from '../element/Heading';
-import type { IndentSheet } from '@/types';
+import type { IndentData } from '@/types';
 
 interface AllIndentTableData {
     id: string;
@@ -36,7 +36,7 @@ interface AllIndentTableData {
 }
 
 export default () => {
-    const { indentSheet, indentLoading, updateIndentSheet, masterSheet: options } = useSheets();
+    const { indentData, indentLoading, updateIndentData, masterData: options } = useDatabase();
     const { user } = useAuth();
 
     const [tableData, setTableData] = useState<AllIndentTableData[]>([]);
@@ -49,17 +49,12 @@ export default () => {
     const [searchTermProduct, setSearchTermProduct] = useState('');
 
     useEffect(() => {
-        console.log('Original indentSheet:', indentSheet); // pehle yeh dekho data kya hai
+        console.log('Original indent database data:', indentData);
 
         setTableData(
-            indentSheet
-                .map((sheet, index) => {
-                    console.log(`Row ${index}:`, {
-                        timestamp: sheet.timestamp,
-                        vendorType: sheet.vendorType,
-                        vendorTypeType: typeof sheet.vendorType
-                    }); // har row ka vendorType check karo
-                    return { sheet, originalIndex: index };
+            indentData
+                .map((sheet) => {
+                    return { sheet };
                 })
                 .filter(({ sheet }) => {
                     const hasTimestamp = !!sheet.timestamp;
@@ -67,8 +62,8 @@ export default () => {
                     console.log('Filter check:', { hasTimestamp, isactual4Null, actual4: sheet.actual4 });
                     return hasTimestamp && isactual4Null;
                 })
-                .map(({ sheet, originalIndex }) => ({
-                    id: `${sheet.indentNumber}_${originalIndex}`,
+                .map(({ sheet }) => ({
+                    id: String(sheet.id!),
                     timestamp: formatDate(new Date(sheet.timestamp)),
                     indentNumber: sheet.indentNumber,
                     indenterName: sheet.indenterName,
@@ -87,7 +82,7 @@ export default () => {
                 }))
                 .reverse()
         );
-    }, [indentSheet]);
+    }, [indentData]);
     const handleRowSelect = (id: string, checked: boolean) => {
         setSelectedRows(prev => {
             const newSet = new Set(prev);
@@ -153,14 +148,7 @@ export default () => {
             const updatesToProcess = Array.from(selectedRows)
                 .map(id => {
                     const update = bulkUpdates.get(id);
-                    // Try to match by searialNumber first, then use original logic
-                    const originalSheet = indentSheet.find(s => {
-                        const updateWithSerial = bulkUpdates.get(id);
-                        if (updateWithSerial && updateWithSerial.searialNumber) {
-                            return String(s.searialNumber) === String(updateWithSerial.searialNumber);
-                        }
-                        return `${s.indentNumber}_${indentSheet.indexOf(s)}` === id;
-                    });
+                    const originalSheet = indentData.find(s => s.id === Number(id));
 
                     if (!originalSheet || !update) return null;
 
@@ -175,7 +163,7 @@ export default () => {
                     const formattedTimestamp = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 
                     return {
-                        rowIndex: (originalSheet as any).rowIndex,
+                        id: originalSheet.id,
                         indentNumber: originalSheet.indentNumber,
                         indenterName: update.indenterName || originalSheet.indenterName,
                         indentApprovedBy: update.indentApproveBy || originalSheet.indentApprovedBy,
@@ -193,13 +181,13 @@ export default () => {
                 .filter((item): item is NonNullable<typeof item> => item !== null);
 
             if (updatesToProcess.length > 0) {
-                await postToSheet(updatesToProcess, 'update');
+                await postToDB(updatesToProcess, 'update');
                 toast.success(`Updated ${updatesToProcess.length} indents successfully`);
 
                 setSelectedRows(new Set());
                 setBulkUpdates(new Map());
 
-                setTimeout(() => updateIndentSheet(), 1000);
+                setTimeout(() => updateIndentData(), 1000);
             }
         } catch (error) {
             toast.error('Failed to update indents');

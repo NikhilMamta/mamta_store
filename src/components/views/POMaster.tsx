@@ -1,6 +1,6 @@
 import { ListTodo } from 'lucide-react';
 import Heading from '../element/Heading';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import { useEffect, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDate } from '@/lib/utils';
@@ -62,18 +62,18 @@ const parseGSTPercent = (value: any): number => {
 };
 
 export default () => {
-    const { poMasterSheet, poMasterLoading } = useSheets();
+    const { poMasterData, poMasterLoading } = useDatabase();
 
     const [tableData, setTableData] = useState<PendingIndentsData[]>([]);
 
     // DEBUG: Log the sheet data to see structure
     useEffect(() => {
-        if (poMasterSheet && poMasterSheet.length > 0) {
-            console.log('DEBUG: First row of poMasterSheet:', poMasterSheet[0]);
-            console.log('DEBUG: All keys in first row:', Object.keys(poMasterSheet[0]));
+        if (poMasterData && poMasterData.length > 0) {
+            console.log('DEBUG: First row of poMasterData:', poMasterData[0]);
+            console.log('DEBUG: All keys in first row:', Object.keys(poMasterData[0]));
 
             // Check for different possible GST property names
-            const firstRow = poMasterSheet[0];
+            const firstRow = poMasterData[0];
             console.log('DEBUG: GST related properties:');
             Object.keys(firstRow).forEach(key => {
                 if (key.toLowerCase().includes('gst')) {
@@ -81,13 +81,13 @@ export default () => {
                 }
             });
         }
-    }, [poMasterSheet]);
+    }, [poMasterData]);
 
     // Fetching table data from PO MASTER sheet (Sheet ID: 10y1LM5kG9blQgML5W5K0E9sb7p8AKmFdCtbWyGL8QLM)
     useEffect(() => {
-        if (poMasterSheet && poMasterSheet.length > 0) {
+        if (poMasterData && poMasterData.length > 0) {
             setTableData(
-                poMasterSheet
+                poMasterData
                     // Filter for pending POs - adjust this condition based on your pending criteria
                     .filter(() => {
                         // Example: You can add filtering logic here if needed
@@ -133,7 +133,7 @@ export default () => {
                     .reverse()
             );
         }
-    }, [poMasterSheet]);
+    }, [poMasterData]);
 
     // Creating table columns based on PO MASTER sheet structure (Columns A-T)
     const columns: ColumnDef<PendingIndentsData>[] = [

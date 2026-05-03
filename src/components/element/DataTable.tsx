@@ -86,7 +86,7 @@ export default function DataTable<TData, TValue>({
                 className={cn('rounded-sm border h-[74dvh] w-full', className)}
             >
                 <Table>
-                    <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
+                    <TableHeader className="sticky top-0 z-[5] bg-primary text-primary-foreground">
                         {table.getHeaderGroups().map((headerGroup) => (
                             <TableRow key={headerGroup.id}>
                                 {headerGroup.headers.map((header) => {
@@ -123,11 +123,14 @@ export default function DataTable<TData, TValue>({
                                 <TableRow
                                     key={row.id}
                                     data-state={row.getIsSelected() && 'selected'}
-                                    className={cn('p-1', onRowClick && 'cursor-pointer hover:bg-muted/50')}
+                                    className={cn(onRowClick && 'cursor-pointer hover:bg-muted/50')}
                                     onClick={() => onRowClick?.(row.original)}
                                 >
                                     {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
+                                        <TableCell 
+                                            key={cell.id} 
+                                            style={{ width: cell.column.getSize() }}
+                                        >
                                             {flexRender(
                                                 cell.column.columnDef.cell,
                                                 cell.getContext()

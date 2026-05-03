@@ -2,8 +2,8 @@
 
 import { Package2, Trash2 } from 'lucide-react';
 import Heading from '../element/Heading';
-import { useSheets } from '@/context/SheetsContext';
-import { postToSheet } from '@/lib/fetchers';
+import { useDatabase } from '@/context/DatabaseContext';
+import { postToDB } from '@/lib/fetchers';
 import { useEffect, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDate } from '@/lib/utils';
@@ -20,7 +20,7 @@ interface HistoryData {
     totalAmount: number;
     status: 'Revised' | 'Not Recieved' | 'Recieved';
     indentNumber: string;
-    rowIndex: number;
+    id: number;
     product: string;
     quantity: number;
     rate: number;
@@ -28,7 +28,7 @@ interface HistoryData {
 
 
 export default () => {
-    const { poHistoryLoading, poHistorySheet, indentSheet, receivedSheet } = useSheets();
+    const { poHistoryLoading, poHistoryData, indentData, receivedData } = useDatabase();
 
 
     const [historyData, setHistoryData] = useState<HistoryData[]>([]);
@@ -36,10 +36,10 @@ export default () => {
 
     // Fetching table data
     useEffect(() => {
-        if (!poHistorySheet) return;
+        if (!poHistoryData) return;
 
         // map all rows without grouping to show every product individually
-        const allRows: HistoryData[] = poHistorySheet.map((row, index) => ({
+        const allRows: HistoryData[] = poHistoryData.map((row, index) => ({
             approvedBy: row.approvedBy || '',
             poCopy: row.pdf || '',
             poNumber: row.poNumber || '',
@@ -47,9 +47,9 @@ export default () => {
             totalAmount: row.totalPoAmount || 0,
             vendorName: row.partyName || '',
             indentNumber: row.internalCode || row.indentNumber || '',
-            rowIndex: (row as any).id || index, // Use database ID or index
-            status: (indentSheet.map((s) => s.poNumber).includes(row.poNumber || '')
-                ? receivedSheet.map((r) => r.poNumber).includes(row.poNumber || '')
+            id: row.id || index, // Use database ID or index
+            status: (indentData.map((s) => s.poNumber).includes(row.poNumber || '')
+                ? receivedData.map((r) => r.poNumber).includes(row.poNumber || '')
                     ? 'Recieved'
                     : 'Not Recieved'
                 : 'Revised') as 'Revised' | 'Not Recieved' | 'Recieved',
@@ -59,18 +59,18 @@ export default () => {
         }));
 
         setHistoryData([...allRows].reverse());
-    }, [poHistorySheet, indentSheet, receivedSheet]);
+    }, [poHistoryData, indentData, receivedData]);
 
 
     // Delete handler function using Apps Script
-    const handleDelete = async (indentNumber: string, rowIndex: number) => {
+    const handleDelete = async (indentNumber: string, id: number) => {
         if (!indentNumber) {
             alert('Indent Number not found');
             return;
         }
 
-        if (!rowIndex) {
-            alert('Row index not found');
+        if (!id) {
+            alert('ID not found');
             return;
         }
 
@@ -81,9 +81,9 @@ export default () => {
         if (!confirmDelete) return;
 
         try {
-            console.log('Deleting row:', { indentNumber, rowIndex });
+            console.log('Deleting row:', { indentNumber, id });
             
-            const result = await postToSheet([{ rowIndex: rowIndex }], 'delete', 'PO MASTER');
+            const result = await postToDB([{ id: id }], 'delete', 'PO MASTER');
 
             if (result.success) {
                 alert('Row deleted successfully');
@@ -158,7 +158,7 @@ export default () => {
             cell: ({ row }) => {
                 return (
                     <button 
-                        onClick={() => handleDelete(row.original.indentNumber, row.original.rowIndex)}
+                        onClick={() => handleDelete(row.original.indentNumber, row.original.id)}
                         className="text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
                         title="Delete row"
                     >

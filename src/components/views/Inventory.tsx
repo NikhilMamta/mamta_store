@@ -2,7 +2,7 @@ import Heading from '../element/Heading';
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pill } from '../ui/pill';
 import DataTable from '../element/DataTable';
@@ -27,7 +27,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { postToSheet } from '@/lib/fetchers';
+import { postToDB } from '@/lib/fetchers';
 import { toast } from 'sonner';
 
 interface InventoryTable {
@@ -47,17 +47,17 @@ interface InventoryTable {
 
 export default () => {
     const { 
-        inventorySheet, 
+        inventoryData, 
         inventoryLoading, 
-        masterSheet, 
+        masterData, 
         updateAll, 
-        indentSheet,
-        approvedIndentSheet,
-        receivedSheet,
-        storeOutSheet,
-        storeOutApprovalSheet,
-        vendorRateUpdateSheet
-    } = useSheets();
+        indentData,
+        approvedIndentData,
+        receivedData,
+        storeOutData,
+        storeOutApprovalData,
+        vendorRateUpdateData
+    } = useDatabase();
  
     const navigate = useNavigate();
 
@@ -72,18 +72,18 @@ export default () => {
     });
  
     useEffect(() => {
-        // 1. Create a mapping of indentNumber -> itemName from indentSheet and storeOutApprovalSheet
+        // 1. Create a mapping of indentNumber -> itemName from indent database and storeOutApproval data
         const indentToItem: Record<string, string> = {};
         
         // Add Purchase indents
-        indentSheet.forEach(row => {
+        indentData.forEach(row => {
             if (row.indentNumber && row.productName) {
                 indentToItem[row.indentNumber] = row.productName.trim().toLowerCase();
             }
         });
 
         // Add Store Out requests
-        storeOutApprovalSheet.forEach(row => {
+        storeOutApprovalData.forEach(row => {
             if ((row.indentNumber || row.issueNo) && row.productName) {
                 const id = row.indentNumber || row.issueNo;
                 indentToItem[id] = row.productName.trim().toLowerCase();
@@ -92,7 +92,7 @@ export default () => {
 
         // 2. Calculate dynamic totals by Item Name (Normalized)
         const indentTotals: Record<string, number> = {};
-        indentSheet.forEach(curr => {
+        indentData.forEach(curr => {
             const name = curr.productName?.trim().toLowerCase();
             if (name) {
                 indentTotals[name] = (indentTotals[name] || 0) + (Number(curr.quantity) || 0);
@@ -100,7 +100,7 @@ export default () => {
         });
 
         const approvedTotals: Record<string, number> = {};
-        approvedIndentSheet.forEach(curr => {
+        approvedIndentData.forEach(curr => {
             const name = indentToItem[curr.indentNumber];
             if (name) {
                 approvedTotals[name] = (approvedTotals[name] || 0) + (Number(curr.approvedQuantity) || 0);
@@ -108,7 +108,7 @@ export default () => {
         });
 
         const purchaseTotals: Record<string, number> = {};
-        receivedSheet.forEach(curr => {
+        receivedData.forEach(curr => {
             const name = indentToItem[curr.indentNumber];
             if (name) {
                 purchaseTotals[name] = (purchaseTotals[name] || 0) + (Number(curr.receivedQuantity) || 0);
@@ -116,7 +116,7 @@ export default () => {
         });
 
         const outTotals: Record<string, number> = {};
-        storeOutSheet.forEach(curr => {
+        storeOutData.forEach(curr => {
             const id = curr.indentNumber || curr.issueNo;
             const name = (curr.productName || (id ? indentToItem[id] : '') || '').trim().toLowerCase();
             if (name) {
@@ -125,7 +125,7 @@ export default () => {
         });
 
         const latestRates: Record<string, number> = {};
-        const sortedVendorUpdates = [...vendorRateUpdateSheet].sort((a, b) => 
+        const sortedVendorUpdates = [...vendorRateUpdateData].sort((a, b) => 
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         );
         sortedVendorUpdates.forEach(curr => {
@@ -135,15 +135,15 @@ export default () => {
             }
         });
 
-        // 3. Group the inventorySheet items uniquely by name
+        // 3. Group the inventory database items uniquely by name
         const uniqueInventory: Record<string, any> = {};
-        inventorySheet.forEach(i => {
+        inventoryData.forEach(i => {
             const name = i.itemName?.trim().toLowerCase();
             if (!name) return;
             if (!uniqueInventory[name]) {
                 uniqueInventory[name] = { ...i, opening: Number(i.opening || 0) };
             } else {
-                // If duplicate item exists in inventory sheet, sum the opening
+                // If duplicate item exists in inventory database, sum the opening
                 uniqueInventory[name].opening += Number(i.opening || 0);
             }
         });
@@ -178,7 +178,7 @@ export default () => {
             })
             .reverse()
         );
-    }, [inventorySheet, indentSheet, approvedIndentSheet, receivedSheet, storeOutSheet, storeOutApprovalSheet, vendorRateUpdateSheet]);
+    }, [inventoryData, indentData, approvedIndentData, receivedData, storeOutData, storeOutApprovalData, vendorRateUpdateData]);
 
     const columns: ColumnDef<InventoryTable>[] = [
         {
@@ -232,11 +232,11 @@ export default () => {
     ];
  
     // Prepare options for ComboBox
-    const allItems = Object.entries(masterSheet?.groupHeads || {}).flatMap(([group, items]) =>
+    const allItems = Object.entries(masterData?.groupHeads || {}).flatMap(([group, items]) =>
         items.map((item) => ({ label: item, value: item, group }))
     );
  
-    const uomOptions = masterSheet?.units || [];
+    const uomOptions = masterData?.units || [];
  
     const handleItemChange = (val: string[]) => {
         const selectedItem = val[0] || '';
@@ -257,7 +257,7 @@ export default () => {
  
         setIsSubmitting(true);
         try {
-            await postToSheet(
+            await postToDB(
                 [
                     {
                         groupHead: formData.groupHead,                    // Col A

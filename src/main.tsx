@@ -10,7 +10,7 @@ import CreateIndent from './components/views/CreateIndent';
 import Dashboard from './components/views/Dashboard';
 import App from './App';
 import ApproveIndent from '@/components/views/ApproveIndent';
-import { SheetsProvider } from './context/SheetsContext';
+import { DatabaseProvider } from './context/DatabaseContext';
 import VendorUpdate from './components/views/VendorUpdate';
 import RateApproval from './components/views/RateApproval';
 import ReceiveItems from './components/views/ReceiveItems';
@@ -42,9 +42,8 @@ import {
     Database,
 
 } from 'lucide-react';
-import type { UserPermissions } from './types/sheets';
+import type { UserPermissions } from './types/database';
 import Administration from './components/views/Administration';
-import Loading from './components/views/Loading';
 import CreatePO from './components/views/CreatePO';
 import PendingIndents from './components/views/PendingIndents';
 import Order from './components/views/Order';
@@ -54,7 +53,7 @@ import POApproval from './components/views/POApproval';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { loggedIn, loading } = useAuth();
-    if (loading) return <Loading />;
+    if (loading) return null;
     return loggedIn ? children : <Navigate to="/login" />;
 }
 
@@ -335,9 +334,9 @@ root.render(
                         path="/"
                         element={
                             <ProtectedRoute>
-                                <SheetsProvider>
+                                <DatabaseProvider>
                                     <App routes={routes} />
-                                </SheetsProvider>
+                                </DatabaseProvider>
                             </ProtectedRoute>
                         }
                     >

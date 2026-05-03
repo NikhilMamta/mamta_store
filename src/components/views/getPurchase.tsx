@@ -1,5 +1,5 @@
 
-import { useSheets } from '@/context/SheetsContext';
+import { useDatabase } from '@/context/DatabaseContext';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { useEffect, useState } from 'react';
 import DataTable from '../element/DataTable';
@@ -15,7 +15,7 @@ import {
     DialogFooter,
     DialogClose,
 } from '../ui/dialog';
-import { postToSheet, uploadFile } from '@/lib/fetchers';
+import { postToDB, uploadFileToSupabase } from '@/lib/fetchers';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -76,6 +76,7 @@ interface GetPurchaseData {
 
 
 interface HistoryData {
+    id?: number;
     indentNo: string;
     indenter: string;
     department: string;
@@ -118,7 +119,7 @@ interface EditedData {
 
 
 export default () => {
-    const { indentSheet, indentLoading, updateIndentSheet } = useSheets();
+    const { indentData, indentLoading, updateIndentData } = useDatabase();
     const { user } = useAuth();
 
 
@@ -146,7 +147,7 @@ export default () => {
         // Unique PO numbers ke liye Set use karo
         const seenPoNumbers = new Set();
 
-        const uniqueTableData = indentSheet
+        const uniqueTableData = indentData
             .filter((sheet) => sheet.planned7 !== '' && sheet.actual7 == '')
             .filter((sheet) => {
                 // Agar PO number pehle se nahi dekha hai toh include karo
@@ -157,6 +158,7 @@ export default () => {
                 return true;
             })
             .map((sheet) => ({
+                id: sheet.id,
                 indentNo: sheet.indentNumber,
                 indenter: sheet.indenterName,
                 department: sheet.department,
@@ -173,9 +175,10 @@ export default () => {
 
         // History data (yahan unique nahi karna kyunki history me sab dikhna chahiye)
         setHistoryData(
-            indentSheet
+            indentData
                 .filter((sheet) => sheet.planned7 !== '' && sheet.actual7 !== '')
                 .map((sheet) => ({
+                    id: sheet.id,
                     date: formatDate(new Date(sheet.actual5)),
                     indentNo: sheet.indentNumber,
                     indenter: sheet.indenterName,
@@ -189,16 +192,17 @@ export default () => {
                 }))
                 .sort((a, b) => b.indentNo.localeCompare(a.indentNo))
         );
-    }, [indentSheet]);
+    }, [indentData]);
 
     // Fetch related products when dialog opens
     useEffect(() => {
         if (selectedIndent && openDialog) {
-            const matchingRows = indentSheet.filter(
+            const matchingRows = indentData.filter(
                 (sheet) => sheet.poNumber === selectedIndent.poNumber
             );
 
             const products = matchingRows.map((sheet) => ({
+                id: sheet.id,
                 indentNo: sheet.indentNumber,
                 product: sheet.productName,
                 quantity: sheet.approvedQuantity,
@@ -214,14 +218,14 @@ export default () => {
             const ratesMap: { [key: string]: number } = {};
             const qtyMap: { [key: string]: number } = {};
             products.forEach(p => {
-                const key = p.searialNumber ? String(p.searialNumber) : `${p.indentNo}-${p.product}`;
+                const key = p.id ? String(p.id) : (p.searialNumber ? String(p.searialNumber) : `${p.indentNo}-${p.product}`);
                 ratesMap[key] = p.rate;
                 qtyMap[key] = p.qty || p.quantity;
             });
             setProductRates(ratesMap);
             setProductQty(qtyMap);
         }
-    }, [selectedIndent, openDialog, indentSheet]);
+    }, [selectedIndent, openDialog, indentData]);
     const handleQtyChange = (key: string, value: string) => {
         setProductQty((prev) => ({
             ...prev,
@@ -305,7 +309,7 @@ export default () => {
         {
             header: 'Action',
             cell: ({ row }) => {
-                const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
+                const rowKey = row.original.id ? String(row.original.id) : (row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`);
                 const isEditing = editingRow === rowKey;
                 return (
                     <div className="flex gap-2">
@@ -316,7 +320,8 @@ export default () => {
                                     size="sm"
                                     onClick={async () => {
                                         try {
-                                            const sheetRow = indentSheet.find(s =>
+                                            const sheetRow = indentData.find(s =>
+                                                s.id === row.original.id ||
                                                 s.searialNumber === row.original.searialNumber ||
                                                 (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                                             );
@@ -327,13 +332,13 @@ export default () => {
 
                                                 // agar naya file select hua hai to upload karo
                                                 if (currentEdit?.photoOfBillFile) {
-                                                    photoUrl = await uploadFile(
+                                                    photoUrl = await uploadFileToSupabase(
                                                         currentEdit.photoOfBillFile,
-                                                        import.meta.env.VITE_BILL_PHOTO_FOLDER || 'bill-photos'
+                                                        'bill'
                                                     );
                                                 }
 
-                                                await postToSheet(
+                                                await postToDB(
                                                     [
                                                         {
                                                             ...sheetRow, // Spread existing row data
@@ -355,7 +360,7 @@ export default () => {
                                                 );
 
                                                 toast.success('Updated successfully');
-                                                setTimeout(() => updateIndentSheet(), 1000);
+                                                setTimeout(() => updateIndentData(), 1000);
                                             }
                                         } catch {
                                             toast.error('Failed to update');
@@ -392,7 +397,8 @@ export default () => {
                                 size="sm"
                                 onClick={() => {
                                     setEditingRow(rowKey);
-                                    const sheetRow = indentSheet.find(s =>
+                                    const sheetRow = indentData.find(s =>
+                                        s.id === row.original.id ||
                                         s.searialNumber === row.original.searialNumber ||
                                         (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                                     );
@@ -531,7 +537,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -560,7 +566,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -590,7 +596,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -619,7 +625,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -648,7 +654,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -678,7 +684,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -708,7 +714,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -737,7 +743,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -767,7 +773,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -830,7 +836,7 @@ export default () => {
             cell: ({ row }) => {
                 const rowKey = row.original.searialNumber ? String(row.original.searialNumber) : `${row.original.indentNo}-${row.original.product}`;
                 const isEditing = editingRow === rowKey;
-                const sheetRow = indentSheet.find(s =>
+                const sheetRow = indentData.find(s =>
                     s.searialNumber === row.original.searialNumber ||
                     (s.indentNumber === row.original.indentNo && s.productName === row.original.product)
                 );
@@ -906,20 +912,23 @@ export default () => {
         try {
             let photoUrl: string | undefined;
             if (values.photoOfBill) {
-                photoUrl = await uploadFile(
-                    values.photoOfBill,
-                    import.meta.env.VITE_BILL_PHOTO_FOLDER || 'bill-photos'
-                );
+                try {
+                    photoUrl = await uploadFileToSupabase(values.photoOfBill, 'bill');
+                } catch (err) {
+                    console.error("Supabase upload error:", err);
+                    toast.error("Failed to upload bill photo");
+                    return;
+                }
             }
 
             // Update ALL rows with matching PO Number
-            await postToSheet(
-                indentSheet
+            await postToDB(
+                indentData
                     .filter((s) => s.poNumber === selectedIndent?.poNumber)
                     .map((prev) => {
                         const key = prev.searialNumber ? String(prev.searialNumber) : `${prev.indentNumber}-${prev.productName}`;
                         return {
-                            rowIndex: (prev as any).rowIndex,
+                            id: prev.id,
                             indentNumber: prev.indentNumber,
                             actual7: formatDate(new Date()),
                             billStatus: values.billStatus,
@@ -944,7 +953,7 @@ export default () => {
             form.reset();
             setProductRates({});
             setProductQty({}); // Add this line to reset qty
-            setTimeout(() => updateIndentSheet(), 1000);
+            setTimeout(() => updateIndentData(), 1000);
         } catch {
             toast.error('Failed to update purchase details');
         }

@@ -47,13 +47,13 @@ export interface Options {
     groups: GroupOptions;
 }
 
-// Type for the `MasterSheet` data (assuming it's external)
-export interface MasterSheet {
+// Type for the `MasterData` data (assuming it's external)
+export interface MasterData {
     department: string[];
     groupHead: string[];
     itemName: string[];
     uom: string[];
-    // Add other fields from your MasterSheet if they exist
+    // Add other fields from your MasterData if they exist
 }
 
 // Props interface for the ProductItem component
