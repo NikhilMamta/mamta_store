@@ -21,6 +21,7 @@ import { Input } from '../ui/input';
 const statuses = ['Pending', 'Reject', 'Three Party', 'Regular'];
 
 interface ApproveTableData {
+    id?: number;
     rowIndex: number;
     indentNo: string;
     indenter: string;
@@ -74,6 +75,7 @@ export default () => {
                     (sheet) => sheet.status?.trim().toLowerCase() === 'pending' && sheet.indentType?.trim() === 'Purchase'
                 )
                 .map((sheet, idx) => ({
+                    id: sheet.id,
                     rowIndex: (sheet as any).rowIndex ?? idx,
                     indentNo: sheet.indentNumber,
                     indenter: sheet.indenterName,
@@ -240,8 +242,6 @@ export default () => {
                     indentUpdates.push({
                         id: originalSheet.id, // CRITICAL: Need ID for Supabase Update
                         indentNumber: originalSheet.indentNumber,
-                        vendorType: vendorType,
-                        approvedQuantity: update.quantity !== undefined ? update.quantity : originalSheet.quantity,
                         specifications: update.specifications !== undefined ? update.specifications : originalSheet.specifications,
                         status: 'Approved', // Move to History
                     });
@@ -358,6 +358,7 @@ export default () => {
 
                 await postToSheet(
                     rowsToUpdate.map((prev) => ({
+                        id: prev.id,
                         rowIndex: (prev as any).rowIndex,
                         indentNumber: prev.indentNumber,
                         productName: newProductName!,
@@ -374,6 +375,7 @@ export default () => {
                         .filter((s) => (s as any).rowIndex === rowIndex)
                         .map((prev) => {
                             return {
+                                id: prev.id,
                                 rowIndex: (prev as any).rowIndex,
                                 indentNumber: prev.indentNumber,
                                 approvedQuantity: editValues.approvedQuantity !== undefined ? editValues.approvedQuantity : prev.approvedQuantity,
@@ -449,12 +451,10 @@ export default () => {
 
             // 1. Update INDENT table
             await postToSheet([{
+                id: indent.id,
                 rowIndex: indent.rowIndex,
                 indentNumber: indent.indentNo,
-                vendorType: update.vendorType,
-                approvedQuantity: update.quantity !== undefined ? update.quantity : indent.quantity,
                 status: 'Approved',
-                actual1: formattedDate,
             }], 'update', 'INDENT');
 
             // 2. Insert into APPROVED INDENT table

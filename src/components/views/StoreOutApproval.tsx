@@ -331,6 +331,7 @@ export default () => {
 
 const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[], onSuccess: () => void }) => {
     const { storeOutSheet } = useSheets();
+    const { user } = useAuth();
     const schema = z.object({
         approvals: z.array(z.object({
             searialNumber: z.union([z.string(), z.number()]),
@@ -372,8 +373,8 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                     quantity: appr.approveQty,
                     unit: appr.originalRow.uom || appr.originalRow.unit
                 })),
-                preparedBy: localStorage.getItem('userName') || 'Admin',
-                approvedBy: ''
+                preparedBy: user?.name || 'Admin',
+                approvedBy: 'Store Incharge'
             });
 
             // Upload PDF to Supabase 'slip' bucket

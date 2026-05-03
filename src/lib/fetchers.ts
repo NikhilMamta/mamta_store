@@ -81,17 +81,17 @@ const toSnakeCase = (obj: any): any => {
 
 // Allowed columns for 'indent' table according to user SQL schema
 const INDENT_COLUMNS = [
-    'timestamp', 'indent_number', 'indenter_name', 'department', 
+    'id', 'timestamp', 'indent_number', 'indenter_name', 'department', 
     'area_of_use', 'group_head', 'product_name', 'quantity', 
     'uom', 'specifications', 'indent_approved_by', 'indent_type', 
     'attachment', 'planned_1', 'status', 'actual_2', 'vendor_name_1',
     'rate_1', 'payment_term_1', 'approved_vendor_name', 'approved_rate',
-    'approved_quantity', 'approved_payment_term', 'vendor_name_2', 'rate_2', 'payment_term_2',
+    'approved_payment_term', 'planned2', 'actual_2', 'vendor_name_2', 'rate_2', 'payment_term_2',
     'vendor_name_3', 'rate_3', 'payment_term_3', 'comparison_sheet'
 ];
 
 const APPROVED_INDENT_COLUMNS = [
-    'id', 'timestamp', 'indent_number', 'vendor_type', 'approved_quantity', 'delay', 'planned2', 'status'
+    'id', 'timestamp', 'indent_number', 'vendor_type', 'approved_quantity', 'uom', 'delay', 'planned2', 'status'
 ];
 
 const THREE_PARTY_APPROVAL_COLUMNS = [
@@ -718,19 +718,58 @@ export async function postToSheet(
     if (action === 'insert' || action === 'insertQuotation') {
         result = await supabase.from(tableName).insert(sData);
     } else if (action === 'update') {
-        result = await Promise.all(sData.map((row: any) => 
-            supabase.from(tableName).update(row).match({ [tableName === 'indent' ? 'indent_number' : 'id']: row.id || row.row_index || row.indent_number })
-        ));
+        result = await Promise.all(sData.map((row: any) => {
+            // Priority 1: Use 'id' if explicitly provided in the row
+            if (row.id) {
+                const { id, ...updateData } = row;
+                return supabase.from(tableName).update(updateData).match({ id });
+            }
+            
+            // Priority 2: Use 'indent_number' for 'indent' table or if provided
+            if (tableName === 'indent' || row.indent_number) {
+                const matchVal = row.indent_number || row.row_index;
+                const { indent_number, row_index, ...updateData } = row;
+                return supabase.from(tableName).update(updateData).match({ indent_number: matchVal });
+            }
+
+            // Priority 3: Fallback for other tables
+            const matchVal = row.row_index || row.id;
+            const { row_index, id, ...updateData } = row;
+            return supabase.from(tableName).update(updateData).match({ id: matchVal });
+        }));
     } else if (action === 'delete') {
-        result = await Promise.all(sData.map((row: any) => 
-            supabase.from(tableName).delete().match({ [tableName === 'indent' ? 'indent_number' : 'id']: row.id || row.row_index || row.indent_number })
-        ));
+        result = await Promise.all(sData.map((row: any) => {
+             // Priority 1: Use 'id' if explicitly provided in the row
+             if (row.id) {
+                return supabase.from(tableName).delete().match({ id: row.id });
+            }
+            
+            // Priority 2: Use 'indent_number' for 'indent' table or if provided
+            if (tableName === 'indent' || row.indent_number) {
+                const matchVal = row.indent_number || row.row_index;
+                return supabase.from(tableName).delete().match({ indent_number: matchVal });
+            }
+
+            // Priority 3: Fallback for other tables
+            return supabase.from(tableName).delete().match({ id: row.row_index || row.id });
+        }));
     }
 
-    if (result && 'error' in result && result.error) {
-        console.error(`Supabase error in postToSheet (${action}):`, result.error);
+    // Comprehensive error checking for both single results and arrays of results
+    const hasError = Array.isArray(result) 
+        ? result.some(r => r && r.error)
+        : (result && result.error);
+
+    if (hasError) {
+        const errorDetail = Array.isArray(result) 
+            ? result.find(r => r && r.error)?.error 
+            : result.error;
+            
+        console.error(`Supabase error in postToSheet (${action}):`, errorDetail);
         const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
-        if (!scriptUrl) throw new Error('Supabase failed and GAS fallback is not configured.');
+        if (!scriptUrl) {
+            throw new Error(`Supabase ${action} failed: ${errorDetail?.message || 'Unknown error'}. (GAS fallback not configured)`);
+        }
 
         const form = new FormData();
         form.append('action', action);
