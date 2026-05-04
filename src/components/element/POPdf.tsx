@@ -231,20 +231,20 @@ export interface POPdfProps {
     supplierGstin: string;
     orderNumber: string;
     orderDate: string;
-    quotationNumber: string;
-    quotationDate: string;
-    enqNo: string;
-    enqDate: string;
-    description: string;
+    quotationNumber?: string;
+    quotationDate?: string;
+    enqNo?: string;
+    enqDate?: string;
+    description?: string;
     items: Item[];
     total: number;
     gstAmount: number;
     grandTotal: number;
     terms: string[];
-    preparedBy: string;
-    approvedBy: string;
-    indentBy: string;
-    finalApproved: string;
+    preparedBy?: string;
+    approvedBy?: string;
+    indentBy?: string;
+    finalApproved?: string;
 }
 
 export default ({
@@ -383,7 +383,7 @@ export default ({
                     <View style={styles.divider} />
 
                     <Text style={styles.description}>
-                        {description.split('\n').map((line, index) => (
+                        {(description || '').split('\n').map((line, index) => (
                             <Text key={index}>
                                 {line}
                                 {'\n'}

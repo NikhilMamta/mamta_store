@@ -634,6 +634,7 @@ export default () => {
                 preparedBy: values.preparedBy,
                 approvedBy: values.approvedBy,
                 indentBy: values.indentBy,
+                finalApproved: '',
             };
 
             const blob = await pdf(<POPdf {...pdfProps} />).toBlob();
