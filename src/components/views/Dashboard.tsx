@@ -1,6 +1,5 @@
 import Heading from '../element/Heading';
 import {
-    CalendarIcon,
     ClipboardList,
     LayoutDashboard,
     PackageCheck,
@@ -12,12 +11,6 @@ import { ChartContainer, ChartTooltip, type ChartConfig } from '../ui/chart';
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from 'recharts';
 import { useEffect, useState } from 'react';
 import { useSheets } from '@/context/SheetsContext';
-import DataTable from '../element/DataTable';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Button } from '../ui/button';
-import { format } from 'date-fns';
-import { Calendar } from '../ui/calendar';
-import { ComboBox } from '../ui/combobox';
 import { analyzeData } from '@/lib/filter';
 
 
@@ -64,17 +57,7 @@ export default function UsersTable() {
     const [out, setOut] = useState({ count: 0, quantity: 0 });
     const [alerts, setAlerts] = useState({ lowStock: 0, outOfStock: 0 });
  
-    const [startDate, setStartDate] = useState<Date>();
-    const [endDate, setEndDate] = useState<Date>();
-    const [filteredVendors, setFilteredVendors] = useState<string[]>([]);
-    const [filteredProducts, setFilteredProducts] = useState<string[]>([]);
-    const [allVendors, setAllVendors] = useState<string[]>([]);
-    const [allProducts, setAllProducts] = useState<string[]>([]);
- 
     useEffect(() => {
-        setAllVendors(Array.from(new Set(indentSheet.map((item) => item.approvedVendorName))));
-        setAllProducts(Array.from(new Set(indentSheet.map((item) => item.productName))));
-        
         const {
             topVendors,
             topProducts,
@@ -87,10 +70,10 @@ export default function UsersTable() {
         } = analyzeData(
             { receivedSheet, indentSheet, storeOutSheet },
             {
-                startDate: startDate?.toISOString(),
-                endDate: endDate?.toISOString(),
-                vendors: filteredVendors,
-                products: filteredProducts,
+                startDate: undefined,
+                endDate: undefined,
+                vendors: [],
+                products: [],
             }
         );
  
@@ -116,7 +99,7 @@ export default function UsersTable() {
         });
         setAlerts({ lowStock: low, outOfStock: outStock });
 
-    }, [startDate, endDate, filteredProducts, filteredVendors, indentSheet, receivedSheet, storeOutSheet, inventorySheet]);
+    }, [indentSheet, receivedSheet, storeOutSheet, inventorySheet]);
 
 
 
@@ -133,57 +116,6 @@ export default function UsersTable() {
             </Heading>
 
             <div className="grid gap-3 m-3">
-                <div className="gap-3 grid grid-cols-2 md:grid-cols-4">
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                data-empty={!startDate}
-                                className="data-[empty=true]:text-muted-foreground w-full min-w-0 justify-start text-left font-normal"
-                            >
-                                <CalendarIcon />
-                                {startDate ? (
-                                    format(startDate, 'PPP')
-                                ) : (
-                                    <span>Pick a start date</span>
-                                )}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar mode="single" selected={startDate} onSelect={setStartDate} />
-                        </PopoverContent>
-                    </Popover>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                data-empty={!endDate}
-                                className="data-[empty=true]:text-muted-foreground w-full min-w-0 justify-start text-left font-normal"
-                            >
-                                <CalendarIcon />
-                                {endDate ? format(endDate, 'PPP') : <span>Pick a end date</span>}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar mode="single" selected={endDate} onSelect={setEndDate} />
-                        </PopoverContent>
-                    </Popover>
-                    <ComboBox
-                        multiple
-                        options={allVendors.filter(Boolean).map((v, i) => ({ label: v, value: `vendor-${v}-${i}` }))}
-                        value={filteredVendors}
-                        onChange={setFilteredVendors}
-                        placeholder="Select Vendors"
-                    />
-                    <ComboBox
-                        multiple
-                        options={allProducts.filter(Boolean).map((v, i) => ({ label: v, value: `product-${v}-${i}` }))}
-                        value={filteredProducts}
-                        onChange={setFilteredProducts}
-                        placeholder="Select Products"
-                    />
-                </div>
-
                 <div className="grid md:grid-cols-4 gap-3">
                     <Card className="bg-gradient-to-br from-transparent to-primary/10">
                         <CardContent>

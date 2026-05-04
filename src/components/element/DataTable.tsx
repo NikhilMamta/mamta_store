@@ -30,6 +30,7 @@ interface DataTableProps<TData, TValue> {
     dataLoading?: boolean;
     children?: ReactNode;
     className?: string;
+    tableClassName?: string;
     extraActions?: ReactNode;
     onRowClick?: (row: TData) => void;
 }
@@ -50,6 +51,7 @@ export default function DataTable<TData, TValue>({
     dataLoading,
     children: _children, // <-- underscore avoids TS unused variable error
     className,
+    tableClassName,
     extraActions,
     onRowClick,
 }: DataTableProps<TData, TValue>) {
@@ -82,10 +84,10 @@ export default function DataTable<TData, TValue>({
                 {extraActions && <div className="ml-auto">{extraActions}</div>}
             </div>
 
-            <ScrollArea
-                className={cn('rounded-sm border h-[74dvh] w-full', className)}
+            <div
+                className={cn('rounded-sm border overflow-auto max-h-[74dvh] w-full', className)}
             >
-                <Table>
+                <Table className={tableClassName}>
                     <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                         {table.getHeaderGroups().map((headerGroup) => (
                             <TableRow key={headerGroup.id}>
@@ -153,7 +155,7 @@ export default function DataTable<TData, TValue>({
                         )}
                     </TableBody>
                 </Table>
-            </ScrollArea>
+            </div>
         </div>
     );
 }

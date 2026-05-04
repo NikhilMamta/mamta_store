@@ -80,7 +80,7 @@ export default () => {
         // Smarter lookup for missing data from indentSheet
         // Prioritize indentNumber as the link, then issueNo
         const lookupId = (row.indentNumber || row.issueNo || '').split(/[_/]/)[0].toLowerCase();
-        
+
         const indentDetail = indentSheet?.find(i => {
             if (row.searialNumber && i.searialNumber) {
                 return String(i.searialNumber) === String(row.searialNumber);
@@ -116,7 +116,7 @@ export default () => {
         const allItems = storeOutApprovalSheet.map(mapRowToTableData);
         const pendingItems = allItems.filter((row) => row.status?.toLowerCase() === 'pending');
         const historyItems = allItems.filter((row) => row.status?.toLowerCase() === 'approved' || row.status?.toLowerCase() === 'rejected');
-        
+
         const groupItems = (items: StoreOutTableData[]) => {
             return items.reduce((acc, item) => {
                 const baseId = item.issueNo.split(/[_/]/)[0];
@@ -216,55 +216,57 @@ export default () => {
     ];
 
     return (
-        <div>
+        <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">
+            <Tabs defaultValue="pending" className="w-full flex-1 flex flex-col min-h-0">
+                <Heading heading="Store Out Approval" subtext="Approve store out requests" tabs>
+                    <PackageCheck size={50} className="text-primary" />
+                </Heading>
+                <TabsContent value="pending" className="flex-1 min-w-0 w-full overflow-hidden">
+                    <DataTable
+                        data={tableData}
+                        columns={columns}
+                        searchFields={['issueNo', 'department', 'requestedBy']}
+                        dataLoading={storeOutApprovalLoading}
+                        tableClassName="min-w-[1600px]"
+                        extraActions={
+                            <Button
+                                variant="default"
+                                onClick={onDownloadClick}
+                                style={{
+                                    background: "linear-gradient(90deg, #4CAF50, #2E7D32)",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    padding: "0 16px",
+                                    fontWeight: "bold",
+                                    boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                }}
+                            >
+                                <DownloadOutlined />
+                                {loading ? "Downloading..." : "Download"}
+                            </Button>
+                        }
+                    />
+                </TabsContent>
+                <TabsContent value="history" className="flex-1 min-w-0 w-full overflow-hidden">
+                    <DataTable
+                        data={historyData}
+                        columns={historyColumns}
+                        searchFields={['issueNo', 'department', 'requestedBy']}
+                        dataLoading={indentLoading}
+                        tableClassName="min-w-[1600px]"
+                    />
+                </TabsContent>
+            </Tabs>
+
             <Dialog open={!!(selectedGroup || selectedHistory)} onOpenChange={(open) => {
                 if (!open) {
                     setSelectedGroup(null);
                     setSelectedHistory(null);
                 }
             }}>
-                <Tabs defaultValue="pending">
-                    <Heading heading="Store Out Approval" subtext="Approve store out requests" tabs>
-                        <PackageCheck size={50} className="text-primary" />
-                    </Heading>
-                    <TabsContent value="pending">
-                        <DataTable
-                            data={tableData}
-                            columns={columns}
-                            searchFields={['issueNo', 'department', 'requestedBy']}
-                            dataLoading={storeOutApprovalLoading}
-                            extraActions={
-                                <Button
-                                    variant="default"
-                                    onClick={onDownloadClick}
-                                    style={{
-                                        background: "linear-gradient(90deg, #4CAF50, #2E7D32)",
-                                        border: "none",
-                                        borderRadius: "8px",
-                                        padding: "0 16px",
-                                        fontWeight: "bold",
-                                        boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "8px",
-                                    }}
-                                >
-                                    <DownloadOutlined />
-                                    {loading ? "Downloading..." : "Download"}
-                                </Button>
-                            }
-                        />
-                    </TabsContent>
-                    <TabsContent value="history">
-                        <DataTable
-                            data={historyData}
-                            columns={historyColumns}
-                            searchFields={['issueNo', 'department', 'requestedBy']}
-                            dataLoading={indentLoading}
-                        />
-                    </TabsContent>
-                </Tabs>
-
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     {selectedGroup && (
                         <>
@@ -373,7 +375,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                     quantity: appr.approveQty,
                     unit: appr.originalRow.uom || appr.originalRow.unit
                 })),
-                preparedBy: user?.name || 'Admin',
+                preparedBy: 'Nikhil Kumar Urnaw',
                 approvedBy: 'Store Incharge'
             });
 
@@ -405,7 +407,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                 }));
                 await postToSheet(insertPayload, 'insert', 'STORE_OUT_APPROVAL');
             }
-            
+
             toast.success(`Approved ${items.length} items and generated slip`);
             onSuccess();
         } catch (error) {

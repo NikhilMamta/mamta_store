@@ -18,7 +18,7 @@ import {
     SelectItem,
 } from '@/components/ui/select';
 import { ClipLoader as Loader } from 'react-spinners';
-import { ClipboardList, Trash, Search, Plus } from 'lucide-react'; // Plus ko import karo
+import { ClipboardList, Trash, Search, Plus, Paperclip } from 'lucide-react'; // Plus ko import karo
 import { postToSheet, submitToMaster, uploadFile } from '@/lib/fetchers';
 import type { IndentSheet, StoreOutSheet, InventorySheet } from '@/types';
 import { useSheets } from '@/context/SheetsContext';
@@ -29,7 +29,7 @@ import { formatDate } from '@/lib/utils';
 
 
 export default () => {
-    const { indentSheet: sheet, storeOutSheet, inventorySheet, updateIndentSheet, updateStoreOutSheet, updateInventorySheet, masterSheet: options } = useSheets();
+    const { indentSheet: sheet, storeOutSheet, storeOutApprovalSheet, inventorySheet, updateIndentSheet, updateStoreOutSheet, updateInventorySheet, updateStoreOutApprovalSheet, masterSheet: options } = useSheets();
     const [indentSheet, setIndentSheet] = useState<IndentSheet[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [searchTermGroupHead, setSearchTermGroupHead] = useState("");
@@ -161,25 +161,36 @@ export default () => {
     // Function to generate next indent number
     const getNextIndentNumber = (type: 'Purchase' | 'Store Out' = 'Purchase') => {
         const prefix = type === 'Purchase' ? 'SI-' : 'SO-';
-        const targetSheet = type === 'Purchase' ? indentSheet : (storeOutSheet as any[]);
-        
+        const targetSheet = type === 'Purchase' ? indentSheet : (storeOutApprovalSheet as any[]);
+
+        console.log(`[getNextIndentNumber] Type: ${type}, Prefix: ${prefix}`);
+        console.log(`[getNextIndentNumber] Target Sheet Length: ${targetSheet?.length || 0}`);
+
         if (!targetSheet || targetSheet.length === 0) {
+            console.log(`[getNextIndentNumber] Target sheet empty, returning ${prefix}0001`);
             return `${prefix}0001`;
         }
 
         const indentNumbers = targetSheet
-            .map((row: any) => row.indentNumber || row.issueNo)
+            .map((row: any) => {
+                const val = row.indentNumber || row.issueNo;
+                if (!val) console.warn('[getNextIndentNumber] Row missing indentNumber/issueNo:', row);
+                return val;
+            })
             .filter((num: string) => num && num.startsWith(prefix))
             .map((num: string) => {
                 const base = num.split(/[_/]/)[0];
-                return parseInt(base.replace(prefix, ''), 10);
+                const parsed = parseInt(base.replace(prefix, ''), 10);
+                return parsed;
             })
             .filter((num: number) => !isNaN(num));
 
         const maxNumber = indentNumbers.length > 0 ? Math.max(...indentNumbers, 0) : 0;
         const nextNumber = maxNumber + 1;
 
-        return `${prefix}${String(nextNumber).padStart(4, '0')}`;
+        const result = `${prefix}${String(nextNumber).padStart(4, '0')}`;
+        console.log(`[getNextIndentNumber] Max found: ${maxNumber}, Next ID: ${result}`);
+        return result;
     };
 
 
@@ -264,7 +275,6 @@ export default () => {
                     const storeOutRow: any = {
                         timestamp: timestamp,
                         indentNumber: `${currentIndentNumber}/${i + 1}`,
-                        issueNo: `${currentIndentNumber}/${i + 1}`,
                         productName: product.productName || '',
                         issueDate: product.issueDate ? formatDate(new Date(product.issueDate)) : issueDate,
                         indenterName: data.indenterName || '',
@@ -302,7 +312,10 @@ export default () => {
                         }
                     }
 
-                    setTimeout(() => updateStoreOutSheet(), 1000);
+                    setTimeout(() => {
+                        updateStoreOutSheet();
+                        updateStoreOutApprovalSheet();
+                    }, 1000);
                 } else {
                     toast.error(res.message || 'Failed to create Store Out');
                 }
@@ -317,7 +330,7 @@ export default () => {
 
                     const row: Partial<IndentSheet> = {
                         timestamp: timestamp,
-                        indentNumber: `${currentIndentNumber}_${i + 1}`,
+                        indentNumber: `${currentIndentNumber}/${i + 1}`,
                         indenterName: data.indenterName || '',
                         department: product.department || '',
                         areaOfUse: product.areaOfUse || '',
@@ -358,7 +371,7 @@ export default () => {
 
                     for (const prodName of uniqueProductNames) {
                         const exists = inventorySheet?.some(inv => inv.itemName?.toLowerCase() === prodName?.toLowerCase());
-                        
+
                         if (!exists) {
                             // Find the product details from the submitted data
                             const productDetails = data.products.find(p => p.productName?.trim() === prodName);
@@ -525,22 +538,23 @@ export default () => {
                                                     variant="ghost"
                                                     size="sm"
                                                     className="h-8 text-xs"
-                                                    onClick={() =>
+                                                    onClick={() => {
+                                                        const firstProd = products[0] || {};
                                                         append({
-                                                            department: '',
-                                                            groupHead: '',
+                                                            department: firstProd.department || '',
+                                                            groupHead: firstProd.groupHead || '',
                                                             productName: '',
                                                             quantity: 1,
                                                             uom: '',
-                                                            areaOfUse: '',
+                                                            areaOfUse: firstProd.areaOfUse || '',
                                                             // @ts-ignore
                                                             priority: undefined,
                                                             attachment: undefined,
-                                                            wardName: '',
-                                                            category: '',
-                                                            issueDate: new Date().toISOString().split('T')[0],
+                                                            wardName: firstProd.wardName || '',
+                                                            category: firstProd.category || '',
+                                                            issueDate: firstProd.issueDate || new Date().toISOString().split('T')[0],
                                                         })
-                                                    }
+                                                    }}
                                                 >
                                                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Product
                                                 </Button>
@@ -578,12 +592,12 @@ export default () => {
                                                             <SelectContent>
                                                                 <div className="flex items-center border-b px-3 pb-3">
                                                                     <Search className="mr-2 h-4 w-4 opacity-50" />
-                                                                    <input 
-                                                                        placeholder="Search..." 
-                                                                        value={searchTermWard} 
-                                                                        onChange={(e) => setSearchTermWard(e.target.value)} 
-                                                                        onKeyDown={(e) => e.stopPropagation()} 
-                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none" 
+                                                                    <input
+                                                                        placeholder="Search..."
+                                                                        value={searchTermWard}
+                                                                        onChange={(e) => setSearchTermWard(e.target.value)}
+                                                                        onKeyDown={(e) => e.stopPropagation()}
+                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none"
                                                                     />
                                                                 </div>
                                                                 {(options?.wardNames || [])
@@ -612,12 +626,12 @@ export default () => {
                                                             <SelectContent>
                                                                 <div className="flex items-center border-b px-3 pb-3">
                                                                     <Search className="mr-2 h-4 w-4 opacity-50" />
-                                                                    <input 
-                                                                        placeholder="Search..." 
-                                                                        value={searchTermWard} 
-                                                                        onChange={(e) => setSearchTermWard(e.target.value)} 
-                                                                        onKeyDown={(e) => e.stopPropagation()} 
-                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none" 
+                                                                    <input
+                                                                        placeholder="Search..."
+                                                                        value={searchTermWard}
+                                                                        onChange={(e) => setSearchTermWard(e.target.value)}
+                                                                        onKeyDown={(e) => e.stopPropagation()}
+                                                                        className="flex h-10 w-full bg-transparent text-sm outline-none"
                                                                     />
                                                                 </div>
                                                                 {(options?.wardNames || [])
@@ -768,7 +782,16 @@ export default () => {
                                                     render={({ field }) => (
                                                         <FormItem className="md:col-span-2">
                                                             <FormLabel className="text-sm">Attachment</FormLabel>
-                                                            <FormControl><Input type="file" onChange={(e) => field.onChange(e.target.files?.[0])} className="h-9" /></FormControl>
+                                                            <FormControl>
+                                                                <div className="relative">
+                                                                    <Input
+                                                                        type="file"
+                                                                        onChange={(e) => field.onChange(e.target.files?.[0])}
+                                                                        className="h-9 pr-10 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                                                                    />
+                                                                    <Paperclip className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+                                                                </div>
+                                                            </FormControl>
                                                         </FormItem>
                                                     )}
                                                 />

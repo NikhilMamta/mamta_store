@@ -23,14 +23,14 @@ const toCamelCase = (obj: any): any => {
 // Utility to convert DD/MM/YYYY HH:mm:ss to YYYY-MM-DD HH:mm:ss for Postgres
 const formatToPostgresDate = (dateStr: any): any => {
     if (typeof dateStr !== 'string') return dateStr;
-    
+
     // Check for DD/MM/YYYY HH:mm:ss or DD/MM/YYYY
     const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(.*)$/);
     if (match) {
         const [, d, m, y, rest] = match;
         // Reformat to YYYY-MM-DD
         let formatted = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-        
+
         // If there's time info, format it too
         if (rest && rest.trim()) {
             // Handle space or other separators
@@ -48,7 +48,7 @@ const toSnakeCase = (obj: any): any => {
     if (obj === null || obj === undefined) {
         return obj;
     }
-    
+
     if (Array.isArray(obj)) {
         return obj.map(v => toSnakeCase(v));
     } else if (typeof obj === 'object' && obj.constructor === Object) {
@@ -61,7 +61,7 @@ const toSnakeCase = (obj: any): any => {
                     // BUT skip planned2 because in the DB it's 'planned2' (no underscore)
                     .replace(/(planned|term)([13456789]|10)/g, '$1_$2')
                     .replace(/(actual)(\d)/g, '$1_$2');
-                
+
                 let value = obj[key];
                 // Format date strings for Postgres
                 if (typeof value === 'string') {
@@ -81,9 +81,9 @@ const toSnakeCase = (obj: any): any => {
 
 // Allowed columns for 'indent' table according to user SQL schema
 const INDENT_COLUMNS = [
-    'id', 'timestamp', 'indent_number', 'indenter_name', 'department', 
-    'area_of_use', 'group_head', 'product_name', 'quantity', 
-    'uom', 'specifications', 'indent_approved_by', 'indent_type', 
+    'id', 'timestamp', 'indent_number', 'indenter_name', 'department',
+    'area_of_use', 'group_head', 'product_name', 'quantity',
+    'uom', 'specifications', 'indent_approved_by', 'indent_type',
     'attachment', 'planned_1', 'status', 'actual_2', 'vendor_name_1',
     'rate_1', 'payment_term_1', 'approved_vendor_name', 'approved_rate',
     'approved_payment_term', 'planned2', 'actual_2', 'vendor_name_2', 'rate_2', 'payment_term_2',
@@ -111,7 +111,7 @@ const PO_HISTORY_COLUMNS = [
     'description', 'quantity', 'unit', 'rate', 'gst_percent', 'discount_percent',
     'amount', 'total_po_amount', 'prepared_by', 'approved_by', 'pdf',
     'term_1', 'term_2', 'term_3', 'term_4', 'term_5', 'term_6', 'term_7', 'term_8', 'term_9', 'term_10',
-    'status', 'planned_4', 'delay'
+    'status', 'planned_4', 'delay', 'indent_by'
 ];
 
 const PO_APPROVAL_COLUMNS = [
@@ -156,8 +156,8 @@ const USER_COLUMNS = [
 // Utility to normalize table names
 const getTableName = (sheetName: string) => {
     const normalized = sheetName.toLowerCase().replace(/\s+/g, '_');
-    if (normalized === 'user') return 'users'; 
-    if (normalized === 'received') return 'receives_items'; 
+    if (normalized === 'user') return 'users';
+    if (normalized === 'received') return 'receives_items';
     if (normalized === 'store_out_approval') return 'store_out_approval';
     if (normalized === 'store_out_request') return 'store_out_request';
     if (normalized === 'store_out') return 'store_out';
@@ -213,12 +213,12 @@ export async function uploadFileToSupabase(file: File | Blob, bucketName: string
     // Use customFileName if provided, otherwise fallback to file.name or a default timestamp
     const baseName = customFileName || (file instanceof File ? file.name : `${Date.now()}.pdf`);
     const fileName = baseName.replace(/[\/\s]+/g, '_');
-    
+
     const { data, error } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file, {
             cacheControl: '3600',
-            upsert: false
+            upsert: true
         });
 
     if (error) {
@@ -237,7 +237,7 @@ export async function fetchSheet(
     sheetName: Sheet
 ): Promise<MasterSheet | IndentSheet[] | ReceivedSheet[] | UserPermissions[] | PoMasterSheet[] | InventorySheet[] | ThreePartyApprovalSheet[]> {
     console.log(`Fetching ${sheetName} from Supabase...`);
-    
+
     // Check if key looks suspicious (looks like a Stripe key)
     if (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.startsWith('sb_publishable_')) {
         console.warn('WARNING: VITE_SUPABASE_PUBLISHABLE_KEY looks like a Stripe key. Please verify it in .env');
@@ -271,11 +271,11 @@ export async function fetchSheet(
             if (cRow.vendorName) {
                 // Avoid duplicates if same vendor appears in multiple rows
                 if (!vendors.some(v => v.vendorName === cRow.vendorName)) {
-                    vendors.push({ 
-                        vendorName: cRow.vendorName, 
-                        gstin: cRow.vendorGstin || '', 
-                        address: cRow.vendorAddress || '', 
-                        email: cRow.vendorEmail || '' 
+                    vendors.push({
+                        vendorName: cRow.vendorName,
+                        gstin: cRow.vendorGstin || '',
+                        address: cRow.vendorAddress || '',
+                        email: cRow.vendorEmail || ''
                     });
                 }
             }
@@ -413,7 +413,7 @@ export async function postToQuotationHistory(rows: any[]) {
         console.error('Supabase error posting quotation:', error);
         const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
         if (!scriptUrl) throw new Error('Supabase failed and GAS fallback is not configured.');
-        
+
         const formData = new FormData();
         formData.append('action', 'insertQuotation');
         formData.append('rows', JSON.stringify(rows));
@@ -506,7 +506,7 @@ export async function fetchVendors() {
         console.error('Supabase error fetching vendors:', error);
         const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
         if (!scriptUrl) return [];
-        
+
         const response = await fetch(`${scriptUrl}?sheetName=MASTER&fetchType=vendors`);
         const resData = await response.json();
         return resData.vendors || [];
@@ -555,7 +555,7 @@ export async function postToSheet(
 
     // Filter out null/undefined items from data array
     const cleanData = data.filter(item => item !== null && item !== undefined);
-    
+
     if (cleanData.length === 0) {
         console.warn('⚠️ postToSheet called with empty data array');
         return { success: true };
@@ -724,7 +724,7 @@ export async function postToSheet(
                 const { id, ...updateData } = row;
                 return supabase.from(tableName).update(updateData).match({ id });
             }
-            
+
             // Priority 2: Use 'indent_number' for 'indent' table or if provided
             if (tableName === 'indent' || row.indent_number) {
                 const matchVal = row.indent_number || row.row_index;
@@ -739,11 +739,11 @@ export async function postToSheet(
         }));
     } else if (action === 'delete') {
         result = await Promise.all(sData.map((row: any) => {
-             // Priority 1: Use 'id' if explicitly provided in the row
-             if (row.id) {
+            // Priority 1: Use 'id' if explicitly provided in the row
+            if (row.id) {
                 return supabase.from(tableName).delete().match({ id: row.id });
             }
-            
+
             // Priority 2: Use 'indent_number' for 'indent' table or if provided
             if (tableName === 'indent' || row.indent_number) {
                 const matchVal = row.indent_number || row.row_index;
@@ -756,15 +756,15 @@ export async function postToSheet(
     }
 
     // Comprehensive error checking for both single results and arrays of results
-    const hasError = Array.isArray(result) 
+    const hasError = Array.isArray(result)
         ? result.some(r => r && r.error)
         : (result && result.error);
 
     if (hasError) {
-        const errorDetail = Array.isArray(result) 
-            ? result.find(r => r && r.error)?.error 
+        const errorDetail = Array.isArray(result)
+            ? result.find(r => r && r.error)?.error
             : result.error;
-            
+
         console.error(`Supabase error in postToSheet (${action}):`, errorDetail);
         const scriptUrl = import.meta.env.VITE_APP_SCRIPT_URL;
         if (!scriptUrl) {

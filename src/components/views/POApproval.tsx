@@ -33,7 +33,7 @@ import {
 import { pdf } from '@react-pdf/renderer';
 import POPdf, { type POPdfProps } from '../element/POPdf';
 import { calculateGrandTotal, calculateSubtotal, calculateTotal, calculateTotalGst } from '@/lib/utils';
-import { uploadFile } from '@/lib/fetchers';
+import { uploadFileToSupabase } from '@/lib/fetchers';
 
 interface PoTableData {
     partyName: string;
@@ -271,33 +271,103 @@ export default () => {
 
     async function onSubmit(values: z.infer<typeof schema>) {
         if (!selectedItem) return;
-
-        // Format date as DD/MM/YYYY HH:mm:ss
-        const formattedDate = formatDate(new Date());
+        setLoading(true);
 
         try {
-            // NEW: Get all items for this base indent to update from po_history
+            // 1. Get all items for this base indent to update from po_history
             const baseIndent = (selectedItem.internalCode || selectedItem.indentNumber || '').split(/[_/]/)[0];
             const poItemsToUpdate = poHistorySheet.filter(p => 
                 (p.internalCode || p.indentNumber || '').split(/[_/]/)[0] === baseIndent
             );
             const todayStr = new Date().toISOString().split('T')[0];
 
+            // 2. REGENERATE PDF with the new approval status
+            let updatedPdfUrl = selectedItem.pdf;
+            
+            try {
+                const pdfProps: POPdfProps = {
+                    companyLogo: window.location.origin + '/Mamta-logo.png',
+                    companyName: details?.companyName || '',
+                    companyPhone: details?.companyPhone || '',
+                    companyGstin: details?.companyGstin || '',
+                    companyPan: details?.companyPan || '',
+                    companyAddress: details?.companyAddress || '',
+                    billingAddress: details?.billingAddress || '',
+                    destinationAddress: details?.destinationAddress || '', // Default to master address
+                    supplierName: selectedItem.partyName,
+                    supplierAddress: '', // Fallback or fetch if needed
+                    supplierGstin: '', // Fallback or fetch if needed
+                    orderNumber: selectedItem.poNumber,
+                    orderDate: selectedItem.quotationDate ? formatDate(new Date(selectedItem.quotationDate)) : formatDate(new Date()),
+                    quotationNumber: selectedItem.quotationNumber,
+                    quotationDate: selectedItem.quotationDate,
+                    enqNo: selectedItem.enquiryNumber,
+                    enqDate: selectedItem.enquiryDate,
+                    description: selectedItem.description,
+                    items: poItemsToUpdate.map((item) => ({
+                        internalCode: item.internalCode || item.indentNumber || '',
+                        product: item.product,
+                        description: item.description,
+                        quantity: item.quantity,
+                        unit: item.unit,
+                        rate: item.rate,
+                        gst: item.gstPercent,
+                        discount: item.discountPercent,
+                        amount: item.amount,
+                    })),
+                    total: calculateSubtotal(
+                        poItemsToUpdate.map((item) => ({
+                            quantity: item.quantity,
+                            rate: item.rate,
+                            discountPercent: item.discountPercent,
+                        }))
+                    ),
+                    gstAmount: calculateTotalGst(
+                        poItemsToUpdate.map((item) => ({
+                            quantity: item.quantity,
+                            rate: item.rate,
+                            discountPercent: item.discountPercent,
+                            gstPercent: item.gstPercent,
+                        }))
+                    ),
+                    grandTotal: selectedItem.totalPoAmount,
+                    terms: [
+                        selectedItem.term1, selectedItem.term2, selectedItem.term3, selectedItem.term4, selectedItem.term5,
+                        selectedItem.term6, selectedItem.term7, selectedItem.term8, selectedItem.term9, selectedItem.term10
+                    ].filter(Boolean),
+                    preparedBy: selectedItem.preparedBy,
+                    approvedBy: selectedItem.approvedBy,
+                    indentBy: selectedItem.indentBy,
+                    finalApproved: values.status === 'Approved' ? 'Dr. Sunil Ramnani' : '',
+                };
+
+                const blob = await pdf(<POPdf {...pdfProps} />).toBlob();
+                const file = new File([blob], `PO-${selectedItem.poNumber}-Approved.pdf`, {
+                    type: 'application/pdf',
+                });
+
+                updatedPdfUrl = await uploadFileToSupabase(file, 'pdf');
+                console.log('Updated PO PDF uploaded:', updatedPdfUrl);
+            } catch (pdfErr) {
+                console.error('PDF Regeneration failed, falling back to original URL:', pdfErr);
+            }
+
+            // 3. Prepare updates for PO HISTORY
             const updates = poItemsToUpdate.map(({ ...item }) => ({
                 ...item,
-                status: values.status           // 'Approved' or 'Rejected'
+                status: values.status,           // 'Approved' or 'Rejected'
+                pdf: updatedPdfUrl               // Link to the new PDF with signature
             }));
 
             await postToSheet(updates, 'update', 'PO HISTORY');
 
-            // --- ALSO Save to PO APPROVAL table ---
+            // 4. ALSO Save to PO APPROVAL table
             const approvalData = poItemsToUpdate.map(item => ({
                 indentNumber: item.indentNumber,
                 indentBy: selectedItem.indentBy,
                 finalApproval: values.status === 'Approved' ? 'Dr. Sunil Ramnani' : '',
-                planned5: todayStr, // Use YYYY-MM-DD as approval date
-                status: 'Pending' // Always save as Pending in this table
-                // timestamp will be generated automatically by the database
+                planned5: todayStr,
+                status: 'Pending'
             }));
 
             try {
@@ -306,13 +376,14 @@ export default () => {
                 console.error('PO APPROVAL table save failed:', err);
             }
 
-            toast.success('Submitted successfully');
+            toast.success(`PO ${values.status} successfully`);
             setOpenDialog(false);
-            // Refresh data
             updatePoHistorySheet();
         } catch (error) {
             console.error(error);
-            toast.error('Failed to submit');
+            toast.error('Failed to submit approval');
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -333,16 +404,22 @@ export default () => {
                     <TabsTrigger value="history">History ({historyData.length})</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="pending" className="flex-1 min-h-0 w-full overflow-hidden">
-                    <div className="w-full h-full overflow-x-auto overflow-y-hidden">
-                        <DataTable columns={columns} data={tableData} searchFields={['partyName', 'poNumber']} />
-                    </div>
+                <TabsContent value="pending" className="flex-1 min-w-0 w-full overflow-hidden">
+                    <DataTable 
+                        columns={columns} 
+                        data={tableData} 
+                        searchFields={['partyName', 'poNumber']} 
+                        tableClassName="min-w-[1600px]"
+                    />
                 </TabsContent>
 
-                <TabsContent value="history" className="flex-1 min-h-0 w-full overflow-hidden">
-                    <div className="w-full h-full overflow-x-auto overflow-y-hidden">
-                        <DataTable columns={historyColumns} data={historyData} searchFields={['partyName', 'poNumber']} />
-                    </div>
+                <TabsContent value="history" className="flex-1 min-w-0 w-full overflow-hidden">
+                    <DataTable 
+                        columns={historyColumns} 
+                        data={historyData} 
+                        searchFields={['partyName', 'poNumber']} 
+                        tableClassName="min-w-[1600px]"
+                    />
                 </TabsContent>
             </Tabs>
 

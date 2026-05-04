@@ -120,7 +120,7 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
             setApprovedIndentLoading(false);
         });
     }
-    
+
     function updateVendorRateUpdateSheet() {
         setVendorRateUpdateLoading(true);
         fetchSheet('VENDOR RATE UPDATE').then((res) => {
@@ -128,7 +128,7 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
             setVendorRateUpdateLoading(false);
         });
     }
-    
+
     function updateThreePartyApprovalSheet() {
         setThreePartyApprovalLoading(true);
         fetchSheet('THREE PARTY APPROVAL').then((res) => {
@@ -160,7 +160,7 @@ export const SheetsProvider = ({ children }: { children: React.ReactNode }) => {
             setStoreOutApprovalLoading(false);
         });
     }
-    
+
     function updateMasterSheet() {
         fetchSheet('MASTER').then((res) => {
             setMasterSheet(res as MasterSheet);

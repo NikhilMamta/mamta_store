@@ -285,6 +285,7 @@ export type PoHistorySheet = {
     status?: string;
     planned4?: string;
     delay?: string;
+    indentBy?: string;
 };
 
 export type Vendor = {

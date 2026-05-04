@@ -58,7 +58,7 @@ export default () => {
     const mapRowToTableData = (row: any): StoreOutTableData => {
         // Smarter lookup for missing data from indentSheet and storeOutApprovalSheet
         const lookupId = (row.indentNumber || '').split(/[_/]/)[0].toLowerCase();
-        
+
         const indentDetail = indentSheet?.find(i => {
             if (row.searialNumber && i.searialNumber) {
                 return String(i.searialNumber) === String(row.searialNumber);
@@ -69,8 +69,8 @@ export default () => {
 
         // Fallback to storeOutApprovalSheet (STORE OUT REQUEST)
         const requestDetail = !indentDetail ? storeOutApprovalSheet?.find(r => {
-             const requestId = (r.issueNo || r.indentNumber || '').split(/[_/]/)[0].toLowerCase();
-             return lookupId === requestId;
+            const requestId = (r.issueNo || r.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            return lookupId === requestId;
         }) : null;
 
         return {
