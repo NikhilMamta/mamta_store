@@ -144,7 +144,7 @@ export default () => {
         try {
             const workbook = XLSX.utils.book_new();
             const flatData = tableData.flatMap(group => group.items.map(item => ({
-                'Issue No.': item.issueNo,
+                'Issue No.': item.issueNo?.split(/[_/]/)[0],
                 'Requested By': item.requestedBy,
                 'Department': item.department,
                 'Item': item.product,
@@ -176,10 +176,13 @@ export default () => {
                 </Button>
             )
         },
-        { accessorKey: 'issueNo', header: 'Issue No.' },
+        { 
+            accessorKey: 'issueNo', 
+            header: 'Issue No.',
+            cell: ({ row }) => row.original.issueNo?.split(/[_/]/)[0]
+        },
         { accessorKey: 'issueDate', header: 'Date' },
         { accessorKey: 'requestedBy', header: 'Requested By' },
-        { accessorKey: 'department', header: 'Department' },
         { accessorKey: 'wardName', header: 'Ward Name' },
         {
             header: 'Products',
@@ -201,10 +204,13 @@ export default () => {
                 </Button>
             )
         },
-        { accessorKey: 'issueNo', header: 'Issue No.' },
+        { 
+            accessorKey: 'issueNo', 
+            header: 'Issue No.',
+            cell: ({ row }) => row.original.issueNo?.split(/[_/]/)[0]
+        },
         { accessorKey: 'issueDate', header: 'Date' },
         { accessorKey: 'requestedBy', header: 'Requested By' },
-        { accessorKey: 'department', header: 'Department' },
         {
             header: 'Products',
             cell: ({ row }) => (
@@ -225,7 +231,7 @@ export default () => {
                     <DataTable
                         data={tableData}
                         columns={columns}
-                        searchFields={['issueNo', 'department', 'requestedBy']}
+                        searchFields={['issueNo', 'requestedBy']}
                         dataLoading={storeOutApprovalLoading}
                         tableClassName="min-w-[1600px]"
                         extraActions={
@@ -254,7 +260,7 @@ export default () => {
                     <DataTable
                         data={historyData}
                         columns={historyColumns}
-                        searchFields={['issueNo', 'department', 'requestedBy']}
+                        searchFields={['issueNo', 'requestedBy']}
                         dataLoading={indentLoading}
                         tableClassName="min-w-[1600px]"
                     />
@@ -271,7 +277,7 @@ export default () => {
                     {selectedGroup && (
                         <>
                             <DialogHeader>
-                                <DialogTitle>Approve Requests - {selectedGroup.issueNo}</DialogTitle>
+                                <DialogTitle>Approve Requests - {selectedGroup.issueNo?.split(/[_/]/)[0]}</DialogTitle>
                                 <DialogDescription>
                                     {selectedGroup.requestedBy} | {selectedGroup.department} | {selectedGroup.wardName}
                                 </DialogDescription>
@@ -291,7 +297,7 @@ export default () => {
                     {selectedHistory && (
                         <>
                             <DialogHeader>
-                                <DialogTitle>Approval History - {selectedHistory.issueNo}</DialogTitle>
+                                <DialogTitle>Approval History - {selectedHistory.issueNo?.split(/[_/]/)[0]}</DialogTitle>
                                 <DialogDescription>{selectedHistory.requestedBy} | {selectedHistory.department}</DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
@@ -362,7 +368,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
             // 0. Generate Store Out Slip PDF
             const firstItem = items[0];
             const pdfBlob = await generateStoreOutSlip({
-                issueNo: firstItem.issueNo,
+                issueNo: firstItem.issueNo.split(/[_/]/)[0],
                 date: formatDate(new Date()),
                 areaOfUse: firstItem.originalRow.areaOfUse || 'N/A',
                 indenterName: firstItem.indenterName,
@@ -375,7 +381,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                     quantity: appr.approveQty,
                     unit: appr.originalRow.uom || appr.originalRow.unit
                 })),
-                preparedBy: 'Nikhil Kumar Urnaw',
+                preparedBy: 'Nikhil Kumar Uranw',
                 approvedBy: 'Store Incharge'
             });
 
@@ -416,7 +422,23 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
         }
     };
 
+    const handleDownload = () => {
+        const workbook = XLSX.utils.book_new();
+        const data = items.map(item => ({
+            'Issue No.': item.issueNo?.split(/[_/]/)[0],
+            'Product': item.product,
+            'Requested Qty': item.qty,
+            'Unit': item.unit,
+            'Ward': item.wardName,
+            'Department': item.department
+        }));
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Request Details');
+        XLSX.writeFile(workbook, `Request_${items[0].issueNo?.split(/[_/]/)[0]}.xlsx`);
+    };
+
     const handleCommonStatusChange = (status: string) => {
+        if (status === 'Rejected') return; // Do not auto-fill rejection for all items
         items.forEach((_, index) => {
             form.setValue(`approvals.${index}.status`, status);
         });
@@ -475,9 +497,23 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                         </div>
                     ))}
                 </div>
-                <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
-                    {form.formState.isSubmitting ? <Loader size={16} color="white" /> : `Approve ${items.length} Items`}
-                </Button>
+                <div className="flex gap-3">
+                    <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={handleDownload}
+                        className="flex-1 flex items-center gap-2 h-10"
+                    >
+                        <DownloadOutlined /> Download
+                    </Button>
+                    <Button 
+                        type="submit" 
+                        disabled={form.formState.isSubmitting} 
+                        className="flex-1 h-10"
+                    >
+                        {form.formState.isSubmitting ? <Loader size={16} color="white" /> : `Approve ${items.length} Items`}
+                    </Button>
+                </div>
             </form>
         </Form>
     );

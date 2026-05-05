@@ -126,7 +126,12 @@ export default function DataTable<TData, TValue>({
                                     key={row.id}
                                     data-state={row.getIsSelected() && 'selected'}
                                     className={cn('p-1', onRowClick && 'cursor-pointer hover:bg-muted/50')}
-                                    onClick={() => onRowClick?.(row.original)}
+                                    onClick={(e) => {
+                                        // Don't trigger row click when interacting with checkboxes, buttons, inputs, selects, or links
+                                        const target = e.target as HTMLElement;
+                                        if (target.closest('input, button, a, select, [role="combobox"], [role="option"]')) return;
+                                        onRowClick?.(row.original);
+                                    }}
                                 >
                                     {row.getVisibleCells().map((cell) => (
                                         <TableCell key={cell.id}>

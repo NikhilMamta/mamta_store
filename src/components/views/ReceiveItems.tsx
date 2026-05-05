@@ -1,884 +1,3 @@
-// import { useSheets } from '@/context/SheetsContext';
-// import type { ColumnDef, Row } from '@tanstack/react-table';
-// import { useEffect, useState } from 'react';
-// import DataTable from '../element/DataTable';
-// import { z } from 'zod';
-// import { useForm } from 'react-hook-form';
-// import { zodResolver } from '@hookform/resolvers/zod';
-// import { DownloadOutlined } from "@ant-design/icons";
-// import * as XLSX from 'xlsx';
-// import {
-//     Dialog,
-//     DialogContent,
-//     DialogDescription,
-//     DialogFooter,
-//     DialogHeader,
-//     DialogTitle,
-//     DialogTrigger,
-//     DialogClose,
-// } from '../ui/dialog';
-// import { Button } from '../ui/button';
-// import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
-// import { PuffLoader as Loader } from 'react-spinners';
-// import { toast } from 'sonner';
-// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-// import { Input } from '../ui/input';
-// import { postToSheet, uploadFile } from '@/lib/fetchers';
-// import type { ReceivedSheet } from '@/types';
-// import { Truck } from 'lucide-react';
-// import { Tabs, TabsContent } from '../ui/tabs';
-// import { useAuth } from '@/context/AuthContext';
-// import Heading from '../element/Heading';
-// import { formatDate } from '@/lib/utils';
-// import { Pill } from '../ui/pill';
-
-// interface RecieveItemsData {
-//     poDate: string;
-//     poNumber: string;
-//     vendor: string;
-//     indentNumber: string;
-//     product: string;
-//     uom: string;
-//     quantity: number;
-//     poCopy: string;
-// }
-
-// interface HistoryData {
-//     receiveStatus: string;
-//     poNumber: string;
-//     poDate: string;
-//     vendor: string;
-//     product: string;
-//     orderQuantity: number;
-//     uom: string;
-//     receivedDate: string;
-//     receivedQuantity: number;
-//     photoOfProduct: string;
-//     warrantyStatus: string;
-//     warrantyEndDate: string;
-//     billStatus: string;
-//     billNumber: string;
-//     billAmount: number;
-//     photoOfBill: string;
-//     anyTransport: string;
-//     transporterName: string;
-//     transportingAmount: number;
-// }
-
-// export default () => {
-//     const { indentSheet, receivedSheet, updateAll, indentLoading, receivedLoading } = useSheets();
-//     const { user } = useAuth();
-
-//     const [tableData, setTableData] = useState<RecieveItemsData[]>([]);
-//     const [historyData, setHistoryData] = useState<HistoryData[]>([]);
-//     const [selectedIndent, setSelectedIndent] = useState<RecieveItemsData | null>(null);
-//     const [openDialog, setOpenDialog] = useState(false);
-//     const [loading, setLoading] = useState(false);
-
-
-//     useEffect(() => {
-//         setTableData(
-//             indentSheet
-//                 .filter((i) => i.planned5 !== '' && i.actual5 === '')
-//                 .map((i) => ({
-//                     indentNumber: i.indentNumber,
-//                     poNumber: i.poNumber,
-//                     uom: i.uom,
-//                     poCopy: i.poCopy,
-//                     vendor: i.approvedVendorName,
-//                     quantity: i.approvedQuantity,
-//                     poDate: i.actual4,
-//                     product: i.productName,
-//                 }))
-//         );
-//     }, [indentSheet]);
-
-//     useEffect(() => {
-//         setHistoryData(
-//             receivedSheet.map((r) => {
-//                 const indent = indentSheet.find((i) => i.indentNumber === r.indentNumber);
-//                 return {
-//                     receiveStatus: r.receivedStatus,
-//                     poNumber: r.poNumber,
-//                     poDate: formatDate(new Date(r.poDate)),
-//                     vendor: indent?.approvedVendorName || '',
-//                     product: indent?.productName || '',
-//                     orderQuantity: indent?.approvedQuantity || 0,
-//                     uom: indent?.uom || '',
-//                     photoOfProduct: r.photoOfProduct,
-//                     receivedDate: formatDate(new Date(r.timestamp)),
-
-//                     receivedQuantity: r.receivedQuantity,
-//                     warrantyStatus: r.warrantyStatus,
-//                     warrantyEndDate: r.endDate ? formatDate(new Date(r.endDate)) : '',
-
-//                     billStatus: r.billStatus,
-//                     billNumber: r.billNumber,
-//                     billAmount: r.billAmount,
-//                     photoOfBill: r.photoOfBill,
-//                     anyTransport: r.anyTransportations,
-//                     transporterName: r.transporterName,
-//                     transportingAmount: r.transportingAmount,
-//                 };
-//             })
-//         );
-//     }, [receivedSheet, indentSheet]);
-
-//     const handleDownload = (data: any[]) => {
-//         if (!data || data.length === 0) {
-//             toast.error("No data to download");
-//             return;
-//         }
-
-//         // Create workbook and worksheet
-//         const worksheet = XLSX.utils.json_to_sheet(data);
-//         const workbook = XLSX.utils.book_new();
-//         XLSX.utils.book_append_sheet(workbook, worksheet, "Receive Items");
-
-//         // Generate Excel file and download
-//         XLSX.writeFile(workbook, `receive-items-${Date.now()}.xlsx`);
-//     };
-
-//     const onDownloadClick = async () => {
-//         setLoading(true);
-//         try {
-//             await handleDownload(tableData);
-//             toast.success("File downloaded successfully");
-//         } catch (error) {
-//             toast.error("Failed to download file");
-//         } finally {
-//             setLoading(false);
-//         }
-//     };
-
-
-//     const columns: ColumnDef<RecieveItemsData>[] = [
-//         ...(user.receiveItemView
-//             ? [
-//                 {
-//                     header: 'Action',
-//                     cell: ({ row }: { row: Row<RecieveItemsData> }) => {
-//                         const indent = row.original;
-
-//                         return (
-//                             <DialogTrigger asChild>
-//                                 <Button
-//                                     variant="outline"
-//                                     onClick={() => {
-//                                         setSelectedIndent(indent);
-//                                     }}
-//                                 >
-//                                     Store In
-//                                 </Button>
-//                             </DialogTrigger>
-//                         );
-//                     },
-//                 },
-//             ]
-//             : []),
-//         {
-//             accessorKey: 'poDate',
-//             header: 'PO Date',
-//             accessorFn: (x) => formatDate(new Date(x.poDate)),
-//         },
-//         { accessorKey: 'poNumber', header: 'PO Number' },
-//         { accessorKey: 'vendor', header: 'Vendor' },
-//         { accessorKey: 'indentNumber', header: 'Indent No.' },
-//         { accessorKey: 'product', header: 'Product' },
-//         { accessorKey: 'uom', header: 'UOM' },
-//         { accessorKey: 'quantity', header: 'Quantity' },
-//         {
-//             accessorKey: 'poCopy',
-//             header: 'PO Copy',
-//             cell: ({ row }) => {
-//                 const poCopy = row.original.poCopy;
-//                 return poCopy ? (
-//                     <a href={poCopy} target="_blank">
-//                         PDF
-//                     </a>
-//                 ) : (
-//                     <></>
-//                 );
-//             },
-//         },
-
-//     ];
-
-//     const historyColumns: ColumnDef<HistoryData>[] = [
-//         { accessorKey: 'poDate', header: 'PO Date' },
-//         { accessorKey: 'poNumber', header: 'PO Number' },
-//         {
-//             accessorKey: 'receiveStatus',
-//             header: 'Receive Status',
-//             cell: ({ row }) => {
-//                 const status = row.original.receiveStatus;
-//                 const variant = status === 'Received' ? 'secondary' : 'reject';
-//                 return <Pill variant={variant}>{status}</Pill>;
-//             },
-//         },
-//         { accessorKey: 'vendor', header: 'Vendor' },
-//         { accessorKey: 'product', header: 'Product' },
-//         { accessorKey: 'orderQuantity', header: 'Order Quantity' },
-//         { accessorKey: 'uom', header: 'UOM' },
-//         { accessorKey: 'receivedDate', header: 'Received Date' },
-//         { accessorKey: 'receivedQuantity', header: 'Received Quantity' },
-//         {
-//             accessorKey: 'photoOfProduct',
-//             header: 'Photo of Product',
-//             cell: ({ row }) => {
-//                 const photo = row.original.photoOfProduct;
-//                 return photo ? (
-//                     <a href={photo} target="_blank">
-//                         Product
-//                     </a>
-//                 ) : (
-//                     <></>
-//                 );
-//             },
-//         },
-//         { accessorKey: 'warrantyStatus', header: 'Warranty Status' },
-//         { accessorKey: 'warrantyEndDate', header: 'Warranty End Date' },
-//         { accessorKey: 'billStatus', header: 'Bill Status' },
-//         { accessorKey: 'billNumber', header: 'Bill Number' },
-//         { accessorKey: 'billAmount', header: 'Bill Amount' },
-//         {
-//             accessorKey: 'photoOfBill',
-//             header: 'Photo of Bill',
-
-//             cell: ({ row }) => {
-//                 const photo = row.original.photoOfBill;
-//                 return photo ? (
-//                     <a href={photo} target="_blank">
-//                         Bill
-//                     </a>
-//                 ) : (
-//                     <></>
-//                 );
-//             },
-//         },
-//         { accessorKey: 'anyTransport', header: 'Any Transport' },
-//         { accessorKey: 'transporterName', header: 'Transporter Name' },
-//         { accessorKey: 'transportingAmount', header: 'Transporting Amount' },
-//     ];
-
-//     const schema = z
-//         .object({
-//             status: z.enum(['Received', 'Not Received']),
-//             quantity: z.coerce.number().optional().default(0),
-//             photoOfProduct: z.instanceof(File).optional(),
-
-//             warrantyStatus: z.enum(['Not Any', 'Gaurantee', 'Warranty']).optional(),
-//             warrantyDate: z.date().optional(),
-
-//             billReceived: z.enum(['Received', 'Not Received']).optional(),
-//             billNo: z.string().optional(),
-//             billAmount: z.coerce.number().optional(),
-//             photoOfBill: z.instanceof(File).optional(),
-
-//             anyTransport: z.enum(['Yes', 'No']).optional(),
-//             transporterName: z.string().optional(),
-//             transportingAmount: z.coerce.number().optional(),
-//         })
-//         .superRefine((data, ctx) => {
-//             if (data.status === 'Received') {
-
-//                 if (data.quantity === undefined) {
-//                     ctx.addIssue({ path: ['quantity'], code: z.ZodIssueCode.custom });
-//                 }
-//                 if (data.warrantyStatus === undefined) {
-//                     ctx.addIssue({ path: ['warrantyStatus'], code: z.ZodIssueCode.custom });
-//                 }
-//                 if (data.billReceived === undefined) {
-//                     ctx.addIssue({ path: ['billReceived'], code: z.ZodIssueCode.custom });
-//                 }
-//                 if (data.anyTransport === undefined) {
-//                     ctx.addIssue({ path: ['anyTransport'], code: z.ZodIssueCode.custom });
-//                 }
-
-//                 if (data.warrantyStatus !== 'Not Any') {
-//                     if (data.warrantyDate === undefined) {
-//                         ctx.addIssue({ path: ['warrantyDate'], code: z.ZodIssueCode.custom });
-//                     }
-//                 }
-//                 if (data.billReceived === 'Received') {
-//                     if (!data.billNo?.trim()) {
-//                         ctx.addIssue({ path: ['billNo'], code: z.ZodIssueCode.custom });
-//                     }
-//                     if (data.billAmount === undefined) {
-//                         ctx.addIssue({ path: ['billAmount'], code: z.ZodIssueCode.custom });
-//                     }
-//                 }
-
-//                 if (data.anyTransport === 'Yes') {
-//                     if (!data.transporterName?.trim()) {
-//                         ctx.addIssue({ path: ['transporterName'], code: z.ZodIssueCode.custom });
-//                     }
-//                     if (data.transportingAmount === undefined) {
-//                         ctx.addIssue({ path: ['transporingAmount'], code: z.ZodIssueCode.custom });
-//                     }
-//                 }
-//             }
-//         });
-
-//     const form = useForm({
-//         resolver: zodResolver(schema),
-//         defaultValues: {
-//             billNo: '',
-//             quantity: undefined,
-//             warrantyStatus: undefined,
-//             status: undefined,
-//             billAmount: undefined,
-//             photoOfBill: undefined,
-//             anyTransport: undefined,
-//             billReceived: undefined,
-//             warrantyDate: undefined,
-//             photoOfProduct: undefined,
-//             transporterName: '',
-//             transportingAmount: undefined,
-//         },
-//     });
-
-//     const status = form.watch('status');
-//     const billReceived = form.watch('billReceived');
-//     const anyTransport = form.watch('anyTransport');
-//     const warrantyStatus = form.watch('warrantyStatus');
-
-//     useEffect(() => {
-//         if (selectedIndent) {
-//             form.setValue('quantity', selectedIndent.quantity);
-//         } else if (!openDialog) {
-//             form.reset({
-//                 billNo: '',
-//                 quantity: undefined,
-//                 warrantyStatus: undefined,
-//                 status: undefined,
-//                 billAmount: undefined,
-//                 photoOfBill: undefined,
-//                 anyTransport: undefined,
-//                 billReceived: undefined,
-//                 warrantyDate: undefined,
-//                 photoOfProduct: undefined,
-//                 transporterName: '',
-//                 transportingAmount: undefined,
-//             });
-//         }
-//     }, [selectedIndent, openDialog]);
-
-//     async function onSubmit(values: z.infer<typeof schema>) {
-//         try {
-//             const row: Partial<ReceivedSheet> = {
-//                 timestamp: new Date().toISOString(),
-//                 indentNumber: selectedIndent?.indentNumber,
-//                 poDate: selectedIndent?.poDate,
-//                 poNumber: selectedIndent?.poNumber,
-//                 vendor: selectedIndent?.vendor,
-//                 receivedStatus: values.status,
-//                 receivedQuantity: values.quantity,
-//                 uom: selectedIndent?.uom,
-//                 warrantyStatus: values.warrantyStatus,
-//                 endDate: values.warrantyDate?.toISOString(),
-//                 billStatus: values.billReceived,
-//                 billNumber: values.billNo,
-//                 billAmount: values.billAmount,
-//                 anyTransportations: values.anyTransport,
-//                 transporterName: values.transporterName,
-//                 transportingAmount: values.transportingAmount,
-//             };
-
-//             console.log('here', 1);
-//             if (values.photoOfProduct !== undefined) {
-//                 row.photoOfProduct = await uploadFile(
-//                     values.photoOfProduct,
-//                     import.meta.env.VITE_PRODUCT_PHOTO_FOLDER
-//                 );
-//             }
-
-//             console.log('here', 2);
-//             if (values.photoOfBill !== undefined) {
-//                 row.photoOfBill = await uploadFile(
-//                     values.photoOfBill,
-//                     import.meta.env.VITE_BILL_PHOTO_FOLDER
-//                 );
-//             }
-//             console.log('here', 3);
-//             await postToSheet([row], 'insert', 'RECEIVED');
-
-//           console.log('here', 4);
-//             // Sirf actual5 (AS column - date) aur AU column (receive status) update karna hai
-//             const indentToUpdate = indentSheet.find((s) => s.indentNumber === selectedIndent?.indentNumber);
-
-//             if (indentToUpdate) {
-//                 // Sirf wo fields bhejo jo update karni hain
-//                 const updatePayload: any = {
-//                     rowIndex: (indentToUpdate as any).rowIndex,
-//                     sheetName: 'INDENT',
-//                     indentNumber: indentToUpdate.indentNumber,
-//                     actual5: new Date().toISOString(), // AS column - date
-//                     receiveStatus: values.status, // AU column - receive status
-//                 };
-
-//                 await postToSheet([updatePayload], 'update', 'INDENT');
-//             }
-//             console.log('here', 5);
-//             toast.success(`Approved vendor for ${selectedIndent?.indentNumber}`);
-//             setOpenDialog(false);
-//             setTimeout(() => updateAll(), 1000);
-//         } catch {
-//             toast.error('Failed to update vendor');
-//         }
-//     }
-
-//     function onError(e: any) {
-//         console.log(e);
-//         toast.error('Please fill all required fields');
-//     }
-
-//     return (
-//         <div>
-//             <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-//                 <Tabs defaultValue="pending">
-//                     <Heading
-//                         heading="Receive Items"
-//                         subtext="Receive items from purchase orders"
-//                         tabs
-//                     >
-//                         <Truck size={50} className="text-primary" />
-//                     </Heading>
-
-//                     <TabsContent value="pending">
-//                         <DataTable
-//                             data={tableData}
-//                             columns={columns}
-//                             searchFields={['product', 'department', 'indenter', 'vendorType']}
-//                             dataLoading={indentLoading}
-//                             extraActions={
-//                                 <Button
-//                                     variant="default"
-//                                     onClick={onDownloadClick}
-//                                     style={{
-//                                         background: "linear-gradient(90deg, #4CAF50, #2E7D32)",
-//                                         border: "none",
-//                                         borderRadius: "8px",
-//                                         padding: "0 16px",
-//                                         fontWeight: "bold",
-//                                         boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
-//                                         display: "flex",
-//                                         alignItems: "center",
-//                                         gap: "8px",
-//                                     }}
-//                                 >
-//                                     <DownloadOutlined />
-//                                     {loading ? "Downloading..." : "Download"}
-//                                 </Button>
-//                             }
-//                         />
-//                     </TabsContent>
-
-//                     {/* <TabsContent value="pending">
-//                         <DataTable
-//                             data={tableData}
-//                             columns={columns}
-//                             searchFields={['product', 'poNumber', 'indentNumber']}
-//                             dataLoading={indentLoading}
-//                         />
-//                     </TabsContent> */}
-//                     <TabsContent value="history">
-//                         <DataTable
-//                             data={historyData}
-//                             columns={historyColumns}
-//                             searchFields={[
-//                                 'receiveStatus',
-//                                 'poNumber',
-//                                 'indentNumber',
-//                                 'poDate',
-//                                 'product',
-//                             ]}
-//                             dataLoading={receivedLoading}
-//                         />
-//                     </TabsContent>
-//                 </Tabs>
-
-//                 {selectedIndent && (
-//                     <DialogContent className="sm:max-w-3xl">
-//                         <Form {...form}>
-//                             <form
-//                                 onSubmit={form.handleSubmit(onSubmit, onError)}
-//                                 className="space-y-5"
-//                             >
-//                                 <DialogHeader className="space-y-1">
-//                                     <DialogTitle>Receive Item</DialogTitle>
-//                                     <DialogDescription>
-//                                         Receive item fron indent{' '}
-//                                         <span className="font-medium">
-//                                             {selectedIndent.indentNumber}
-//                                         </span>
-//                                     </DialogDescription>
-//                                 </DialogHeader>
-//                                 <div className="bg-muted p-4 rounded-md grid gap-3">
-//                                     <h3 className="text-lg font-bold">Item Details</h3>
-//                                     <div className="grid grid-cols-2 md:grid-cols-4 bg-muted rounded-md gap-3 ">
-//                                         <div className="space-y-1">
-//                                             <p className="font-medium text-nowrap">Indent Number</p>
-//                                             <p className="text-sm font-light">
-//                                                 {selectedIndent.indentNumber}
-//                                             </p>
-//                                         </div>
-//                                         <div className="space-y-1">
-//                                             <p className="font-medium">Item Name</p>
-//                                             <p className="text-sm font-light">
-//                                                 {selectedIndent.product}
-//                                             </p>
-//                                         </div>
-//                                         <div className="space-y-1">
-//                                             <p className="font-medium text-nowrap">
-//                                                 Ordered Quantity
-//                                             </p>
-//                                             <p className="text-sm font-light">
-//                                                 {selectedIndent.quantity}
-//                                             </p>
-//                                         </div>
-//                                         <div className="space-y-1">
-//                                             <p className="font-medium text-nowrap">UOM</p>
-//                                             <p className="text-sm font-light">
-//                                                 {selectedIndent.uom}
-//                                             </p>
-//                                         </div>
-//                                     </div>
-//                                 </div>
-//                                 <div className="grid md:grid-cols-2 gap-4">
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="status"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormControl>
-//                                                     <Select
-//                                                         onValueChange={field.onChange}
-//                                                         value={field.value}
-//                                                     >
-//                                                         <FormLabel>Receiving Status</FormLabel>
-//                                                         <FormControl>
-//                                                             <SelectTrigger className="w-full">
-//                                                                 <SelectValue placeholder="Set status" />
-//                                                             </SelectTrigger>
-//                                                         </FormControl>
-//                                                         <SelectContent>
-//                                                             <SelectItem value="Received">
-//                                                                 Received
-//                                                             </SelectItem>
-//                                                             <SelectItem value="Not Received">
-//                                                                 Not Received
-//                                                             </SelectItem>
-//                                                         </SelectContent>
-//                                                     </Select>
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="quantity"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormLabel>Received Quantity</FormLabel>
-//                                                 <FormControl>
-//                                                     <Input
-//                                                         type="number"
-//                                                         placeholder="Enter received quantity"
-//                                                         max={selectedIndent.quantity}
-//                                                         disabled={status !== 'Received'}
-//                                                         {...field}
-//                                                     />
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-//                                 </div>
-
-//                                 <FormField
-//                                     control={form.control}
-//                                     name="photoOfProduct"
-//                                     render={({ field }) => (
-//                                         <FormItem>
-//                                             <FormLabel>Photo of Product</FormLabel>
-//                                             <FormControl>
-//                                                 <Input
-//                                                     type="file"
-//                                                     disabled={status !== 'Received'}
-//                                                     onChange={(e) =>
-//                                                         field.onChange(e.target.files?.[0])
-//                                                     }
-//                                                 />
-//                                             </FormControl>
-//                                         </FormItem>
-//                                     )}
-//                                 />
-
-//                                 <div className="grid md:grid-cols-2 gap-4">
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="warrantyStatus"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormControl>
-//                                                     <Select
-//                                                         onValueChange={field.onChange}
-//                                                         value={field.value}
-//                                                     >
-//                                                         <FormLabel>Warranty</FormLabel>
-//                                                         <FormControl>
-//                                                             <SelectTrigger
-//                                                                 className="w-full"
-//                                                                 disabled={status !== 'Received'}
-//                                                             >
-//                                                                 <SelectValue placeholder="Set warranty" />
-//                                                             </SelectTrigger>
-//                                                         </FormControl>
-//                                                         <SelectContent>
-//                                                             <SelectItem value="Not Any">
-//                                                                 Not Any
-//                                                             </SelectItem>
-//                                                             <SelectItem value="Warranty">
-//                                                                 Warranty
-//                                                             </SelectItem>
-//                                                             <SelectItem value="Gaurantee">
-//                                                                 Gaurantee
-//                                                             </SelectItem>
-//                                                         </SelectContent>
-//                                                     </Select>
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="warrantyDate"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormLabel>End of Warrany / Guarantee</FormLabel>
-//                                                 <FormControl>
-//                                                     <Input
-//                                                         type="date"
-//                                                         disabled={
-//                                                             status !== 'Received' ||
-//                                                             !['Warranty', 'Gaurantee'].includes(
-//                                                                 warrantyStatus || ''
-//                                                             )
-//                                                         }
-//                                                         value={
-//                                                             field.value
-//                                                                 ? field.value
-//                                                                     .toISOString()
-//                                                                     .split('T')[0]
-//                                                                 : ''
-//                                                         }
-//                                                         onChange={(e) =>
-//                                                             field.onChange(
-//                                                                 e.target.value
-//                                                                     ? new Date(e.target.value)
-//                                                                     : undefined
-//                                                             )
-//                                                         }
-//                                                     />
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="billReceived"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormControl>
-//                                                     <Select
-//                                                         onValueChange={field.onChange}
-//                                                         value={field.value}
-//                                                     >
-//                                                         <FormLabel>Bill Received</FormLabel>
-//                                                         <FormControl>
-//                                                             <SelectTrigger
-//                                                                 className="w-full"
-//                                                                 disabled={status !== 'Received'}
-//                                                             >
-//                                                                 <SelectValue placeholder="Set bill received" />
-//                                                             </SelectTrigger>
-//                                                         </FormControl>
-//                                                         <SelectContent>
-//                                                             <SelectItem value="Received">
-//                                                                 Received
-//                                                             </SelectItem>
-//                                                             <SelectItem value="Not Received">
-//                                                                 Not Received
-//                                                             </SelectItem>
-//                                                         </SelectContent>
-//                                                     </Select>
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="billNo"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormLabel>Bill Number</FormLabel>
-//                                                 <FormControl>
-//                                                     <Input
-//                                                         disabled={
-//                                                             status !== 'Received' ||
-//                                                             billReceived !== 'Received'
-//                                                         }
-//                                                         placeholder="Enter bill number"
-//                                                         {...field}
-//                                                     />
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="billAmount"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormLabel>Bill Amount</FormLabel>
-//                                                 <FormControl>
-//                                                     <Input
-//                                                         type="number"
-//                                                         disabled={
-//                                                             status !== 'Received' ||
-//                                                             billReceived !== 'Received'
-//                                                         }
-//                                                         placeholder="Enter bill amount"
-//                                                         {...field}
-//                                                     />
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="photoOfBill"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormLabel>Photo of Bill</FormLabel>
-//                                                 <FormControl>
-//                                                     <Input
-//                                                         type="file"
-//                                                         disabled={
-//                                                             status !== 'Received' ||
-//                                                             billReceived !== 'Received'
-//                                                         }
-//                                                         onChange={(e) =>
-//                                                             field.onChange(e.target.files?.[0])
-//                                                         }
-//                                                     />
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-//                                 </div>
-
-//                                 <FormField
-//                                     control={form.control}
-//                                     name="anyTransport"
-//                                     render={({ field }) => (
-//                                         <FormItem>
-//                                             <FormControl>
-//                                                 <Select
-//                                                     onValueChange={field.onChange}
-//                                                     value={field.value}
-//                                                 >
-//                                                     <FormLabel>Any transport</FormLabel>
-//                                                     <FormControl>
-//                                                         <SelectTrigger
-//                                                             className="w-full"
-//                                                             disabled={status !== 'Received'}
-//                                                         >
-//                                                             <SelectValue placeholder="Any tranport?" />
-//                                                         </SelectTrigger>
-//                                                     </FormControl>
-//                                                     <SelectContent>
-//                                                         <SelectItem value="Yes">Yes</SelectItem>
-//                                                         <SelectItem value="No">No</SelectItem>
-//                                                     </SelectContent>
-//                                                 </Select>
-//                                             </FormControl>
-//                                         </FormItem>
-//                                     )}
-//                                 />
-//                                 <div className="grid md:grid-cols-2 gap-4">
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="transporterName"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormLabel>Transporter Name</FormLabel>
-//                                                 <FormControl>
-//                                                     <Input
-//                                                         disabled={
-//                                                             status !== 'Received' ||
-//                                                             anyTransport !== 'Yes'
-//                                                         }
-//                                                         placeholder="Enter transporter name"
-//                                                         {...field}
-//                                                     />
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-//                                     <FormField
-//                                         control={form.control}
-//                                         name="transportingAmount"
-//                                         render={({ field }) => (
-//                                             <FormItem>
-//                                                 <FormLabel>Transporting Amount</FormLabel>
-//                                                 <FormControl>
-//                                                     <Input
-//                                                         type="number"
-//                                                         disabled={
-//                                                             status !== 'Received' ||
-//                                                             anyTransport !== 'Yes'
-//                                                         }
-//                                                         placeholder="Enter transporting amount"
-//                                                         {...field}
-//                                                     />
-//                                                 </FormControl>
-//                                             </FormItem>
-//                                         )}
-//                                     />
-//                                 </div>
-//                                 <DialogFooter>
-//                                     <DialogClose asChild>
-//                                         <Button variant="outline">Close</Button>
-//                                     </DialogClose>
-
-//                                     <Button type="submit" disabled={form.formState.isSubmitting}>
-//                                         {form.formState.isSubmitting && (
-//                                             <Loader
-//                                                 size={20}
-//                                                 color="white"
-//                                                 aria-label="Loading Spinner"
-//                                             />
-//                                         )}
-//                                         Store In
-//                                     </Button>
-//                                 </DialogFooter>
-//                             </form>
-//                         </Form>
-//                     </DialogContent>
-//                 )}
-//             </Dialog>
-//         </div>
-//     );
-// };
-
-
-
-
 import { useSheets } from '@/context/SheetsContext';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { useEffect, useState } from 'react';
@@ -906,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from '../ui/input';
 import { postToSheet, uploadFile, uploadFileToSupabase } from '@/lib/fetchers';
 import type { ReceivedSheet } from '@/types';
-import { Truck } from 'lucide-react';
+import { Truck, Eye } from 'lucide-react';
 import { Tabs, TabsContent } from '../ui/tabs';
 import { useAuth } from '@/context/AuthContext';
 import Heading from '../element/Heading';
@@ -923,7 +42,9 @@ interface RecieveItemsData {
     quantity: number;
     poCopy: string;
     searialNumber?: string | number;
-    _count?: number; // Add count for grouped items
+    indentNumbers?: string[];
+    products?: string[];
+    _count?: number;
 }
 
 interface HistoryData {
@@ -946,6 +67,11 @@ interface HistoryData {
     anyTransport: string;
     transporterName: string;
     transportingAmount: number;
+    indentNumbers?: string[];
+    products?: string[];
+    _count?: number;
+    poCopy?: string;
+    indentNumber?: string;
 }
 
 export default () => {
@@ -954,6 +80,27 @@ export default () => {
 
     const [tableData, setTableData] = useState<RecieveItemsData[]>([]);
     const [historyData, setHistoryData] = useState<HistoryData[]>([]);
+    const [selectedHistoryItem, setSelectedHistoryItem] = useState<HistoryData | null>(null);
+    const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
+    const [matchingHistoryItems, setMatchingHistoryItems] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (selectedHistoryItem && openHistoryDialog) {
+            // Find all receives for this PO
+            const items = receivedSheet.filter(r => r.poNumber === selectedHistoryItem.poNumber).map(r => {
+                const indent = indentSheet.find((i) =>
+                    r.searialNumber ? String(i.searialNumber) === String(r.searialNumber) : i.indentNumber === r.indentNumber
+                );
+                return {
+                    ...r,
+                    product: indent?.productName || '',
+                    uom: indent?.uom || ''
+                };
+            });
+            setMatchingHistoryItems(items);
+        }
+    }, [selectedHistoryItem, openHistoryDialog, receivedSheet, indentSheet]);
+
     const [selectedIndent, setSelectedIndent] = useState<RecieveItemsData | null>(null);
     const [matchingIndents, setMatchingIndents] = useState<RecieveItemsData[]>([]);
     const [openDialog, setOpenDialog] = useState(false);
@@ -966,64 +113,107 @@ export default () => {
         );
 
         const grouped = filteredIndents.reduce((acc: { [key: string]: RecieveItemsData }, i) => {
-            // Find full details from poHistorySheet or indentSheet
             const indentDetail = indentSheet.find(indent => indent.indentNumber === i.indentNumber);
             const poHistoryDetail = poHistorySheet.find(history => history.indentNumber === i.indentNumber);
             
             const poNumber = poHistoryDetail?.poNumber || 'N/A';
-            
+            const qty = indentDetail?.qty || indentDetail?.approvedQuantity || indentDetail?.quantity || 0;
+            const product = indentDetail?.productName || '';
+
             if (!acc[poNumber]) {
                 acc[poNumber] = {
                     indentNumber: i.indentNumber,
+                    indentNumbers: [i.indentNumber],
                     poNumber: poNumber,
                     uom: indentDetail?.uom || '',
                     poCopy: poHistoryDetail?.pdf || '',
                     vendor: poHistoryDetail?.partyName || '',
-                    quantity: indentDetail?.qty || indentDetail?.approvedQuantity || indentDetail?.quantity || 0,
+                    quantity: qty,
                     poDate: poHistoryDetail?.timestamp || '',
-                    product: indentDetail?.productName || '',
+                    product: product,
+                    products: [product],
                     searialNumber: indentDetail?.searialNumber,
                     _count: 1
                 };
             } else {
-                acc[poNumber]._count = (acc[poNumber]._count || 1) + 1;
+                acc[poNumber].quantity += qty;
+                if (!acc[poNumber].indentNumbers?.includes(i.indentNumber)) {
+                    acc[poNumber].indentNumbers?.push(i.indentNumber);
+                }
+                if (!acc[poNumber].products?.includes(product)) {
+                    acc[poNumber].products?.push(product);
+                }
+                acc[poNumber]._count = (acc[poNumber]._count || 0) + 1;
             }
             return acc;
         }, {});
 
-        setTableData(Object.values(grouped).reverse());
+        const finalData = Object.values(grouped);
+        console.log('ReceiveItems Grouped Table Data:', finalData);
+        setTableData(finalData.reverse());
     }, [poApprovalSheet, indentSheet, poHistorySheet]);
 
     useEffect(() => {
-        setHistoryData(
-            receivedSheet.map((r) => {
-                const indent = indentSheet.find((i) =>
-                    r.searialNumber ? String(i.searialNumber) === String(r.searialNumber) : i.indentNumber === r.indentNumber
-                );
-                return {
+        if (!receivedSheet) return;
+
+        const grouped = receivedSheet.reduce((acc: { [key: string]: HistoryData }, r) => {
+            const poNumber = r.poNumber || 'N/A';
+            const indent = indentSheet.find((i) =>
+                r.searialNumber ? String(i.searialNumber) === String(r.searialNumber) : i.indentNumber === r.indentNumber
+            );
+            
+            const indentNo = r.indentNumber || '';
+            const product = indent?.productName || '';
+            const orderQty = indent?.qty || indent?.approvedQuantity || 0;
+            const recQty = r.receivedQuantity || 0;
+            const billAmt = r.billAmount || 0;
+            const transAmt = r.transportingAmount || 0;
+
+            if (!acc[poNumber]) {
+                acc[poNumber] = {
                     receiveStatus: r.receivedStatus,
-                    poNumber: r.poNumber,
+                    poNumber: poNumber,
                     poDate: formatDate(new Date(r.poDate)),
                     vendor: indent?.approvedVendorName || '',
-                    product: indent?.productName || '',
-                    orderQuantity: indent?.qty || indent?.approvedQuantity || 0,
+                    product: product,
+                    products: [product],
+                    orderQuantity: orderQty,
                     uom: indent?.uom || '',
                     photoOfProduct: r.photoOfProduct,
                     receivedDate: formatDate(new Date(r.timestamp)),
-                    receivedQuantity: r.receivedQuantity,
+                    receivedQuantity: recQty,
                     warrantyStatus: r.warrantyStatus,
                     warrantyEndDate: r.endDate ? formatDate(new Date(r.endDate)) : '',
                     billStatus: r.billStatus,
                     billNumber: r.billNumber,
-                    billAmount: r.billAmount,
+                    billAmount: billAmt,
                     photoOfBill: r.photoOfBill,
                     anyTransport: r.anyTransportations,
                     transporterName: r.transporterName,
-                    transportingAmount: r.transportingAmount,
+                    transportingAmount: transAmt,
+                    indentNumber: indentNo,
+                    indentNumbers: [indentNo],
+                    poCopy: indent?.poCopy || '',
+                    _count: 1
                 };
-            })
-                .reverse()
-        );
+            } else {
+                acc[poNumber].orderQuantity += orderQty;
+                acc[poNumber].receivedQuantity += recQty;
+                acc[poNumber].billAmount += billAmt;
+                acc[poNumber].transportingAmount += transAmt;
+                
+                if (!acc[poNumber].indentNumbers?.includes(indentNo)) {
+                    acc[poNumber].indentNumbers?.push(indentNo);
+                }
+                if (!acc[poNumber].products?.includes(product)) {
+                    acc[poNumber].products?.push(product);
+                }
+                acc[poNumber]._count = (acc[poNumber]._count || 0) + 1;
+            }
+            return acc;
+        }, {});
+
+        setHistoryData(Object.values(grouped).reverse());
     }, [receivedSheet, indentSheet]);
 
     const handleDownload = (data: any[]) => {
@@ -1066,7 +256,7 @@ export default () => {
                                         setSelectedIndent(indent);
                                     }}
                                 >
-                                    Store In
+                                    Store In {indent._count && indent._count > 1 ? `(${indent._count})` : ''}
                                 </Button>
                             </DialogTrigger>
                         );
@@ -1086,10 +276,13 @@ export default () => {
             header: 'Indent No.',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
+                const baseId = (row.original.indentNumber || '').split(/[_/]/)[0];
                 return count > 1 ? (
-                    <span className="text-primary font-medium">Multiple ({count})</span>
+                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
+                        {baseId} ({count})
+                    </span>
                 ) : (
-                    row.original.indentNumber
+                    baseId
                 );
             }
         },
@@ -1099,7 +292,9 @@ export default () => {
             cell: ({ row }) => {
                 const count = row.original._count || 1;
                 return count > 1 ? (
-                    <span className="text-primary font-medium">Multiple Products</span>
+                    <span className="text-muted-foreground italic text-xs">
+                        Multiple Products
+                    </span>
                 ) : (
                     row.original.product
                 );
@@ -1111,7 +306,14 @@ export default () => {
             header: 'Quantity',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
-                return count > 1 ? "-" : row.original.quantity;
+                return (
+                    <div className="text-center">
+                        <div className="font-bold">{row.original.quantity}</div>
+                        {count > 1 && (
+                            <div className="text-[10px] text-muted-foreground">({count} Items)</div>
+                        )}
+                    </div>
+                );
             }
         },
         {
@@ -1131,6 +333,23 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<HistoryData>[] = [
+        {
+            id: 'actions',
+            header: 'Action',
+            cell: ({ row }) => (
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    onClick={() => {
+                        setSelectedHistoryItem(row.original);
+                        setOpenHistoryDialog(true);
+                    }}
+                >
+                    <Eye size={16} />
+                </Button>
+            ),
+        },
         { accessorKey: 'poDate', header: 'PO Date' },
         { accessorKey: 'poNumber', header: 'PO Number' },
         {
@@ -1143,11 +362,54 @@ export default () => {
             },
         },
         { accessorKey: 'vendor', header: 'Vendor' },
-        { accessorKey: 'product', header: 'Product' },
-        { accessorKey: 'orderQuantity', header: 'Order Quantity' },
+        {
+            accessorKey: 'indentNumber',
+            header: 'Indent No.',
+            cell: ({ row }) => {
+                const count = row.original._count || 1;
+                const baseId = (row.original.indentNumber || '').split(/[_/]/)[0];
+                return count > 1 ? (
+                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
+                        {baseId} ({count})
+                    </span>
+                ) : (
+                    baseId
+                );
+            }
+        },
+        { 
+            accessorKey: 'product', 
+            header: 'Product',
+            cell: ({ row }) => {
+                const count = row.original._count || 1;
+                return count > 1 ? (
+                    <span className="text-muted-foreground italic text-xs">
+                        Multiple Products
+                    </span>
+                ) : (
+                    <div className="max-w-[200px] truncate" title={row.original.product}>
+                        {row.original.product}
+                    </div>
+                );
+            }
+        },
         { accessorKey: 'uom', header: 'UOM' },
         { accessorKey: 'receivedDate', header: 'Received Date' },
-        { accessorKey: 'receivedQuantity', header: 'Received Quantity' },
+        { 
+            accessorKey: 'receivedQuantity', 
+            header: 'Rec Qty',
+            cell: ({ row }) => {
+                const count = row.original._count || 1;
+                return (
+                    <div className="text-center">
+                        <div className="font-bold text-primary">{row.original.receivedQuantity}</div>
+                        {count > 1 && (
+                            <div className="text-[10px] text-muted-foreground">({count} Items)</div>
+                        )}
+                    </div>
+                );
+            }
+        },
         {
             accessorKey: 'photoOfProduct',
             header: 'Photo of Product',
@@ -1272,10 +534,10 @@ export default () => {
 
             setMatchingIndents(matching);
 
-            // Initialize items array in form with PENDING quantity
+            // Initialize items array in form with ORDERED quantity (as requested)
             const initialItems = matching.map((indent) => ({
                 indentNumber: indent.indentNumber,
-                quantity: indent.pendingQuantity,
+                quantity: indent.quantity,
                 searialNumber: indent.searialNumber,
             }));
             form.setValue('items', initialItems as any);
@@ -1645,6 +907,86 @@ export default () => {
                         </Form>
                     </DialogContent>
                 )}
+            </Dialog>
+
+            <Dialog open={openHistoryDialog} onOpenChange={setOpenHistoryDialog}>
+                <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Receive History: {selectedHistoryItem?.poNumber}</DialogTitle>
+                        <DialogDescription>
+                            Itemized breakdown of all received goods for this PO
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedHistoryItem && (
+                        <div className="space-y-6">
+                            <div className="grid md:grid-cols-2 gap-4 bg-muted/50 p-4 rounded-lg">
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Vendor</p>
+                                    <p className="font-medium">{selectedHistoryItem.vendor}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Received Date</p>
+                                    <p className="font-medium">{selectedHistoryItem.receivedDate}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Transporter</p>
+                                    <p className="font-medium">{selectedHistoryItem.transporterName || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Bill No.</p>
+                                    <p className="font-medium">{selectedHistoryItem.billNumber || 'N/A'}</p>
+                                </div>
+                            </div>
+
+                            <div className="border rounded-md overflow-hidden">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-muted text-muted-foreground">
+                                        <tr>
+                                            <th className="p-3 font-medium">Indent No.</th>
+                                            <th className="p-3 font-medium">Product</th>
+                                            <th className="p-3 font-medium text-center">Rec Qty</th>
+                                            <th className="p-3 font-medium text-center">Bill Amount</th>
+                                            <th className="p-3 font-medium text-center">Warranty</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {matchingHistoryItems.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                                                <td className="p-3 font-mono text-xs">{item.indentNumber}</td>
+                                                <td className="p-3">{item.product}</td>
+                                                <td className="p-3 text-center font-medium">{item.receivedQuantity} {item.uom}</td>
+                                                <td className="p-3 text-center">₹{item.billAmount || 0}</td>
+                                                <td className="p-3 text-center">
+                                                    <Pill variant={item.warrantyStatus === 'Yes' ? 'primary' : 'secondary'}>
+                                                        {item.warrantyStatus || 'No'}
+                                                    </Pill>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-muted/50 font-bold">
+                                        <tr>
+                                            <td colSpan={2} className="p-3 text-right">Total:</td>
+                                            <td className="p-3 text-center text-primary">{selectedHistoryItem.receivedQuantity}</td>
+                                            <td className="p-3 text-center text-primary">₹{selectedHistoryItem.billAmount}</td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div className="flex justify-end gap-3">
+                                {selectedHistoryItem.poCopy && (
+                                    <Button variant="outline" asChild>
+                                        <a href={selectedHistoryItem.poCopy} target="_blank">View PO Copy</a>
+                                    </Button>
+                                )}
+                                <Button onClick={() => setOpenHistoryDialog(false)}>Close</Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
             </Dialog>
         </div>
     );

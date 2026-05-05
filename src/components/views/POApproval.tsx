@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -17,7 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
 import { postToSheet } from '@/lib/fetchers';
-import { PackageCheck } from 'lucide-react';
+import { PackageCheck, Package2, Eye } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import Heading from '../element/Heading';
 import { formatDate } from '@/lib/utils';
@@ -70,6 +71,7 @@ interface PoTableData {
     indentBy: string;
     indentNumber: string;
     originalRow: any;
+    _count?: number;
 }
 
 export default () => {
@@ -78,7 +80,16 @@ export default () => {
     const [tableData, setTableData] = useState<PoTableData[]>([]);
     const [historyData, setHistoryData] = useState<PoTableData[]>([]);
     const [selectedItem, setSelectedItem] = useState<PoTableData | null>(null);
+    const [openViewDialog, setOpenViewDialog] = useState(false);
+    const [matchingItems, setMatchingItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (selectedItem && openViewDialog) {
+            const items = poHistorySheet.filter(row => row.poNumber === selectedItem.poNumber);
+            setMatchingItems(items);
+        }
+    }, [selectedItem, openViewDialog, poHistorySheet]);
 
     const getV = (row: any, ...keys: string[]) => {
         if (!row || typeof row !== 'object') return '';
@@ -134,6 +145,10 @@ export default () => {
     });
 
     useEffect(() => {
+        updatePoHistorySheet();
+    }, []);
+
+    useEffect(() => {
         if (!poHistorySheet) return;
 
         // Filter: Keep ANY row that has at least one value
@@ -154,25 +169,26 @@ export default () => {
         // History: Status is 'Approved' or 'Rejected'
         const history = allMapped.filter(item => item.status && (item.status.trim().toLowerCase() === 'approved' || item.status.trim().toLowerCase() === 'rejected'));
 
-        // Grouping logic for pending (group by base Indent Number and concatenate products)
-        const groupedMap = new Map<string, PoTableData>();
-        pending.forEach(item => {
-            const baseIndent = (item.internalCode || item.indentNumber || '').split(/[_/]/)[0];
-            if (baseIndent) {
-                if (!groupedMap.has(baseIndent)) {
-                    groupedMap.set(baseIndent, { ...item });
+        // Helper for grouping
+        const groupItems = (items: PoTableData[]) => {
+            const map = new Map<string, PoTableData>();
+            items.forEach(item => {
+                const poNum = item.poNumber || 'N/A';
+                if (!map.has(poNum)) {
+                    map.set(poNum, { ...item, _count: 1 });
                 } else {
-                    const existing = groupedMap.get(baseIndent)!;
-                    const existingProducts = existing.product.split(', ').map(p => p.trim());
-                    if (!existingProducts.includes(item.product.trim())) {
-                        existing.product = `${existing.product}, ${item.product.trim()}`;
+                    const existing = map.get(poNum)!;
+                    existing._count = (existing._count || 1) + 1;
+                    if (typeof existing.quantity === 'number' && typeof item.quantity === 'number') {
+                        existing.quantity += item.quantity;
                     }
                 }
-            }
-        });
+            });
+            return Array.from(map.values());
+        };
 
-        setTableData(Array.from(groupedMap.values()));
-        setHistoryData(history);
+        setTableData(groupItems(pending));
+        setHistoryData(groupItems(history));
     }, [poHistorySheet]);
 
     const columns: ColumnDef<PoTableData>[] = [
@@ -180,35 +196,79 @@ export default () => {
             id: 'actions',
             header: 'Action',
             cell: ({ row }) => (
-                <Button
-                    size="sm"
-                    onClick={() => {
-                        setSelectedItem(row.original);
-                        setOpenDialog(true);
-                    }}
-                >
-                    Action
-                </Button>
-            )
+                <div className="flex items-center gap-2">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-8 p-0"
+                        onClick={() => {
+                            setSelectedItem(row.original);
+                            setOpenViewDialog(true);
+                        }}
+                    >
+                        <Eye size={16} />
+                    </Button>
+                    <Button
+                        size="sm"
+                        onClick={() => {
+                            setSelectedItem(row.original);
+                            setOpenDialog(true);
+                        }}
+                    >
+                        Approve {row.original._count && row.original._count > 1 ? `(${row.original._count})` : ''}
+                    </Button>
+                </div>
+            ),
         },
         { accessorKey: 'partyName', header: 'Party Name' },
         { accessorKey: 'poNumber', header: 'PO Number' },
-        { accessorKey: 'quotationNumber', header: 'Quotation Number' },
-        { accessorKey: 'quotationDate', header: 'Quotation Date' },
-        { accessorKey: 'enquiryNumber', header: 'Enquiry Number' },
-        { accessorKey: 'enquiryDate', header: 'Enquiry Date' },
-        { 
-            accessorKey: 'internalCode', 
-            header: 'Internal Code',
-            cell: ({ getValue }) => (getValue() as string || '').split(/[_/]/)[0]
+        {
+            accessorKey: 'indentNumber',
+            header: 'Indent No.',
+            cell: ({ row }) => {
+                const count = row.original._count || 1;
+                const baseId = (row.original.indentNumber || '').split(/[_/]/)[0];
+                return count > 1 ? (
+                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
+                        {baseId} ({count})
+                    </span>
+                ) : (
+                    baseId
+                );
+            }
         },
         { 
             accessorKey: 'product', 
             header: 'Product',
-            cell: ({ getValue }) => <div className="max-w-[300px] break-words whitespace-normal">{getValue() as string}</div>
+            cell: ({ row }) => {
+                const count = row.original._count || 1;
+                return count > 1 ? (
+                    <span className="text-muted-foreground italic text-xs">
+                        Multiple Products
+                    </span>
+                ) : (
+                    <div className="max-w-[200px] truncate" title={row.original.product}>
+                        {row.original.product}
+                    </div>
+                );
+            }
         },
         { accessorKey: 'description', header: 'Description' },
-        { accessorKey: 'quantity', header: 'Quantity' },
+        { 
+            accessorKey: 'quantity', 
+            header: 'Qty',
+            cell: ({ row }) => {
+                const count = row.original._count || 1;
+                return (
+                    <div className="text-center">
+                        <div className="font-bold">{row.original.quantity}</div>
+                        {count > 1 && (
+                            <div className="text-[10px] text-muted-foreground">({count} Items)</div>
+                        )}
+                    </div>
+                );
+            }
+        },
         { accessorKey: 'unit', header: 'Unit' },
         { accessorKey: 'rate', header: 'Rate' },
         { accessorKey: 'gstPercent', header: 'GST %' },
@@ -237,6 +297,23 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<PoTableData>[] = [
+        {
+            id: 'actions',
+            header: 'Action',
+            cell: ({ row }) => (
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    onClick={() => {
+                        setSelectedItem(row.original);
+                        setOpenViewDialog(true);
+                    }}
+                >
+                    <Eye size={16} />
+                </Button>
+            ),
+        },
         ...columns.filter(c => c.id !== 'actions'),
         {
             accessorKey: 'status',
@@ -502,6 +579,84 @@ export default () => {
                                         </div>
                                     </form>
                                 </Form>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+            
+            <Dialog open={openViewDialog} onOpenChange={setOpenViewDialog}>
+                <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>PO Details: {selectedItem?.poNumber}</DialogTitle>
+                        <DialogDescription>
+                            Full breakdown of items in this purchase order
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedItem && (
+                        <div className="space-y-6">
+                            {/* Header Info */}
+                            <div className="grid md:grid-cols-2 gap-4 bg-muted/50 p-4 rounded-lg">
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Party Name</p>
+                                    <p className="font-medium">{selectedItem.partyName}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Status</p>
+                                    <Pill variant={selectedItem.status === "Approved" ? "primary" : selectedItem.status === "Rejected" ? "reject" : "secondary"}>
+                                        {selectedItem.status || 'Pending'}
+                                    </Pill>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Prepared By</p>
+                                    <p className="font-medium">{selectedItem.preparedBy}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Approved By</p>
+                                    <p className="font-medium">{selectedItem.approvedBy}</p>
+                                </div>
+                            </div>
+
+                            {/* Items Table */}
+                            <div className="border rounded-md overflow-hidden">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-muted text-muted-foreground">
+                                        <tr>
+                                            <th className="p-3 font-medium">Indent No.</th>
+                                            <th className="p-3 font-medium">Product</th>
+                                            <th className="p-3 font-medium text-center">Qty</th>
+                                            <th className="p-3 font-medium text-right">Rate</th>
+                                            <th className="p-3 font-medium text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {matchingItems.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                                                <td className="p-3 font-mono text-xs">{item.internalCode || item.indentNumber}</td>
+                                                <td className="p-3">{item.product}</td>
+                                                <td className="p-3 text-center font-medium">{item.quantity}</td>
+                                                <td className="p-3 text-right">₹{item.rate}</td>
+                                                <td className="p-3 text-right font-semibold">₹{item.totalPoAmount || (item.quantity * item.rate)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-muted/50 font-bold">
+                                        <tr>
+                                            <td colSpan={4} className="p-3 text-right">Total Amount:</td>
+                                            <td className="p-3 text-right text-primary">₹{selectedItem.totalPoAmount}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div className="flex justify-end gap-3">
+                                {selectedItem.pdf && (
+                                    <Button variant="outline" asChild>
+                                        <a href={selectedItem.pdf} target="_blank">View PDF Copy</a>
+                                    </Button>
+                                )}
+                                <Button onClick={() => setOpenViewDialog(false)}>Close</Button>
                             </div>
                         </div>
                     )}

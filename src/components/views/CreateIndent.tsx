@@ -20,10 +20,11 @@ import {
 import { ClipLoader as Loader } from 'react-spinners';
 import { ClipboardList, Trash, Search, Plus, Paperclip } from 'lucide-react'; // Plus ko import karo
 import { postToSheet, submitToMaster, uploadFile } from '@/lib/fetchers';
+import { supabase } from '@/lib/supabase';
 import type { IndentSheet, StoreOutSheet, InventorySheet } from '@/types';
 import { useSheets } from '@/context/SheetsContext';
 import Heading from '../element/Heading';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatDate } from '@/lib/utils';
 
@@ -31,7 +32,6 @@ import { formatDate } from '@/lib/utils';
 export default () => {
     const { indentSheet: sheet, storeOutSheet, storeOutApprovalSheet, inventorySheet, updateIndentSheet, updateStoreOutSheet, updateInventorySheet, updateStoreOutApprovalSheet, masterSheet: options } = useSheets();
     const [indentSheet, setIndentSheet] = useState<IndentSheet[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
     const [searchTermGroupHead, setSearchTermGroupHead] = useState("");
     const [searchTermProductName, setSearchTermProductName] = useState("");
     const [newProductName, setNewProductName] = useState<{ [key: number]: string }>({});
@@ -39,6 +39,35 @@ export default () => {
     const [localProducts, setLocalProducts] = useState<{ [key: string]: string[] }>({});
     const [searchTermCategory, setSearchTermCategory] = useState("");
     const [searchTermWard, setSearchTermWard] = useState("");
+    
+    // Compute all products and their mapping to group heads
+    const { allProducts, productToGroupHeadMap } = useMemo(() => {
+        const productMap: Record<string, string> = {};
+        const masterGroupHeads = options?.groupHeads || {};
+        
+        // Process master sheet data
+        Object.entries(masterGroupHeads).forEach(([groupHead, products]) => {
+            products.forEach(product => {
+                if (!productMap[product]) {
+                    productMap[product] = groupHead;
+                }
+            });
+        });
+        
+        // Process local products
+        Object.entries(localProducts).forEach(([groupHead, products]) => {
+            products.forEach(product => {
+                if (!productMap[product]) {
+                    productMap[product] = groupHead;
+                }
+            });
+        });
+        
+        return {
+            allProducts: Object.keys(productMap).sort(),
+            productToGroupHeadMap: productMap
+        };
+    }, [options, localProducts]);
 
 
     useEffect(() => {
@@ -53,7 +82,6 @@ export default () => {
         products: z
             .array(
                 z.object({
-                    department: z.string().optional(),
                     groupHead: z.string().optional(),
                     productName: z.string().optional(),
                     quantity: z.coerce.number().gt(0, 'Must be greater than 0'),
@@ -65,6 +93,7 @@ export default () => {
                     // New fields for Store Out
                     floor: z.string().optional(),
                     category: z.string().optional(),
+                    department: z.string().optional(),
                     issueDate: z.string().optional(),
                     requestedBy: z.string().optional(),
                 })
@@ -76,19 +105,19 @@ export default () => {
             if (!data.indentApproveBy) ctx.addIssue({ code: 'custom', message: 'Required', path: ['indentApproveBy'] });
 
             data.products.forEach((p, i) => {
-                if (!p.department) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'department'] });
                 if (!p.groupHead) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'groupHead'] });
                 if (!p.productName) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'productName'] });
                 if (!p.uom) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'uom'] });
                 if (!p.areaOfUse) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'areaOfUse'] });
+                if (!p.department) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'department'] });
             });
         } else if (data.indentType === 'Store Out') {
             data.products.forEach((p, i) => {
-                if (!p.department) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'department'] });
                 if (!p.wardName) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'wardName'] });
                 if (!p.category) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'category'] });
                 if (!p.productName) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'productName'] });
                 if (!p.uom) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'uom'] });
+                if (!p.department) ctx.addIssue({ code: 'custom', message: 'Required', path: ['products', i, 'department'] });
             });
         }
     });
@@ -113,11 +142,11 @@ export default () => {
                     groupHead: groupParam || '',
                     category: groupParam || '',
                     quantity: 1 as any,
-                    department: '',
                     areaOfUse: '',
                     wardName: '',
                     specifications: '',
                     floor: '',
+                    department: '',
                     issueDate: new Date().toISOString().split('T')[0],
                     requestedBy: '',
                     attachment: undefined,
@@ -131,10 +160,10 @@ export default () => {
                     quantity: 1,
                     areaOfUse: '',
                     groupHead: '',
-                    department: '',
                     // Initialize Store Out specific fields to avoid uncontrolled warnings
                     wardName: '',
                     category: '',
+                    department: '',
                     issueDate: new Date().toISOString().split('T')[0],
                 },
             ],
@@ -158,39 +187,73 @@ export default () => {
     }, [indentType, form]);
 
 
-    // Function to generate next indent number
-    const getNextIndentNumber = (type: 'Purchase' | 'Store Out' = 'Purchase') => {
-        const prefix = type === 'Purchase' ? 'SI-' : 'SO-';
-        const targetSheet = type === 'Purchase' ? indentSheet : (storeOutApprovalSheet as any[]);
+    /**
+     * Get the next Store Out base number by querying Supabase directly.
+     * Avoids stale-state race conditions – always reads the freshest data.
+     * Format returned: 'SO-XXXX'
+     */
+    const getNextIssueBase = async (): Promise<string> => {
+        const prefix = 'SO-';
+        const { data, error } = await supabase
+            .from('store_out_request')
+            .select('issue_no')
+            .ilike('issue_no', `${prefix}%`)
+            .order('id', { ascending: false })
+            .limit(200);
 
-        console.log(`[getNextIndentNumber] Type: ${type}, Prefix: ${prefix}`);
-        console.log(`[getNextIndentNumber] Target Sheet Length: ${targetSheet?.length || 0}`);
+        if (error) throw new Error(`Failed to fetch existing issue numbers: ${error.message}`);
 
-        if (!targetSheet || targetSheet.length === 0) {
-            console.log(`[getNextIndentNumber] Target sheet empty, returning ${prefix}0001`);
-            return `${prefix}0001`;
+        let maxNumber = 0;
+        if (data && data.length > 0) {
+            for (const row of data) {
+                if (!row.issue_no?.startsWith(prefix)) continue;
+                const base = row.issue_no.split(/[_/]/)[0]; // strip _N or /N suffix
+                const num = parseInt(base.replace(prefix, ''), 10);
+                if (!isNaN(num) && num > maxNumber) maxNumber = num;
+            }
+        }
+        return `${prefix}${String(maxNumber + 1).padStart(4, '0')}`;
+    };
+
+    /**
+     * Get the next Purchase indent base number by querying Supabase directly.
+     * Format returned: 'SI-XXXX'
+     */
+    const getNextIndentBase = async (): Promise<string> => {
+        const prefix = 'SI-';
+        const { data, error } = await supabase
+            .from('indent')
+            .select('indent_number')
+            .ilike('indent_number', `${prefix}%`)
+            .order('id', { ascending: false })
+            .limit(200);
+
+        if (error) {
+            console.error('[getNextIndentBase] Supabase error, falling back to context:', error);
+            // Graceful fallback to cached context
+            if (!indentSheet?.length) return `${prefix}0001`;
+            const maxNumber = indentSheet
+                .map((row: any) => {
+                    const val = row.indentNumber || '';
+                    if (!val.startsWith(prefix)) return 0;
+                    const base = val.split(/[_/]/)[0];
+                    const num = parseInt(base.replace(prefix, ''), 10);
+                    return isNaN(num) ? 0 : num;
+                })
+                .reduce((max: number, n: number) => Math.max(max, n), 0);
+            return `${prefix}${String(maxNumber + 1).padStart(4, '0')}`;
         }
 
-        const indentNumbers = targetSheet
-            .map((row: any) => {
-                const val = row.indentNumber || row.issueNo;
-                if (!val) console.warn('[getNextIndentNumber] Row missing indentNumber/issueNo:', row);
-                return val;
-            })
-            .filter((num: string) => num && num.startsWith(prefix))
-            .map((num: string) => {
-                const base = num.split(/[_/]/)[0];
-                const parsed = parseInt(base.replace(prefix, ''), 10);
-                return parsed;
-            })
-            .filter((num: number) => !isNaN(num));
-
-        const maxNumber = indentNumbers.length > 0 ? Math.max(...indentNumbers, 0) : 0;
-        const nextNumber = maxNumber + 1;
-
-        const result = `${prefix}${String(nextNumber).padStart(4, '0')}`;
-        console.log(`[getNextIndentNumber] Max found: ${maxNumber}, Next ID: ${result}`);
-        return result;
+        let maxNumber = 0;
+        if (data && data.length > 0) {
+            for (const row of data) {
+                if (!row.indent_number?.startsWith(prefix)) continue;
+                const base = row.indent_number.split(/[_/]/)[0];
+                const num = parseInt(base.replace(prefix, ''), 10);
+                if (!isNaN(num) && num > maxNumber) maxNumber = num;
+            }
+        }
+        return `${prefix}${String(maxNumber + 1).padStart(4, '0')}`;
     };
 
 
@@ -247,186 +310,203 @@ export default () => {
     };
 
     async function onSubmit(data: z.infer<typeof schema>) {
-        try {
-            const now = new Date();
-            const day = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit' });
-            const month = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', month: '2-digit' });
-            const year = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric' });
-            const time = now.toLocaleString('en-IN', {
-                timeZone: 'Asia/Kolkata',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            });
+        const now = new Date();
+        const day = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit' });
+        const month = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', month: '2-digit' });
+        const year = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', year: 'numeric' });
+        const time = now.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+        const timestamp = `${day}/${month}/${year} ${time}`;
+        const issueDate = `${day}/${month}/${year}`;
 
-            const timestamp = `${day}/${month}/${year} ${time}`;
-            const issueDate = `${day}/${month}/${year}`;
+        // ─── STORE OUT PATH ───────────────────────────────────────────────────────
+        if (data.indentType === 'Store Out') {
+            const MAX_ATTEMPTS = 3;
+            let attempt = 0;
 
-            if (data.indentType === 'Store Out') {
-                // STORE OUT sheet submission
-                const storeOutRows: any[] = [];
-                let currentIndentNumber = getNextIndentNumber('Store Out');
+            while (attempt < MAX_ATTEMPTS) {
+                try {
+                    // 1. Always get a fresh base number directly from DB
+                    const baseNumber = await getNextIssueBase();
 
-                for (let i = 0; i < data.products.length; i++) {
-                    const product = data.products[i];
-
-                    // Using camelCase keys that backend expects for store_out_request
-                    const storeOutRow: any = {
+                    // 2. Build rows with snake_case column names the table expects
+                    const rows = data.products.map((product, idx) => ({
                         timestamp: timestamp,
-                        indentNumber: `${currentIndentNumber}/${i + 1}`,
-                        productName: product.productName || '',
-                        issueDate: product.issueDate ? formatDate(new Date(product.issueDate)) : issueDate,
-                        indenterName: data.indenterName || '',
-                        indentType: data.indentType || 'Store Out',
-                        approvalNeeded: data.indentApproveBy || '',
-                        requestedBy: data.indenterName || '',
+                        issue_no: `${baseNumber}_${idx + 1}`,
+                        product_name: product.productName || '',
+                        issue_date: product.issueDate
+                            ? formatDate(new Date(product.issueDate))
+                            : issueDate,
+                        indenter_name: data.indenterName || '',
+                        indent_type: 'Store Out',
+                        approval_needed: data.indentApproveBy || '',
+                        requested_by: data.indenterName || '',
                         floor: product.floor || '',
-                        wardName: product.wardName || '',
+                        ward_name: product.wardName || '',
                         qty: Number(product.quantity) || 0,
                         unit: product.uom || '',
                         department: product.department || '',
                         category: product.category || '',
-                        areaOfUse: product.areaOfUse || '',
-                        planned7: timestamp, // planned_7 in SQL
-                        status: 'Pending'
-                    };
+                        area_of_use: product.areaOfUse || '',
+                        planned_7: timestamp,
+                        status: 'Pending',
+                    }));
 
-                    storeOutRows.push(storeOutRow);
-                }
+                    console.log('=== STORE OUT REQUEST SUBMISSION ===', JSON.stringify(rows, null, 2));
 
-                console.log("=== STORE OUT REQUEST SUBMISSION ===");
-                console.log(JSON.stringify(storeOutRows, null, 2));
+                    // 3. Insert directly via Supabase (bypasses postToSheet to control error code)
+                    const { error: insertError } = await supabase
+                        .from('store_out_request')
+                        .insert(rows);
 
-                const res = await postToSheet(storeOutRows, 'insert', 'STORE OUT REQUEST');
-                console.log("Response:", res);
-
-                if (res.success) {
-                    toast.success('Store Out created successfully!');
-
-                    // Submit custom ward names to MASTER Column R if any
-                    for (const product of data.products) {
-                        const finalWardName = product.wardName;
-                        if (finalWardName) {
-                            submitToMaster(finalWardName);
+                    if (insertError) {
+                        // Unique-constraint violation → increment and retry
+                        if (insertError.code === '23505') {
+                            console.warn(`[Store Out] Duplicate issue_no conflict on attempt ${attempt + 1}, retrying…`);
+                            attempt++;
+                            continue;
                         }
+                        throw new Error(insertError.message);
                     }
+
+                    // SUCCESS
+                    toast.success(`Store Out ${baseNumber} created successfully!`);
+
+                    for (const product of data.products) {
+                        if (product.wardName) submitToMaster(product.wardName);
+                    }
+
+                    form.reset();
+                    setLocalProducts({});
+                    setNewProductName({});
+                    setShowAddProduct({});
 
                     setTimeout(() => {
                         updateStoreOutSheet();
                         updateStoreOutApprovalSheet();
                     }, 1000);
-                } else {
-                    toast.error(res.message || 'Failed to create Store Out');
-                }
+                    return;
 
-            } else {
-                // INDENT sheet submission (Purchase type)
-                const indentRows: Partial<IndentSheet>[] = [];
-                let currentIndentNumber = getNextIndentNumber();
-
-                for (let i = 0; i < data.products.length; i++) {
-                    const product = data.products[i];
-
-                    const row: Partial<IndentSheet> = {
-                        timestamp: timestamp,
-                        indentNumber: `${currentIndentNumber}/${i + 1}`,
-                        indenterName: data.indenterName || '',
-                        department: product.department || '',
-                        areaOfUse: product.areaOfUse || '',
-                        groupHead: product.groupHead || '',
-                        productName: product.productName || '',
-                        quantity: Number(product.quantity) || 0,
-                        uom: product.uom || '',
-                        specifications: product.specifications || '',
-                        indentApprovedBy: data.indentApproveBy || '',
-                        indentType: data.indentType || 'Purchase',
-                        attachment: '',
-                        planned1: timestamp,
-                        status: 'Pending',
-                    };
-
-                    if (product.attachment !== undefined) {
-                        row.attachment = await uploadFile(
-                            product.attachment,
-                            import.meta.env.VITE_IDENT_ATTACHMENT_FOLDER
-                        );
+                } catch (error: any) {
+                    const isDuplicate = error?.code === '23505';
+                    if (isDuplicate && attempt < MAX_ATTEMPTS - 1) {
+                        attempt++;
+                        continue;
                     }
-                    indentRows.push(row);
-                }
-
-                console.log("=== INDENT SUBMISSION ===");
-                console.log("Rows to submit:", JSON.stringify(indentRows, null, 2));
-
-                const res = await postToSheet(indentRows, 'insert', 'INDENT');
-                console.log("Response:", res);
-
-                if (res.success) {
-                    toast.success(`Purchase indent created! Indent No: ${indentRows.map(r => r.indentNumber).join(', ')}`);
-
-                    // AUTOMATIC INVENTORY REGISTRATION:
-                    // Check if unique products already exist in inventory, if not, add them.
-                    const uniqueProductNames = Array.from(new Set(data.products.map(p => p.productName?.trim()).filter(Boolean)));
-                    const inventoryRowsToInsert: Partial<InventorySheet>[] = [];
-
-                    for (const prodName of uniqueProductNames) {
-                        const exists = inventorySheet?.some(inv => inv.itemName?.toLowerCase() === prodName?.toLowerCase());
-
-                        if (!exists) {
-                            // Find the product details from the submitted data
-                            const productDetails = data.products.find(p => p.productName?.trim() === prodName);
-                            if (productDetails) {
-                                inventoryRowsToInsert.push({
-                                    groupHead: productDetails.groupHead || productDetails.category || '',
-                                    itemName: prodName || '',
-                                    uom: productDetails.uom || '',
-                                    maxLevel: 0,
-                                    opening: 0,
-                                    individualRate: 0,
-                                    indented: 0,
-                                    approved: 0,
-                                    purchaseQuantity: 0,
-                                    outQuantity: 0,
-                                    currentStock: 0,
-                                    totalPrice: 0,
-                                    colorCode: '#000000'
-                                });
-                            }
-                        }
-                    }
-
-                    if (inventoryRowsToInsert.length > 0) {
-                        try {
-                            await postToSheet(inventoryRowsToInsert, 'insert', 'INVENTORY');
-                            console.log(`Automatically added ${inventoryRowsToInsert.length} new items to inventory.`);
-                            updateInventorySheet();
-                        } catch (invErr) {
-                            console.error("Failed to auto-register inventory items:", invErr);
-                        }
-                    }
-
-                    // Submit custom ward names to MASTER Column R if any
-                    for (const product of data.products) {
-                        const finalWardName = product.areaOfUse;
-                        if (finalWardName) {
-                            submitToMaster(finalWardName);
-                        }
-                    }
-
-                    setTimeout(() => updateIndentSheet(), 1000);
-                } else {
-                    toast.error(res.message || 'Failed to create indent');
+                    console.error('Store Out submission failed:', error);
+                    toast.error(`Failed: ${error?.message || 'Unknown error'}`);
+                    return;
                 }
             }
 
-            form.reset();
-            setLocalProducts({});
-            setNewProductName({});
-            setShowAddProduct({});
+            toast.error('Could not generate a unique issue number after 3 attempts. Please try again.');
+            return;
+        }
 
+        // ─── PURCHASE INDENT PATH ────────────────────────────────────────────────
+        try {
+            const indentRows: Partial<IndentSheet>[] = [];
+            const currentIndentNumber = await getNextIndentBase();
+
+            for (let i = 0; i < data.products.length; i++) {
+                const product = data.products[i];
+
+                const row: Partial<IndentSheet> = {
+                    timestamp: timestamp,
+                    indentNumber: `${currentIndentNumber}_${i + 1}`,
+                    indenterName: data.indenterName || '',
+                    department: product.department || '',
+                    areaOfUse: product.areaOfUse || '',
+                    groupHead: product.groupHead || '',
+                    productName: product.productName || '',
+                    quantity: Number(product.quantity) || 0,
+                    uom: product.uom || '',
+                    specifications: product.specifications || '',
+                    indentApprovedBy: data.indentApproveBy || '',
+                    indentType: data.indentType || 'Purchase',
+                    attachment: '',
+                    planned1: timestamp,
+                    status: 'Pending',
+                };
+
+                if (product.attachment !== undefined) {
+                    row.attachment = await uploadFile(
+                        product.attachment,
+                        import.meta.env.VITE_IDENT_ATTACHMENT_FOLDER
+                    );
+                }
+                indentRows.push(row);
+            }
+
+            console.log('=== INDENT SUBMISSION ===', JSON.stringify(indentRows, null, 2));
+
+            const res = await postToSheet(indentRows, 'insert', 'INDENT');
+
+            if (res.success) {
+                toast.success(`Purchase indent created! Indent No: ${indentRows.map(r => r.indentNumber).join(', ')}`);
+
+                // Auto-register new products in inventory
+                const uniqueProductNames = Array.from(
+                    new Set(data.products.map(p => p.productName?.trim()).filter(Boolean))
+                );
+                const inventoryRowsToInsert: Partial<InventorySheet>[] = [];
+
+                for (const prodName of uniqueProductNames) {
+                    const exists = inventorySheet?.some(
+                        inv => inv.itemName?.toLowerCase() === prodName?.toLowerCase()
+                    );
+                    if (!exists) {
+                        const productDetails = data.products.find(p => p.productName?.trim() === prodName);
+                        if (productDetails) {
+                            inventoryRowsToInsert.push({
+                                groupHead: productDetails.groupHead || productDetails.category || '',
+                                itemName: prodName || '',
+                                uom: productDetails.uom || '',
+                                maxLevel: 0,
+                                opening: 0,
+                                individualRate: 0,
+                                indented: 0,
+                                approved: 0,
+                                purchaseQuantity: 0,
+                                outQuantity: 0,
+                                currentStock: 0,
+                                totalPrice: 0,
+                                colorCode: '#000000',
+                            });
+                        }
+                    }
+                }
+
+                if (inventoryRowsToInsert.length > 0) {
+                    try {
+                        await postToSheet(inventoryRowsToInsert, 'insert', 'INVENTORY');
+                        console.log(`Auto-registered ${inventoryRowsToInsert.length} new inventory items.`);
+                        updateInventorySheet();
+                    } catch (invErr) {
+                        console.error('Failed to auto-register inventory items:', invErr);
+                    }
+                }
+
+                for (const product of data.products) {
+                    if (product.areaOfUse) submitToMaster(product.areaOfUse);
+                }
+
+                form.reset();
+                setLocalProducts({});
+                setNewProductName({});
+                setShowAddProduct({});
+
+                setTimeout(() => updateIndentSheet(), 1000);
+            } else {
+                toast.error(res.message || 'Failed to create indent');
+            }
         } catch (error) {
-            console.error('=== SUBMIT ERROR ===');
-            console.error('Error:', error);
+            console.error('=== SUBMIT ERROR ===', error);
             toast.error(`Error: ${error instanceof Error ? error.message : 'Please try again'}`);
         }
     }
@@ -515,11 +595,7 @@ export default () => {
 
                         {fields.map((field, index) => {
                             const groupHead = indentType === 'Store Out' ? products[index]?.category : products[index]?.groupHead;
-
-                            // Combine master sheet products + local products
-                            const masterProducts = options?.groupHeads[groupHead] || [];
-                            const localGroupProducts = localProducts[groupHead] || [];
-                            const productOptions = [...masterProducts, ...localGroupProducts];
+                            const productOptions = allProducts;
 
 
                             return (
@@ -541,7 +617,6 @@ export default () => {
                                                     onClick={() => {
                                                         const firstProd = products[0] || {};
                                                         append({
-                                                            department: firstProd.department || '',
                                                             groupHead: firstProd.groupHead || '',
                                                             productName: '',
                                                             quantity: 1,
@@ -552,6 +627,7 @@ export default () => {
                                                             attachment: undefined,
                                                             wardName: firstProd.wardName || '',
                                                             category: firstProd.category || '',
+                                                            department: firstProd.department || '',
                                                             issueDate: firstProd.issueDate || new Date().toISOString().split('T')[0],
                                                         })
                                                     }}
@@ -574,6 +650,29 @@ export default () => {
 
                                     {/* Consolidated Grid Container - Clear 4-column layout */}
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+                                        {/* New Department Field */}
+                                        <FormField
+                                            control={form.control}
+                                            name={`products.${index}.department`}
+                                            render={({ field }) => (
+                                                <FormItem className="md:col-span-1">
+                                                    <FormLabel className="text-sm">Department<span className="text-destructive">*</span></FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <FormControl>
+                                                            <SelectTrigger className="w-full h-9">
+                                                                <SelectValue placeholder="Select" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {(options?.departments || []).map((d, i) => (
+                                                                <SelectItem key={i} value={d}>{d}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormItem>
+                                            )}
+                                        />
 
                                         {/* Row 1: Location & Categorization */}
                                         {indentType === 'Store Out' ? (
@@ -670,29 +769,6 @@ export default () => {
                                             )}
                                         />
 
-                                        <FormField
-                                            control={form.control}
-                                            name={`products.${index}.department`}
-                                            render={({ field }) => (
-                                                <FormItem className="md:col-span-1">
-                                                    <FormLabel className="text-sm">Department<span className="text-destructive">*</span></FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
-                                                        <FormControl>
-                                                            <SelectTrigger className="w-full h-9"><SelectValue placeholder="Select" /></SelectTrigger>
-                                                        </FormControl>
-                                                        <SelectContent>
-                                                            <div className="flex items-center border-b px-3 pb-3">
-                                                                <Search className="mr-2 h-4 w-4 opacity-50" />
-                                                                <input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => e.stopPropagation()} className="flex h-10 w-full bg-transparent text-sm outline-none" />
-                                                            </div>
-                                                            {[...new Set(options?.departments || [])].filter(d => d.toLowerCase().includes(searchTerm.toLowerCase())).map((d, i) => (
-                                                                <SelectItem key={`${d}-${i}`} value={d}>{d}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormItem>
-                                            )}
-                                        />
 
                                         {indentType === 'Store Out' && (
                                             <FormField
@@ -715,7 +791,20 @@ export default () => {
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel className="text-sm">Product Name<span className="text-destructive">*</span></FormLabel>
-                                                        <Select onValueChange={field.onChange} value={field.value} disabled={!groupHead}>
+                                                        <Select 
+                                                            onValueChange={(val) => {
+                                                                field.onChange(val);
+                                                                // Auto-fill Group Head / Category
+                                                                const mappedGroup = productToGroupHeadMap[val];
+                                                                if (mappedGroup) {
+                                                                    const fieldName = indentType === 'Store Out' 
+                                                                        ? `products.${index}.category` 
+                                                                        : `products.${index}.groupHead`;
+                                                                    form.setValue(fieldName as any, mappedGroup);
+                                                                }
+                                                            }} 
+                                                            value={field.value}
+                                                        >
                                                             <FormControl><SelectTrigger className="w-full h-9"><SelectValue placeholder="Select product" /></SelectTrigger></FormControl>
                                                             <SelectContent>
                                                                 <div className="flex items-center border-b px-3 pb-3">
@@ -729,8 +818,14 @@ export default () => {
                                                                 )}
                                                                 {showAddProduct[index] && (
                                                                     <div className="flex items-center gap-2 px-3 py-2 border-b">
-                                                                        <Input placeholder="New product" value={newProductName[index] || ''} onChange={(e) => setNewProductName(prev => ({ ...prev, [index]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addNewProductLocally(index, groupHead!))} className="h-9" />
-                                                                        <Button type="button" size="sm" onClick={() => addNewProductLocally(index, groupHead!)}>Add</Button>
+                                                                        <Input placeholder="New product" value={newProductName[index] || ''} onChange={(e) => setNewProductName(prev => ({ ...prev, [index]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), groupHead ? addNewProductLocally(index, groupHead) : toast.error("Please select a Group Head first"))} className="h-9" />
+                                                                        <Button type="button" size="sm" onClick={() => {
+                                                                            if (!groupHead) {
+                                                                                toast.error("Please select a Group Head for the new product");
+                                                                                return;
+                                                                            }
+                                                                            addNewProductLocally(index, groupHead);
+                                                                        }}>Add</Button>
                                                                     </div>
                                                                 )}
                                                                 {[...new Set(productOptions)].filter(p => p.toLowerCase().includes(searchTermProductName.toLowerCase())).map((p, i) => (

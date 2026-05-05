@@ -125,8 +125,9 @@ export default () => {
             .filter((approved) => approved.status?.trim().toLowerCase() === 'approved')
             .forEach((approved) => {
                 const fullNo = (approved.indentNumber || '').trim();
-                if (fullNo) {
-                    indentNumbers.add(fullNo);
+                const baseNo = fullNo.split(/[_/]/)[0];
+                if (baseNo) {
+                    indentNumbers.add(baseNo);
                 }
             });
 
@@ -278,7 +279,10 @@ export default () => {
         if (vendor && mode === 'create' && !indentNumber) {
             // Check if this indent is in the pending list
             const items = indentSheet.filter(
-                (i) => pendingIndentNumbers.has(i.indentNumber) && i.approvedVendorName === vendor
+                (i) => {
+                    const baseNo = (i.indentNumber || '').split(/[_/]/)[0];
+                    return pendingIndentNumbers.has(baseNo) && i.approvedVendorName === vendor;
+                }
             );
 
             // Find vendor details from master table and fill address & GSTIN
@@ -908,7 +912,10 @@ export default () => {
                                                                 className="h-9"
                                                                 readOnly
                                                                 placeholder="Indent Number"
-                                                                {...field}
+                                                                value={field.value?.split(/[_/]/)[0]}
+                                                                onChange={field.onChange}
+                                                                onBlur={field.onBlur}
+                                                                name={field.name}
                                                             />
                                                         </FormControl>
                                                     </>
@@ -1234,7 +1241,6 @@ export default () => {
                                     <Table>
                                         <TableHeader className="bg-primary text-primary-foreground font-bold">
                                             <TableRow>
-                                                <TableHead>S.No.</TableHead>
                                                 <TableHead>S/N</TableHead>
                                                 <TableHead>Internal Code</TableHead>
                                                 <TableHead>Product</TableHead>
@@ -1254,8 +1260,6 @@ export default () => {
                                                 const indent = findIndentWithFallback(value.indentNumber, value.searialNumber);
                                                 return (
                                                     <TableRow key={field.id}>
-                                                        {/* Actual Serial Number from Sheet */}
-                                                        <TableCell>{indent?.searialNumber || '-'}</TableCell>
                                                         {/* Index */}
                                                         <TableCell>{index + 1}</TableCell>
                                                         <TableCell>

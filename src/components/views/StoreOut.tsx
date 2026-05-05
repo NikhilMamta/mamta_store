@@ -67,17 +67,16 @@ export default () => {
             return lookupId === itemBaseId;
         });
 
-        // Fallback to storeOutApprovalSheet (STORE OUT REQUEST)
-        const requestDetail = !indentDetail ? storeOutApprovalSheet?.find(r => {
-            const requestId = (r.issueNo || r.indentNumber || '').split(/[_/]/)[0].toLowerCase();
-            return lookupId === requestId;
-        }) : null;
+        // Direct lookup from storeOutApprovalSheet (STORE OUT REQUEST) as per user request
+        const requestDetail = storeOutApprovalSheet?.find(r => 
+            (r.issueNo || r.issue_no || r.indentNumber) === row.indentNumber
+        );
 
         return {
             id: row.id,
             issueNo: row.indentNumber || 'N/A',
             requestedBy: row.requestedBy || indentDetail?.indenterName || requestDetail?.requestedBy || 'N/A',
-            product: row.productName || row.product || row.itemName || row.item || indentDetail?.productName || requestDetail?.productName || requestDetail?.product || requestDetail?.category || 'N/A',
+            product: requestDetail?.productName || requestDetail?.product || row.productName || row.product || row.itemName || row.item || indentDetail?.productName || requestDetail?.category || 'N/A',
             category: indentDetail?.groupHead || requestDetail?.category || '',
             qty: Number(row.approveQty || 0),
             unit: indentDetail?.uom || requestDetail?.unit || '',
@@ -93,8 +92,10 @@ export default () => {
 
     useEffect(() => {
         if (!storeOutSheet) return;
+        console.log('--- STORE OUT RAW DATA ---', storeOutSheet);
 
         const allItems = storeOutSheet.map(mapRowToTableData);
+        console.log('--- STORE OUT PRODUCT NAMES ---', allItems.map(i => i.product));
         const pendingItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'pending');
         const historyItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'approved' || row.storeOutStatus?.toLowerCase() === 'rejected');
 
@@ -132,63 +133,97 @@ export default () => {
     const pendingColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
             id: 'actions',
-            header: 'Action',
+            header: () => <div className="text-center w-full">View</div>,
             cell: ({ row }) => (
-                <Button size="sm" variant="outline" onClick={() => setSelectedGroup(row.original)}>
-                    Action ({row.original.items.length})
-                </Button>
+                <div className="flex justify-center w-full">
+                    <Button size="sm" variant="outline" onClick={() => setSelectedGroup(row.original)} className="h-8 px-3 text-xs border-primary/20 hover:bg-primary/5">
+                        View ({row.original.items.length})
+                    </Button>
+                </div>
             ),
         },
-        { accessorKey: 'issueNo', header: 'Issue No.' },
-        { accessorKey: 'indenterName', header: 'Indenter' },
-        { accessorKey: 'department', header: 'Department' },
-        { accessorKey: 'wardName', header: 'Ward Name' },
+        { 
+            accessorKey: 'issueNo', 
+            header: () => <div className="text-left">Issue No.</div>,
+            cell: ({ row }) => <div className="text-left">{row.original.issueNo?.split(/[_/]/)[0]}</div>
+        },
+        { 
+            accessorKey: 'indenterName', 
+            header: () => <div className="text-left">Indenter</div>,
+            cell: ({ row }) => <div className="text-left">{row.original.indenterName}</div>
+        },
+        { 
+            accessorKey: 'wardName', 
+            header: () => <div className="text-left">Ward Name</div>,
+            cell: ({ row }) => <div className="text-left">{row.original.wardName}</div>
+        },
         {
-            header: 'Products',
+            id: 'products',
+            header: () => <div className="text-left">Products</div>,
             cell: ({ row }) => (
-                <div className="max-w-[200px] break-words text-xs">
-                    {row.original.items.map(i => i.product).join(', ')}
+                <div className="max-w-[300px] break-words text-xs text-left">
+                    {[...new Set(row.original.items.map(i => i.product))].join(', ')}
                 </div>
             )
         },
         {
-            header: 'Slip',
-            cell: ({ row }) => row.original.slip ? (
-                <a href={row.original.slip} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
-                    <FileText size={14} /> View Slip
-                </a>
-            ) : <span className="text-muted-foreground text-xs">No Slip</span>
+            id: 'slip',
+            header: () => <div className="text-center w-full">Slip</div>,
+            cell: ({ row }) => (
+                <div className="flex justify-center w-full">
+                    {row.original.slip ? (
+                        <a href={row.original.slip} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
+                            <FileText size={14} /> View Slip
+                        </a>
+                    ) : <span className="text-muted-foreground text-xs text-center w-full">No Slip</span>}
+                </div>
+            )
         }
     ];
 
     const historyColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
             id: 'actions',
-            header: 'View',
+            header: () => <div className="text-center w-full">View</div>,
             cell: ({ row }) => (
-                <Button size="sm" variant="outline" onClick={() => setSelectedHistory(row.original)}>
-                    View ({row.original.items.length})
-                </Button>
+                <div className="flex justify-center w-full">
+                    <Button size="sm" variant="outline" onClick={() => setSelectedHistory(row.original)} className="h-8 px-3 text-xs border-primary/20 hover:bg-primary/5">
+                        View ({row.original.items.length})
+                    </Button>
+                </div>
             ),
         },
-        { accessorKey: 'issueNo', header: 'Issue No.' },
-        { accessorKey: 'indenterName', header: 'Indenter' },
-        { accessorKey: 'department', header: 'Department' },
+        { 
+            accessorKey: 'issueNo', 
+            header: () => <div className="text-left">Issue No.</div>,
+            cell: ({ row }) => <div className="text-left">{row.original.issueNo?.split(/[_/]/)[0]}</div>
+        },
+        { 
+            accessorKey: 'indenterName', 
+            header: () => <div className="text-left">Indenter</div>,
+            cell: ({ row }) => <div className="text-left">{row.original.indenterName}</div>
+        },
         {
-            header: 'Products',
+            id: 'products',
+            header: () => <div className="text-left">Products</div>,
             cell: ({ row }) => (
-                <div className="max-w-[200px] break-words text-xs">
-                    {row.original.items.map(i => i.product).join(', ')}
+                <div className="max-w-[300px] break-words text-xs text-left">
+                    {[...new Set(row.original.items.map(i => i.product))].join(', ')}
                 </div>
             )
         },
         {
-            header: 'Slip',
-            cell: ({ row }) => row.original.slip ? (
-                <a href={row.original.slip} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
-                    <FileText size={14} /> View Slip
-                </a>
-            ) : <span className="text-muted-foreground text-xs">No Slip</span>
+            id: 'slip',
+            header: () => <div className="text-center w-full">Slip</div>,
+            cell: ({ row }) => (
+                <div className="flex justify-center w-full">
+                    {row.original.slip ? (
+                        <a href={row.original.slip} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
+                            <FileText size={14} /> View Slip
+                        </a>
+                    ) : <span className="text-muted-foreground text-xs text-center w-full">No Slip</span>}
+                </div>
+            )
         }
     ];
 
@@ -223,7 +258,7 @@ export default () => {
                     {selectedGroup && (
                         <>
                             <DialogHeader>
-                                <DialogTitle>Confirm Store Out - {selectedGroup.issueNo}</DialogTitle>
+                                <DialogTitle>Confirm Store Out - {selectedGroup.issueNo?.split(/[_/]/)[0]}</DialogTitle>
                                 <DialogDescription>
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mt-1">
                                         <span className="font-semibold">{selectedGroup.indenterName}</span>
@@ -251,7 +286,7 @@ export default () => {
                     {selectedHistory && (
                         <>
                             <DialogHeader>
-                                <DialogTitle>Store Out History - {selectedHistory.issueNo}</DialogTitle>
+                                <DialogTitle>Store Out History - {selectedHistory.issueNo?.split(/[_/]/)[0]}</DialogTitle>
                                 <DialogDescription>
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mt-1">
                                         <span className="font-semibold">{selectedHistory.indenterName}</span>
@@ -311,6 +346,7 @@ const StoreOutStatusForm = ({ items, onSuccess }: { items: StoreOutTableData[], 
     });
 
     const handleCommonStatusChange = (status: string) => {
+        if (status === 'Rejected') return; // Do not auto-fill rejection for all items
         items.forEach((_, index) => {
             form.setValue(`updates.${index}.status`, status);
         });

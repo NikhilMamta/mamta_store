@@ -124,48 +124,48 @@ export default () => {
         );
     }, [indentSheet, approvedIndentSheet]);
 
-    const handleRowSelect = (rowIndex: number, checked: boolean) => {
-        const identifier = String(rowIndex);
-        
+    // Use rowIndex as the stable unique key per row — always guaranteed unique.
+    // indentNo is used ONLY for grouping (multiple product lines per indent).
+    const getRowKey = (row: ApproveTableData) => String(row.rowIndex);
+    const getBaseIndent = (row: ApproveTableData) => row.indentNo?.split(/[_/]/)[0] ?? '';
+
+    const handleRowSelect = (rowKey: string, checked: boolean) => {
+        const row = tableData.find(r => getRowKey(r) === rowKey);
+        if (!row) return;
+
+        // On check: auto-select all rows sharing the same base indent number.
+        // On uncheck: only remove this specific row.
+        const keysToUpdate = checked
+            ? tableData.filter(r => getBaseIndent(r) === getBaseIndent(row)).map(getRowKey)
+            : [rowKey];
+
         setSelectedRows(prev => {
-            const newSet = new Set(prev);
-            if (checked) newSet.add(identifier);
-            else newSet.delete(identifier);
-            return newSet;
+            const next = new Set(prev);
+            keysToUpdate.forEach(k => checked ? next.add(k) : next.delete(k));
+            return next;
         });
 
         setBulkUpdates(prev => {
             const next = new Map(prev);
-            if (checked) {
-                const row = tableData.find(r => r.rowIndex === rowIndex);
-                if (row) {
-                    next.set(identifier, {
-                        vendorType: row.vendorType,
-                        quantity: row.quantity,
-                        specifications: row.specifications
-                    });
+            keysToUpdate.forEach(k => {
+                if (checked) {
+                    const r = tableData.find(tr => getRowKey(tr) === k);
+                    if (r) next.set(k, { vendorType: r.vendorType, quantity: r.quantity, specifications: r.specifications });
+                } else {
+                    next.delete(k);
                 }
-            } else {
-                next.delete(identifier);
-            }
+            });
             return next;
         });
     };
 
-
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            const allIndices = tableData.map(row => String(row.rowIndex));
-            setSelectedRows(new Set(allIndices));
-            
-            setBulkUpdates(prev => {
-                const next = new Map(prev);
+            setSelectedRows(new Set(tableData.map(getRowKey)));
+            setBulkUpdates(() => {
+                const next = new Map<string, { vendorType?: string; quantity?: number; specifications?: string }>();
                 tableData.forEach(row => {
-                    next.set(String(row.rowIndex), {
-                        vendorType: row.vendorType,
-                        quantity: row.quantity,
-                        specifications: row.specifications
-                    });
+                    next.set(getRowKey(row), { vendorType: row.vendorType, quantity: row.quantity, specifications: row.specifications });
                 });
                 return next;
             });
@@ -180,13 +180,32 @@ export default () => {
         field: 'vendorType' | 'quantity' | 'specifications',
         value: string | number
     ) => {
-        setBulkUpdates((prevUpdates) => {
+        setBulkUpdates(prevUpdates => {
             const newUpdates = new Map(prevUpdates);
-            const currentUpdate = newUpdates.get(identifier) || {};
-            newUpdates.set(identifier, {
-                ...currentUpdate,
-                [field]: value,
-            });
+
+            if (field === 'vendorType') {
+                const currentValue = newUpdates.get(identifier)?.vendorType;
+                const isFirstSet = !currentValue || currentValue === 'Pending';
+
+                if (isFirstSet) {
+                    // Auto-fill: first time setting → propagate to all rows in the same indent group
+                    const changedRow = tableData.find(r => getRowKey(r) === identifier);
+                    const baseIndent = changedRow ? getBaseIndent(changedRow) : '';
+                    tableData.forEach(r => {
+                        const k = getRowKey(r);
+                        if (newUpdates.has(k) && getBaseIndent(r) === baseIndent) {
+                            newUpdates.set(k, { ...newUpdates.get(k)!, vendorType: value as string });
+                        }
+                    });
+                } else {
+                    // Override: already set — only update this specific row
+                    newUpdates.set(identifier, { ...newUpdates.get(identifier)!, vendorType: value as string });
+                }
+            } else {
+                // Quantity and specs are always per-row
+                newUpdates.set(identifier, { ...newUpdates.get(identifier), [field]: value });
+            }
+
             return newUpdates;
         });
     };
@@ -209,10 +228,10 @@ export default () => {
             const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
             const simpleDate = `${day}/${month}/${year}`;
 
-            // 1. Identify all unique Indent Numbers from selected rows
+            // 1. Collect all unique indent numbers from selected rows
             const selectedIndentNos = new Set<string>();
-            selectedRows.forEach(rowIndexStr => {
-                const row = tableData.find(r => String(r.rowIndex) === rowIndexStr);
+            selectedRows.forEach(rowKey => {
+                const row = tableData.find(r => getRowKey(r) === rowKey);
                 if (row?.indentNo) selectedIndentNos.add(row.indentNo);
             });
 
@@ -224,14 +243,12 @@ export default () => {
                 // Find all rows in original sheet for this indent number
                 const allRowsForIndent = indentSheet.filter(s => s.indentNumber === indentNo);
                 
-                // Get the update info (vendorType, etc.) from the bulkUpdates map
-                // We'll look for any selected row that has this indentNo to get the update values
-                const representativeRowIndex = Array.from(selectedRows).find(idx => {
-                    const r = tableData.find(tr => String(tr.rowIndex) === idx);
+                // Get the update values from any selected row with this indentNo
+                const representativeKey = Array.from(selectedRows).find(k => {
+                    const r = tableData.find(tr => getRowKey(tr) === k);
                     return r?.indentNo === indentNo;
                 });
-                
-                const update = bulkUpdates.get(representativeRowIndex || "");
+                const update = bulkUpdates.get(representativeKey || '');
                 if (!update) return;
 
                 allRowsForIndent.forEach(originalSheet => {
@@ -429,7 +446,7 @@ export default () => {
     };
 
     const handleSingleRowUpdate = async (indent: ApproveTableData) => {
-        const identifier = String(indent.rowIndex);
+        const identifier = String(indent.id);
         const update = bulkUpdates.get(identifier);
         
         if (!update || !update.vendorType || update.vendorType === 'Pending') {
@@ -507,28 +524,19 @@ export default () => {
             ),
             cell: ({ row }: { row: Row<ApproveTableData> }) => {
                 const indent = row.original;
+                const rowKey = getRowKey(indent);
                 return (
                     <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
                         <input
                             type="checkbox"
-                            checked={selectedRows.has(String(row.original.rowIndex))}
-                            onChange={(e) => handleRowSelect(indent.rowIndex, e.target.checked)}
-                            className="w-4 h-4"
+                            checked={selectedRows.has(rowKey)}
+                            onChange={(e) => handleRowSelect(rowKey, e.target.checked)}
+                            className="w-4 h-4 cursor-pointer"
                         />
                     </div>
                 );
             },
             size: 50,
-        },
-        {
-            accessorKey: 'searialNumber',
-            header: 'S.No.',
-            cell: ({ getValue }) => (
-                <div className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                    {String(getValue() || '-')}
-                </div>
-            ),
-            size: 60,
         },
         ...(user.indentApprovalAction
             ? [
@@ -537,7 +545,7 @@ export default () => {
                     id: 'vendorTypeAction',
                     cell: ({ row }: { row: Row<ApproveTableData> }) => {
                         const indent = row.original;
-                        const identifier = String(indent.rowIndex);
+                        const identifier = getRowKey(indent);
                         const isSelected = selectedRows.has(identifier);
                         const currentValue =
                             bulkUpdates.get(identifier)?.vendorType || indent.vendorType;
@@ -624,7 +632,7 @@ export default () => {
             header: 'Quantity',
             cell: ({ row }: { row: Row<ApproveTableData> }) => {
                 const indent = row.original;
-                const identifier = String(indent.rowIndex);
+                const identifier = getRowKey(indent);
                 const isSelected = selectedRows.has(identifier);
                 const currentValue = bulkUpdates.get(identifier)?.quantity || indent.quantity;
 
@@ -677,7 +685,7 @@ export default () => {
             header: 'Specifications',
             cell: ({ row }: { row: Row<ApproveTableData> }) => {
                 const indent = row.original;
-                const identifier = String(indent.rowIndex);
+                const identifier = getRowKey(indent);
                 const isSelected = selectedRows.has(identifier);
                 const currentValue = bulkUpdates.get(identifier)?.specifications || indent.specifications;
 
@@ -735,20 +743,10 @@ export default () => {
             size: 100,
         },
 
-    ], [selectedRows, bulkUpdates, submitting, user.indentApprovalAction]);
+    ], [selectedRows, bulkUpdates, submitting, user.indentApprovalAction, tableData]);
 
     // History columns with mobile responsiveness
     const historyColumns: ColumnDef<HistoryData>[] = useMemo(() => [
-        {
-            accessorKey: 'searialNumber',
-            header: 'S.No.',
-            cell: ({ getValue }) => (
-                <div className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                    {String(getValue() || '-')}
-                </div>
-            ),
-            size: 60,
-        },
         {
             accessorKey: 'indentNo',
             header: 'Indent No.',
@@ -989,35 +987,31 @@ export default () => {
                     <ClipboardCheck size={50} className="text-primary" />
                 </Heading>
                 <TabsContent value="pending" className="w-full">
-                    <div className="space-y-4">
-                        {selectedRows.size > 0 && (
-                            <div className="flex justify-end">
-                                <Button
-                                    onClick={handleSubmitBulkUpdates}
-                                    disabled={submitting}
-                                    className="flex items-center gap-2 w-full sm:w-auto"
-                                >
-                                    {submitting && (
-                                        <Loader
-                                            size={16}
-                                            color="white"
-                                            aria-label="Loading Spinner"
-                                        />
+                    <div className="w-full overflow-x-auto overflow-y-hidden">
+                        <DataTable
+                            data={tableData}
+                            columns={columns}
+                            searchFields={['product', 'department', 'indenter', 'vendorType']}
+                            dataLoading={indentLoading}
+                            className="h-[74dvh]"
+                            extraActions={
+                                <div className="flex items-center gap-2">
+                                    {selectedRows.size > 0 && (
+                                        <Button
+                                            onClick={handleSubmitBulkUpdates}
+                                            disabled={submitting}
+                                            className="flex items-center gap-2 text-xs sm:text-sm bg-primary hover:bg-primary/90"
+                                        >
+                                            {submitting && (
+                                                <Loader
+                                                    size={16}
+                                                    color="white"
+                                                    aria-label="Loading Spinner"
+                                                />
+                                            )}
+                                            Submit Updates
+                                        </Button>
                                     )}
-                                    Submit Updates
-                                </Button>
-                            </div>
-                        )}
-
-                        <div className="w-full overflow-x-auto overflow-y-hidden">
-                            <DataTable
-                                data={tableData}
-                                columns={columns}
-                                searchFields={['product', 'department', 'indenter', 'vendorType']}
-                                dataLoading={indentLoading}
-                                onRowClick={(row) => handleRowSelect(row.rowIndex, !selectedRows.has(String(row.rowIndex)))}
-                                className="h-[74dvh]"
-                                extraActions={
                                     <Button
                                         variant="default"
                                         onClick={onDownloadClick}
@@ -1035,9 +1029,9 @@ export default () => {
                                         <span className="hidden sm:inline">{loading ? "Downloading..." : "Download"}</span>
                                         <span className="sm:hidden">{loading ? "..." : "CSV"}</span>
                                     </Button>
-                                }
-                            />
-                        </div>
+                                </div>
+                            }
+                        />
                     </div>
                 </TabsContent>
                 <TabsContent value="history" className="flex-1 min-h-0 w-full">
