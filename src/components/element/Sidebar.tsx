@@ -12,23 +12,23 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { useSheets } from '@/context/SheetsContext';
 import type { RouteAttributes, UserPermissions } from '@/types';
-import { LogOut, RotateCw } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { LogOut, RotateCw, User, ShieldCheck } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import Logo from './Logo';
 import { useMemo } from 'react';
+import { cn } from '@/lib/utils';
 
 export default ({ items }: { items: RouteAttributes[] }) => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { indentSheet, updateAll, allLoading } = useSheets();
     const { user, logout } = useAuth();
 
-    // Memoize the permission checking function to avoid re-creation on every render
-    // Fix the permission checking logic
+    const currentPath = location.pathname.slice(1);
+
     const hasPermission = useMemo(() => {
         return (routeItem: RouteAttributes) => {
-            // In the Sidebar component, update the pathToPermissionMap:
-
             const pathToPermissionMap: Record<string, keyof UserPermissions> = {
                 '': 'dashboard',
                 'dashboard': 'dashboard',
@@ -52,16 +52,11 @@ export default ({ items }: { items: RouteAttributes[] }) => {
             };
 
             const permissionKey = pathToPermissionMap[routeItem.path];
-            
-            // If it's the admin, and no specific key is defined, allow it
             if (user?.username === 'admin' && !permissionKey) return true;
-            
-            if (!permissionKey) return routeItem.path === '' || routeItem.path === 'dashboard'; // Default to true only for dashboard
+            if (!permissionKey) return routeItem.path === '' || routeItem.path === 'dashboard';
 
-            // Fix: Handle both string and boolean values safely with type assertion
             const userPermission = (user as any)?.[permissionKey];
 
-            // Special handling for Admin: Show everything unless explicitly set to FALSE
             if (user?.username === 'admin') {
                 if (userPermission === false || userPermission === 'FALSE' || userPermission === 'False') {
                     return false;
@@ -69,112 +64,155 @@ export default ({ items }: { items: RouteAttributes[] }) => {
                 return true;
             }
 
-            // Handle string values like 'TRUE', 'FALSE', 'No Access'
             if (typeof userPermission === 'string') {
                 return userPermission.toUpperCase() === 'TRUE';
             }
 
-            // Handle boolean values
             if (typeof userPermission === 'boolean') {
                 return userPermission;
             }
 
-            // Handle numbers (0 = false, 1 = true) or other types
             if (typeof userPermission === 'number') {
                 return userPermission !== 0;
             }
 
-            // Default to false if undefined or null
             return false;
         };
     }, [user]);
 
-    // Memoize filtered items to prevent unnecessary re-renders
     const filteredItems = useMemo(() => {
         if (!user) return [];
 
         return items.filter((item) => {
-            // First check existing gateKey condition
             if (item.gateKey && (user as any)[item.gateKey] === 'No Access') {
                 return false;
             }
-
-            // Then check new permission-based condition
             return hasPermission(item);
         });
     }, [items, user, hasPermission]);
 
-    // Early return if user is not loaded
     if (!user) {
         return null;
     }
 
     return (
-        <Sidebar side="left" variant="inset" collapsible="offcanvas">
-            <SidebarHeader className="p-3 border-b-1">
-                <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                        <Logo />
-                        <div>
-                            <h2 className="text-xl font-bold">Store App</h2>
-                            <p className="text-sm">Management System</p>
+        <Sidebar side="left" variant="inset" collapsible="offcanvas" className="border-r border-sidebar-border/50 bg-sidebar/95 backdrop-blur-md">
+            <SidebarHeader className="p-4 border-b border-sidebar-border/50">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3 group">
+                        <div className="p-2 bg-primary/10 rounded-xl group-hover:bg-primary/20 transition-all duration-300 shadow-sm border border-primary/20">
+                            <Logo />
+                        </div>
+                        <div className="flex flex-col">
+                            <h2 className="text-lg font-bold tracking-tight leading-none text-primary">Store App</h2>
+                            <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/70 mt-1">Management v2.0</span>
                         </div>
                     </div>
                     <Button
                         variant="ghost"
-                        className="size-7"
+                        size="icon"
+                        className={cn(
+                            "size-8 rounded-full hover:bg-primary/10 transition-transform active:scale-95",
+                            allLoading && "animate-spin"
+                        )}
                         onClick={() => updateAll()}
                         disabled={allLoading}
                     >
-                        <RotateCw />
-                    </Button>
-                </div>
-                <SidebarSeparator />
-                <div className="flex justify-between items-center px-3 text-xs text-muted-foreground">
-                    <div>
-                        <p>
-                            Name: <span className="font-semibold">{user.name}</span>
-                        </p>
-                        <p>
-                            Username: <span className="font-semibold">{user.username}</span>
-                        </p>
-                    </div>
-                    <Button variant="outline" className="size-8" onClick={() => logout()}>
-                        <LogOut />
+                        <RotateCw size={16} className="text-muted-foreground" />
                     </Button>
                 </div>
             </SidebarHeader>
-            <SidebarContent className="py-1 border-b-1">
-                <SidebarGroup>
-                    <SidebarMenu>
-                        {filteredItems.map((item, i) => (
-                            <SidebarMenuItem key={`${item.path}-${i}`}>
-                                <SidebarMenuButton
-                                    className="transition-colors duration-200 rounded-md py-5 flex justify-between font-medium text-secondary-foreground"
-                                    onClick={() => navigate(item.path)}
-                                    isActive={window.location.pathname.slice(1) === item.path}
-                                >
-                                    <div className="flex gap-2 items-center">
-                                        {item.icon}
-                                        {item.name}
-                                    </div>
-                                    {item.notifications && item.notifications(indentSheet || []) !== 0 && (
-                                        <span className="bg-destructive text-secondary w-[1.3rem] h-[1.3rem] rounded-full text-xs grid place-items-center text-center">
-                                            {item.notifications(indentSheet || [])}
-                                        </span>
-                                    )}
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        ))}
+
+            <SidebarContent className="px-2 pb-4 scrollbar-none flex flex-col">
+                <SidebarGroup className="p-0 flex-1">
+                    <SidebarMenu className="gap-1">
+                        {filteredItems.map((item, i) => {
+                            const isActive = currentPath === item.path || (item.path === '' && currentPath === 'dashboard');
+                            
+                            return (
+                                <SidebarMenuItem key={`${item.path}-${i}`}>
+                                    <SidebarMenuButton
+                                        className={cn(
+                                            "relative group transition-all duration-300 ease-in-out rounded-xl py-6 px-4 flex justify-between items-center overflow-hidden",
+                                            "hover:translate-x-1 hover:scale-[1.02] hover:shadow-md active:scale-95",
+                                            isActive 
+                                                ? "bg-primary text-white font-bold shadow-lg ring-1 ring-white/20 z-10" 
+                                                : "text-muted-foreground hover:bg-primary/5 hover:text-primary font-medium"
+                                        )}
+                                        onClick={() => navigate(item.path)}
+                                        isActive={isActive}
+                                    >
+                                        <div className="flex gap-3 items-center">
+                                            <div className={cn(
+                                                "size-5 transition-transform group-hover:scale-110",
+                                                isActive ? "text-white" : "text-muted-foreground group-hover:text-primary"
+                                            )}>
+                                                {item.icon}
+                                            </div>
+                                            <span className={cn(
+                                                "text-sm tracking-wide",
+                                                isActive ? "text-white" : "text-secondary-foreground"
+                                            )}>{item.name}</span>
+                                        </div>
+                                        
+                                        {/* Active indicator bar */}
+                                        {isActive && (
+                                            <div className="absolute left-0 top-2 bottom-2 w-1 bg-white rounded-r-full shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
+                                        )}
+
+                                        {item.notifications && item.notifications(indentSheet || []) !== 0 && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-destructive text-destructive-foreground min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-bold flex items-center justify-center shadow-md animate-in zoom-in duration-300">
+                                                {item.notifications(indentSheet || [])}
+                                            </div>
+                                        )}
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            );
+                        })}
                     </SidebarMenu>
                 </SidebarGroup>
+
             </SidebarContent>
-            <SidebarFooter>
-                <div className="p-2 text-center text-sm">
-                    Powered by &#8208;{' '}
-                    <a className="text-primary" href="https://botivate.in" target="_blank" rel="noopener noreferrer">
-                        Botivate
-                    </a>
+
+            <SidebarFooter className="p-4 border-t border-sidebar-border/50 gap-4">
+                {/* User Profile */}
+                <div className="bg-muted/40 rounded-xl p-3 border border-border/40 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]">
+                    <div className="flex items-center gap-3">
+                        <div className="size-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 text-primary shrink-0 shadow-sm">
+                            <User size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold truncate leading-none">{user.name}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                                <ShieldCheck size={10} className="text-primary" />
+                                <p className="text-[10px] text-muted-foreground font-medium uppercase truncate">@{user.username}</p>
+                            </div>
+                        </div>
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="size-8 rounded-full hover:bg-destructive/10 hover:text-destructive group transition-all" 
+                            onClick={() => logout()}
+                            title="Logout"
+                        >
+                            <LogOut size={16} />
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Botivate Partner Footer */}
+                <div className="bg-primary/5 rounded-lg p-2 text-center border border-primary/10">
+                    <div className="flex items-center justify-center gap-2">
+                        <span className="text-[10px] font-medium text-muted-foreground">Powered by</span>
+                        <a 
+                            className="text-[10px] text-primary font-bold hover:underline" 
+                            href="https://botivate.in" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                        >
+                            Botivate
+                        </a>
+                    </div>
                 </div>
             </SidebarFooter>
         </Sidebar>
