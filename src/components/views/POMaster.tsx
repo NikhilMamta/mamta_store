@@ -144,8 +144,8 @@ export default () => {
         { accessorKey: 'quotationDate', header: 'Quotation Date' },
         { accessorKey: 'enquiryNumber', header: 'Enquiry Number' },
         { accessorKey: 'enquiryDate', header: 'Enquiry Date' },
-        { 
-            accessorKey: 'internalCode', 
+        {
+            accessorKey: 'internalCode',
             header: 'Internal Code',
             cell: ({ getValue }) => (getValue() as string || '').split(/[_/]/)[0]
         },

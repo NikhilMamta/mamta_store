@@ -403,7 +403,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
             const approvedItems = values.approvals.filter(a => a.status === 'Approved');
             if (approvedItems.length > 0) {
                 const insertPayload = approvedItems.map(appr => ({
-                    indentNumber: appr.originalRow.indentNumber || appr.originalRow.issueNo,
+                    indentNumber: (appr.originalRow.indentNumber || appr.originalRow.issueNo)?.replace('_', '/'),
                     approveQty: appr.approveQty,
                     slip: slipUrl,
                     planned8: new Date().toISOString().split('T')[0], // Planned date for final store out

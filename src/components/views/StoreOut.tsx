@@ -367,7 +367,7 @@ const StoreOutStatusForm = ({ items, onSuccess }: { items: StoreOutTableData[], 
             const insertPayload = values.updates.map(update => {
                 const originalItem = items.find(i => i.id === update.id)!;
                 return {
-                    indentNumber: originalItem.originalRow.indentNumber,
+                    indentNumber: originalItem.originalRow.indentNumber?.replace('_', '/'),
                     status: update.status,
                     planned9: new Date().toISOString().split('T')[0], // planned_9 in SQL
                     timestamp: new Date().toISOString(),

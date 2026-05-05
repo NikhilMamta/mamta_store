@@ -125,7 +125,7 @@ export default () => {
 
         try {
             console.log('Deleting row:', { indentNumber, rowIndex });
-            
+
             const result = await postToSheet([{ rowIndex: rowIndex }], 'delete', 'PO MASTER');
 
             if (result.success) {
@@ -152,7 +152,7 @@ export default () => {
             cell: ({ row }) => {
                 return (
                     <div className="flex items-center gap-2">
-                        <button 
+                        <button
                             onClick={() => {
                                 setSelectedPo(row.original);
                                 setOpenDialog(true);
@@ -162,7 +162,7 @@ export default () => {
                         >
                             <Eye size={18} />
                         </button>
-                        <button 
+                        <button
                             onClick={() => handleDelete(row.original.indentNumber, row.original.rowIndex)}
                             className="text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
                             title="Delete row"
@@ -174,8 +174,8 @@ export default () => {
             },
         },
         { accessorKey: 'poNumber', header: 'PO Number' },
-        { 
-            accessorKey: 'indentNumber', 
+        {
+            accessorKey: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
@@ -204,8 +204,8 @@ export default () => {
             },
         },
         { accessorKey: 'vendorName', header: 'Vendor Name' },
-        { 
-            accessorKey: 'product', 
+        {
+            accessorKey: 'product',
             header: 'Product',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
@@ -220,8 +220,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'quantity', 
+        {
+            accessorKey: 'quantity',
             header: 'Qty',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
@@ -235,8 +235,8 @@ export default () => {
                 );
             }
         },
-        { 
-            accessorKey: 'rate', 
+        {
+            accessorKey: 'rate',
             header: 'Rate',
             cell: ({ getValue }) => `₹${getValue()}`
         },
@@ -249,8 +249,8 @@ export default () => {
                 return <>&#8377;{row.original.totalAmount}</>;
             },
         },
-        { 
-            accessorKey: 'status', 
+        {
+            accessorKey: 'status',
             header: 'Status',
             cell: ({ row }) => {
                 const variant = row.original.status === "Not Recieved" ? "secondary" : row.original.status === "Recieved" ? "primary" : "default"

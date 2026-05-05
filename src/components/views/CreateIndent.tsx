@@ -337,7 +337,7 @@ export default () => {
                     // 2. Build rows with snake_case column names the table expects
                     const rows = data.products.map((product, idx) => ({
                         timestamp: timestamp,
-                        issue_no: `${baseNumber}_${idx + 1}`,
+                        issue_no: `${baseNumber}/${idx + 1}`,
                         product_name: product.productName || '',
                         issue_date: product.issueDate
                             ? formatDate(new Date(product.issueDate))
@@ -418,7 +418,7 @@ export default () => {
 
                 const row: Partial<IndentSheet> = {
                     timestamp: timestamp,
-                    indentNumber: `${currentIndentNumber}_${i + 1}`,
+                    indentNumber: `${currentIndentNumber}/${i + 1}`,
                     indenterName: data.indenterName || '',
                     department: product.department || '',
                     areaOfUse: product.areaOfUse || '',
