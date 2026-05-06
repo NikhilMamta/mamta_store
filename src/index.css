@@ -60,7 +60,7 @@
     --card-foreground: #0f172a;
     --popover: #ffffff;
     --popover-foreground: #0f172a;
-    --primary: #58CC02;
+    --primary: #15803D;
     --primary-foreground: #ffffff;
     --secondary: #f1f5f9;
     --secondary-foreground: #0f172a;
@@ -71,25 +71,25 @@
     --destructive: #ef4444;
     --border: #e2e8f0;
     --input: #e2e8f0;
-    --ring: #58CC02;
-    --chart-1: #58CC02;
-    --chart-2: #46a302;
-    --chart-3: #84d841;
-    --chart-4: #b0e680;
-    --chart-5: #d7f3bf;
-    --chart-6: #58CC02;
-    --chart-7: #58CC02;
-    --chart-8: #58CC02;
-    --chart-9: #58CC02;
-    --chart-10: #58CC02;
+    --ring: #15803D;
+    --chart-1: #15803D;
+    --chart-2: #166534;
+    --chart-3: #16a34a;
+    --chart-4: #22c55e;
+    --chart-5: #4ade80;
+    --chart-6: #15803D;
+    --chart-7: #15803D;
+    --chart-8: #15803D;
+    --chart-9: #15803D;
+    --chart-10: #15803D;
     --sidebar: #f8fafc;
     --sidebar-foreground: #334155;
-    --sidebar-primary: #58CC02;
+    --sidebar-primary: #15803D;
     --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: #f1f5f9;
     --sidebar-accent-foreground: #0f172a;
     --sidebar-border: #e2e8f0;
-    --sidebar-ring: #58CC02;
+    --sidebar-ring: #15803D;
 }
 
 @layer base {
