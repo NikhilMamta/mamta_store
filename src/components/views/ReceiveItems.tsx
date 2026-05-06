@@ -148,9 +148,13 @@ export default () => {
             return acc;
         }, {});
 
-        const finalData = Object.values(grouped);
+        const finalData = Object.values(grouped).sort((a, b) => {
+            const dateA = a.poDate ? new Date(a.poDate).getTime() : 0;
+            const dateB = b.poDate ? new Date(b.poDate).getTime() : 0;
+            return dateB - dateA;
+        });
         console.log('ReceiveItems Grouped Table Data:', finalData);
-        setTableData(finalData.reverse());
+        setTableData(finalData);
     }, [poApprovalSheet, indentSheet, poHistorySheet]);
 
     useEffect(() => {
@@ -194,7 +198,8 @@ export default () => {
                     indentNumber: indentNo,
                     indentNumbers: [indentNo],
                     poCopy: indent?.poCopy || '',
-                    _count: 1
+                    _count: 1,
+                    timestamp: r.timestamp,
                 };
             } else {
                 acc[poNumber].orderQuantity += orderQty;
@@ -209,11 +214,22 @@ export default () => {
                     acc[poNumber].products?.push(product);
                 }
                 acc[poNumber]._count = (acc[poNumber]._count || 0) + 1;
+
+                // Update to latest timestamp in group
+                if (r.timestamp && (!acc[poNumber].timestamp || new Date(r.timestamp) > new Date(acc[poNumber].timestamp!))) {
+                    acc[poNumber].timestamp = r.timestamp;
+                }
             }
             return acc;
-        }, {});
+        }, {} as Record<string, HistoryData & { timestamp?: string }>);
 
-        setHistoryData(Object.values(grouped).reverse());
+        setHistoryData(
+            Object.values(grouped).sort((a, b) => {
+                const dateA = (a as any).timestamp ? new Date((a as any).timestamp).getTime() : 0;
+                const dateB = (b as any).timestamp ? new Date((b as any).timestamp).getTime() : 0;
+                return dateB - dateA;
+            })
+        );
     }, [receivedSheet, indentSheet]);
 
     const handleDownload = (data: any[]) => {

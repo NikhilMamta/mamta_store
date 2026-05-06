@@ -85,7 +85,11 @@ export default () => {
                     vendorType: sheet.vendorType || 'Pending',
                     searialNumber: sheet.searialNumber,
                 }))
-                .reverse()
+                .sort((a, b) => {
+                    const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                    const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                    return dateB - dateA;
+                })
         );
     }, [indentSheet]);
     const handleRowSelect = (id: string, checked: boolean) => {

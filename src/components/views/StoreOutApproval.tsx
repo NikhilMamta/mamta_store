@@ -56,6 +56,7 @@ interface StoreOutTableData {
     wardName: string;
     searialNumber?: string | number;
     originalRow: any;
+    timestamp: string;
 }
 
 interface GroupedStoreOutData {
@@ -64,6 +65,7 @@ interface GroupedStoreOutData {
     requestedBy: string;
     department: string;
     wardName: string;
+    timestamp: string;
     items: StoreOutTableData[];
 }
 
@@ -113,6 +115,7 @@ export default () => {
             indentType: row.indentType || indentDetail?.indentType || '',
             wardName: row.wardName || indentDetail?.wardName || '',
             searialNumber: row.searialNumber,
+            timestamp: row.timestamp || indentDetail?.timestamp || '',
             originalRow: row
         };
     };
@@ -134,16 +137,30 @@ export default () => {
                         requestedBy: item.requestedBy,
                         department: item.department,
                         wardName: item.wardName,
+                        timestamp: item.timestamp,
                         items: [],
                     };
+                } else {
+                    // Update to latest timestamp in group
+                    if (item.timestamp && (!acc[baseId].timestamp || new Date(item.timestamp) > new Date(acc[baseId].timestamp))) {
+                        acc[baseId].timestamp = item.timestamp;
+                    }
                 }
                 acc[baseId].items.push(item);
                 return acc;
             }, {} as Record<string, GroupedStoreOutData>);
         };
 
-        setTableData(Object.values(groupItems(pendingItems)).reverse());
-        setHistoryData(Object.values(groupItems(historyItems)).reverse());
+        const sortLatest = (data: GroupedStoreOutData[]) => {
+            return data.sort((a, b) => {
+                const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return dateB - dateA;
+            });
+        };
+
+        setTableData(sortLatest(Object.values(groupItems(pendingItems))));
+        setHistoryData(sortLatest(Object.values(groupItems(historyItems))));
     }, [storeOutApprovalSheet]);
 
     const onDownloadClick = async () => {
@@ -185,16 +202,49 @@ export default () => {
         },
         { 
             accessorKey: 'issueNo', 
+            id: 'issueNo',
             header: 'Issue No.',
-            cell: ({ row }) => row.original.issueNo?.split(/[_/]/)[0]
+            cell: ({ row }) => (
+                <div className="text-center font-medium">
+                    {row.original.issueNo?.split(/[_/]/)[0]}
+                </div>
+            )
         },
-        { accessorKey: 'issueDate', header: 'Date' },
-        { accessorKey: 'requestedBy', header: 'Requested By' },
-        { accessorKey: 'wardName', header: 'Ward Name' },
+        { 
+            accessorKey: 'timestamp', 
+            id: 'timestamp',
+            header: 'Date',
+            cell: ({ row }) => {
+                const d = new Date(row.original.timestamp);
+                return (
+                    <div className="flex flex-col items-center justify-center min-w-[100px] gap-0.5">
+                        <span className="text-sm font-bold text-foreground tabular-nums tracking-tight">
+                            {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                    </div>
+                );
+            }
+        },
+        { 
+            accessorKey: 'requestedBy', 
+            id: 'requestedBy',
+            header: 'Requested By',
+            cell: ({ getValue }) => <div className="text-center">{getValue() as string}</div>
+        },
+        { 
+            accessorKey: 'wardName', 
+            id: 'wardName',
+            header: 'Ward Name',
+            cell: ({ getValue }) => <div className="text-center">{getValue() as string}</div>
+        },
         {
+            id: 'products',
             header: 'Products',
             cell: ({ row }) => (
-                <div className="max-w-[200px] break-words text-xs">
+                <div className="max-w-[300px] break-words text-xs text-center mx-auto">
                     {row.original.items.map(i => i.product).join(', ')}
                 </div>
             )
@@ -203,7 +253,7 @@ export default () => {
 
     const historyColumns: ColumnDef<GroupedStoreOutData>[] = [
         {
-            id: 'actions',
+            id: 'actions_history',
             header: 'Action',
             cell: ({ row }) => (
                 <Button size="sm" variant="outline" onClick={() => setSelectedHistory(row.original)}>
@@ -213,15 +263,43 @@ export default () => {
         },
         { 
             accessorKey: 'issueNo', 
+            id: 'issueNo_history',
             header: 'Issue No.',
-            cell: ({ row }) => row.original.issueNo?.split(/[_/]/)[0]
+            cell: ({ row }) => (
+                <div className="text-center font-medium">
+                    {row.original.issueNo?.split(/[_/]/)[0]}
+                </div>
+            )
         },
-        { accessorKey: 'issueDate', header: 'Date' },
-        { accessorKey: 'requestedBy', header: 'Requested By' },
+        { 
+            accessorKey: 'timestamp', 
+            id: 'timestamp_history',
+            header: 'Date',
+            cell: ({ row }) => {
+                const d = new Date(row.original.timestamp);
+                return (
+                    <div className="flex flex-col items-center justify-center min-w-[100px] gap-0.5">
+                        <span className="text-sm font-bold text-foreground tabular-nums tracking-tight">
+                            {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                    </div>
+                );
+            }
+        },
+        { 
+            accessorKey: 'requestedBy', 
+            id: 'requestedBy_history',
+            header: 'Requested By',
+            cell: ({ getValue }) => <div className="text-center">{getValue() as string}</div>
+        },
         {
+            id: 'products_history',
             header: 'Products',
             cell: ({ row }) => (
-                <div className="max-w-[200px] break-words text-xs">
+                <div className="max-w-[300px] break-words text-xs text-center mx-auto">
                     {row.original.items.map(i => i.product).join(', ')}
                 </div>
             )

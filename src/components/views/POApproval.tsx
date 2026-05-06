@@ -71,6 +71,7 @@ interface PoTableData {
     indentBy: string;
     indentNumber: string;
     originalRow: any;
+    timestamp: string;
     _count?: number;
 }
 
@@ -141,6 +142,7 @@ export default () => {
         status: String(getV(row, 'Status', 'status') || ''),
         actual: String(getV(row, 'Actual', 'actual') || ''),
         indentBy: String(getV(row, 'Indent By', 'indentBy') || ''),
+        timestamp: String(getV(row, 'timestamp', 'Timestamp') || ''),
         originalRow: row
     });
 
@@ -182,9 +184,17 @@ export default () => {
                     if (typeof existing.quantity === 'number' && typeof item.quantity === 'number') {
                         existing.quantity += item.quantity;
                     }
+                    // Update to latest timestamp in group
+                    if (item.timestamp && (!existing.timestamp || new Date(item.timestamp) > new Date(existing.timestamp))) {
+                        existing.timestamp = item.timestamp;
+                    }
                 }
             });
-            return Array.from(map.values());
+            return Array.from(map.values()).sort((a, b) => {
+                const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return dateB - dateA;
+            });
         };
 
         setTableData(groupItems(pending));
@@ -220,42 +230,87 @@ export default () => {
                 </div>
             ),
         },
-        { accessorKey: 'partyName', header: 'Party Name' },
-        { accessorKey: 'poNumber', header: 'PO Number' },
+        {
+            accessorKey: 'timestamp',
+            id: 'timestamp',
+            header: 'Date',
+            cell: ({ row }) => {
+                const d = new Date(row.original.timestamp);
+                return (
+                    <div className="flex flex-col items-center justify-center min-w-[100px] gap-0.5">
+                        <span className="text-sm font-bold text-foreground tabular-nums tracking-tight">
+                            {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                    </div>
+                );
+            },
+            size: 110,
+        },
+        { 
+            accessorKey: 'partyName', 
+            id: 'partyName',
+            header: 'Party Name',
+            cell: ({ getValue }) => <div className="text-center">{getValue() as string}</div>
+        },
+        { 
+            accessorKey: 'poNumber', 
+            id: 'poNumber',
+            header: 'PO Number',
+            cell: ({ getValue }) => <div className="text-center font-medium">{getValue() as string}</div>
+        },
         {
             accessorKey: 'indentNumber',
+            id: 'indentNumber',
             header: 'Indent No.',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
                 const baseId = (row.original.indentNumber || '').split(/[_/]/)[0];
-                return count > 1 ? (
-                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
-                        {baseId} ({count})
-                    </span>
-                ) : (
-                    baseId
+                return (
+                    <div className="text-center">
+                        {count > 1 ? (
+                            <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
+                                {baseId} ({count})
+                            </span>
+                        ) : (
+                            baseId
+                        )}
+                    </div>
                 );
             }
         },
         { 
             accessorKey: 'product', 
+            id: 'product',
             header: 'Product',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
-                return count > 1 ? (
-                    <span className="text-muted-foreground italic text-xs">
-                        Multiple Products
-                    </span>
-                ) : (
-                    <div className="max-w-[200px] truncate" title={row.original.product}>
-                        {row.original.product}
+                return (
+                    <div className="text-center">
+                        {count > 1 ? (
+                            <span className="text-muted-foreground italic text-xs">
+                                Multiple Products
+                            </span>
+                        ) : (
+                            <div className="max-w-[200px] truncate mx-auto" title={row.original.product}>
+                                {row.original.product}
+                            </div>
+                        )}
                     </div>
                 );
             }
         },
-        { accessorKey: 'description', header: 'Description' },
+        { 
+            accessorKey: 'description', 
+            id: 'description',
+            header: 'Description',
+            cell: ({ getValue }) => <div className="text-center text-xs">{getValue() as string || '-'}</div>
+        },
         { 
             accessorKey: 'quantity', 
+            id: 'quantity',
             header: 'Qty',
             cell: ({ row }) => {
                 const count = row.original._count || 1;
@@ -269,16 +324,57 @@ export default () => {
                 );
             }
         },
-        { accessorKey: 'unit', header: 'Unit' },
-        { accessorKey: 'rate', header: 'Rate' },
-        { accessorKey: 'gstPercent', header: 'GST %' },
-        { accessorKey: 'discountPercent', header: 'Discount %' },
-        { accessorKey: 'amount', header: 'Amount' },
-        { accessorKey: 'totalPoAmount', header: 'Total PO Amount' },
-        { accessorKey: 'preparedBy', header: 'Prepared By' },
-        { accessorKey: 'approvedBy', header: 'Approved By' },
+        { 
+            accessorKey: 'unit', 
+            id: 'unit',
+            header: 'Unit',
+            cell: ({ getValue }) => <div className="text-center">{getValue() as string}</div>
+        },
+        { 
+            accessorKey: 'rate', 
+            id: 'rate',
+            header: 'Rate',
+            cell: ({ getValue }) => <div className="text-center font-medium">₹{getValue() as number}</div>
+        },
+        { 
+            accessorKey: 'gstPercent', 
+            id: 'gstPercent',
+            header: 'GST %',
+            cell: ({ getValue }) => <div className="text-center">{getValue() as number}%</div>
+        },
+        { 
+            accessorKey: 'discountPercent', 
+            id: 'discountPercent',
+            header: 'Discount %',
+            cell: ({ getValue }) => <div className="text-center">{getValue() as number}%</div>
+        },
+        { 
+            accessorKey: 'amount', 
+            id: 'amount',
+            header: 'Amount',
+            cell: ({ getValue }) => <div className="text-center font-bold">₹{getValue() as number}</div>
+        },
+        { 
+            accessorKey: 'totalPoAmount', 
+            id: 'totalPoAmount',
+            header: 'Total PO Amount',
+            cell: ({ getValue }) => <div className="text-center font-bold text-primary">₹{getValue() as number}</div>
+        },
+        { 
+            accessorKey: 'preparedBy', 
+            id: 'preparedBy',
+            header: 'Prepared By',
+            cell: ({ getValue }) => <div className="text-center text-xs">{getValue() as string}</div>
+        },
+        { 
+            accessorKey: 'approvedBy', 
+            id: 'approvedBy',
+            header: 'Approved By',
+            cell: ({ getValue }) => <div className="text-center text-xs">{getValue() as string}</div>
+        },
         {
             accessorKey: 'pdf',
+            id: 'pdf',
             header: 'PDF',
             cell: ({ row }) => {
                 const url = row.original.pdf;

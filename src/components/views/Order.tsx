@@ -35,6 +35,7 @@ interface HistoryData {
     rate: number;
     indentNumbers?: string[];
     _count?: number;
+    timestamp?: string;
 }
 
 
@@ -85,7 +86,8 @@ export default () => {
                     products: [product],
                     quantity: qty,
                     rate: row.rate || 0,
-                    _count: 1
+                    _count: 1,
+                    timestamp: row.timestamp || '',
                 };
             } else {
                 acc[poNumber].quantity += qty;
@@ -96,12 +98,21 @@ export default () => {
                     acc[poNumber].products?.push(product);
                 }
                 acc[poNumber]._count = (acc[poNumber]._count || 0) + 1;
+                
+                // Update to latest timestamp in group
+                if (row.timestamp && (!acc[poNumber].timestamp || new Date(row.timestamp) > new Date(acc[poNumber].timestamp!))) {
+                    acc[poNumber].timestamp = row.timestamp;
+                }
             }
             return acc;
         }, {});
 
-        const finalData = Object.values(grouped);
-        setHistoryData(finalData.reverse());
+        const finalData = Object.values(grouped).sort((a, b) => {
+            const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return dateB - dateA;
+        });
+        setHistoryData(finalData);
     }, [poHistorySheet, indentSheet, receivedSheet]);
 
 
@@ -148,10 +159,10 @@ export default () => {
     const historyColumns: ColumnDef<HistoryData>[] = [
         {
             id: 'actions',
-            header: 'Actions',
+            header: () => <div className="text-center">Actions</div>,
             cell: ({ row }) => {
                 return (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-center gap-2">
                         <button
                             onClick={() => {
                                 setSelectedPo(row.original);
@@ -172,57 +183,105 @@ export default () => {
                     </div>
                 );
             },
+            size: 80,
         },
-        { accessorKey: 'poNumber', header: 'PO Number' },
+        {
+            accessorKey: 'timestamp',
+            id: 'timestamp',
+            header: () => <div className="text-center">Date</div>,
+            cell: ({ getValue }) => {
+                const val = getValue() as string;
+                if (!val) return <div className="text-center">-</div>;
+                const d = new Date(val);
+                return (
+                    <div className="flex flex-col items-center justify-center text-center">
+                        <span className="text-xs font-bold text-foreground">
+                            {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                    </div>
+                );
+            },
+            size: 110,
+        },
+        { 
+            accessorKey: 'poNumber', 
+            id: 'poNumber',
+            header: () => <div className="text-center">PO Number</div>,
+            cell: ({ getValue }) => <div className="text-center font-medium">{getValue() as string}</div>
+        },
         {
             accessorKey: 'indentNumber',
-            header: 'Indent No.',
+            id: 'indentNumber',
+            header: () => <div className="text-center">Indent No.</div>,
             cell: ({ row }) => {
                 const count = row.original._count || 1;
                 const baseId = (row.original.indentNumber || '').split(/[_/]/)[0];
-                return count > 1 ? (
-                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
-                        {baseId} ({count})
-                    </span>
-                ) : (
-                    baseId
+                return (
+                    <div className="text-center">
+                        {count > 1 ? (
+                            <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs font-bold border border-primary/20">
+                                {baseId} ({count})
+                            </span>
+                        ) : (
+                            baseId
+                        )}
+                    </div>
                 );
             }
         },
         {
             accessorKey: 'poCopy',
-            header: 'PO Copy',
+            id: 'poCopy',
+            header: () => <div className="text-center">PO Copy</div>,
             cell: ({ row }) => {
                 const attachment = row.original.poCopy;
-                return attachment ? (
-                    <a href={attachment} target="_blank">
-                        PDF
-                    </a>
-                ) : (
-                    <></>
+                return (
+                    <div className="text-center">
+                        {attachment ? (
+                            <a href={attachment} target="_blank" className="text-primary underline">
+                                PDF
+                            </a>
+                        ) : (
+                            '-'
+                        )}
+                    </div>
                 );
             },
         },
-        { accessorKey: 'vendorName', header: 'Vendor Name' },
+        { 
+            accessorKey: 'vendorName', 
+            id: 'vendorName',
+            header: () => <div className="text-center">Vendor Name</div>,
+            cell: ({ getValue }) => <div className="text-center">{getValue() as string}</div>
+        },
         {
             accessorKey: 'product',
-            header: 'Product',
+            id: 'product',
+            header: () => <div className="text-center">Product</div>,
             cell: ({ row }) => {
                 const count = row.original._count || 1;
-                return count > 1 ? (
-                    <span className="text-muted-foreground italic text-xs">
-                        Multiple Products
-                    </span>
-                ) : (
-                    <div className="max-w-[200px] truncate" title={row.original.product}>
-                        {row.original.product}
+                return (
+                    <div className="text-center">
+                        {count > 1 ? (
+                            <span className="text-muted-foreground italic text-xs">
+                                Multiple Products
+                            </span>
+                        ) : (
+                            <div className="max-w-[200px] truncate mx-auto" title={row.original.product}>
+                                {row.original.product}
+                            </div>
+                        )}
                     </div>
                 );
             }
         },
         {
             accessorKey: 'quantity',
-            header: 'Qty',
+            id: 'quantity',
+            header: () => <div className="text-center">Qty</div>,
             cell: ({ row }) => {
                 const count = row.original._count || 1;
                 return (
@@ -237,24 +296,41 @@ export default () => {
         },
         {
             accessorKey: 'rate',
-            header: 'Rate',
-            cell: ({ getValue }) => `₹${getValue()}`
+            id: 'rate',
+            header: () => <div className="text-center">Rate</div>,
+            cell: ({ getValue }) => <div className="text-center">₹{getValue() as number}</div>
         },
-        { accessorKey: 'preparedBy', header: 'Prepared By' },
-        { accessorKey: 'approvedBy', header: 'Approved By' },
         {
             accessorKey: 'totalAmount',
-            header: 'Amount',
+            id: 'totalAmount',
+            header: () => <div className="text-center">Amount</div>,
             cell: ({ row }) => {
-                return <>&#8377;{row.original.totalAmount}</>;
+                return <div className="text-center font-bold">₹{row.original.totalAmount}</div>;
             },
+        },
+        { 
+            accessorKey: 'preparedBy', 
+            id: 'preparedBy',
+            header: () => <div className="text-center">Prepared By</div>,
+            cell: ({ getValue }) => <div className="text-center text-xs">{getValue() as string}</div>
+        },
+        { 
+            accessorKey: 'approvedBy', 
+            id: 'approvedBy',
+            header: () => <div className="text-center">Approved By</div>,
+            cell: ({ getValue }) => <div className="text-center text-xs">{getValue() as string}</div>
         },
         {
             accessorKey: 'status',
-            header: 'Status',
+            id: 'status',
+            header: () => <div className="text-center">Status</div>,
             cell: ({ row }) => {
                 const variant = row.original.status === "Not Recieved" ? "secondary" : row.original.status === "Recieved" ? "primary" : "default"
-                return <Pill variant={variant}>{row.original.status}</Pill>
+                return (
+                    <div className="flex justify-center">
+                        <Pill variant={variant}>{row.original.status}</Pill>
+                    </div>
+                );
             }
         },
     ];

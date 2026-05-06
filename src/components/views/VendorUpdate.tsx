@@ -521,6 +521,7 @@ export default () => {
                     vendorName: sheet.approvedVendorName || sheet.vendorName1 || '',
                     searialNumber: sheet.searialNumber,
                     rowIndex: (sheet as any).rowIndex ?? idx,
+                    timestamp: sheet.timestamp,
                 };
             });
 
@@ -532,14 +533,25 @@ export default () => {
                     indenter: item.indenter,
                     department: item.department,
                     vendorType: item.vendorType,
+                    date: item.timestamp, // Store raw timestamp
                     items: [],
                 };
             }
+            // Update to latest timestamp in group
+            if (item.timestamp && (!acc[baseNo].date || new Date(item.timestamp) > new Date(acc[baseNo].date))) {
+                acc[baseNo].date = item.timestamp;
+            }
             acc[baseNo].items.push(item);
             return acc;
-        }, {} as Record<string, GroupedVendorUpdateData>);
+        }, {} as Record<string, GroupedVendorUpdateData & { date: string }>);
 
-        setTableData(Object.values(groupedPending).reverse());
+        setTableData(
+            Object.values(groupedPending).sort((a, b) => {
+                const latestA = Math.max(...a.items.map(i => (i as any).timestamp ? new Date((i as any).timestamp).getTime() : 0));
+                const latestB = Math.max(...b.items.map(i => (i as any).timestamp ? new Date((i as any).timestamp).getTime() : 0));
+                return latestB - latestA;
+            })
+        );
 
         // HISTORY TAB: Show data where vendor_rate_update status is 'Approved'
         const approvedVendorUpdates = vendorRateUpdateSheet.filter(
@@ -565,6 +577,8 @@ export default () => {
                 vendorType: sheet.vendorType as HistoryData['vendorType'],
                 vendorName: sheet.approvedVendorName || sheet.vendorName1 || '',
                 searialNumber: sheet.searialNumber,
+                timestamp: sheet.timestamp,
+                actual2: sheet.actual2, // This is often used as the vendor update date
             }));
 
         const groupedHistory = historyItems.reduce((acc, item) => {
@@ -582,7 +596,19 @@ export default () => {
             return acc;
         }, {} as Record<string, GroupedHistoryData>);
 
-        setHistoryData(Object.values(groupedHistory).reverse());
+        setHistoryData(
+            Object.values(groupedHistory).sort((a, b) => {
+                const latestA = Math.max(...a.items.map(i => {
+                    const ts = (i as any).actual2 || (i as any).timestamp;
+                    return ts ? new Date(ts).getTime() : 0;
+                }));
+                const latestB = Math.max(...b.items.map(i => {
+                    const ts = (i as any).actual2 || (i as any).timestamp;
+                    return ts ? new Date(ts).getTime() : 0;
+                }));
+                return latestB - latestA;
+            })
+        );
     }, [indentSheet, approvedIndentSheet, vendorRateUpdateSheet]);
 
     const columns: ColumnDef<GroupedVendorUpdateData>[] = [
@@ -590,82 +616,163 @@ export default () => {
             ? [
                 {
                     header: 'Action',
+                    id: 'action',
                     cell: ({ row }: { row: Row<GroupedVendorUpdateData> }) => (
-                        <Button
-                            variant="outline"
-                            onClick={() => setSelectedIndent(row.original)}
-                        >
-                            Update ({row.original.items.length})
-                        </Button>
+                        <div className="flex justify-center">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedIndent(row.original)}
+                                className="h-8 text-xs font-bold border-primary/20 text-primary hover:bg-primary/5"
+                            >
+                                Update ({row.original.items.length})
+                            </Button>
+                        </div>
                     ),
+                    size: 100,
                 },
             ]
             : []),
         {
+            accessorKey: 'date',
+            id: 'date',
+            header: () => <div className="text-center">Date</div>,
+            cell: ({ getValue }) => {
+                const val = getValue() as string;
+                if (!val) return <div className="text-center">-</div>;
+                const d = new Date(val);
+                return (
+                    <div className="flex flex-col items-center justify-center text-center">
+                        <span className="text-xs font-bold text-foreground">
+                            {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                    </div>
+                );
+            },
+            size: 110,
+        },
+        {
             accessorKey: 'indentNo',
-            header: 'Indent No.',
+            id: 'indentNo',
+            header: () => <div className="text-center">Indent No.</div>,
             cell: ({ getValue }) => (
-                <div className="font-medium text-xs sm:text-sm">
+                <div className="font-bold text-xs sm:text-sm text-center">
                     {(getValue() as string).split(/[_/]/)[0]}
                 </div>
             ),
+            size: 100,
         },
-        { accessorKey: 'indenter', header: 'Indenter' },
-        { accessorKey: 'department', header: 'Department' },
+        { 
+            accessorKey: 'indenter', 
+            id: 'indenter',
+            header: () => <div className="text-center">Indenter</div>,
+            cell: ({ getValue }) => <div className="text-xs font-medium text-center">{(getValue() as string)}</div>,
+            size: 140 
+        },
+        { 
+            accessorKey: 'department', 
+            id: 'department',
+            header: () => <div className="text-center">Department</div>,
+            cell: ({ getValue }) => <div className="text-xs text-center">{(getValue() as string) || '-'}</div>,
+            size: 130 
+        },
         {
             accessorKey: 'items',
-            header: 'Products',
+            id: 'products',
+            header: () => <div className="text-center">Products</div>,
             cell: ({ row }) => (
-                <div className="max-w-[200px] break-words whitespace-normal text-xs">
+                <div className="max-w-[250px] mx-auto text-center break-words whitespace-normal text-xs leading-tight">
                     {row.original.items.map(i => i.product).join(', ')}
                 </div>
             ),
+            size: 250,
         },
         {
             accessorKey: 'vendorType',
-            header: 'Vendor Type',
+            id: 'vendorType',
+            header: () => <div className="text-center">Vendor Type</div>,
             cell: ({ row }) => {
                 const vendorType = row.original.vendorType || 'Regular';
                 const variant = vendorType === 'Regular' ? 'primary' : 'secondary';
-                return <Pill variant={variant}>{vendorType}</Pill>;
+                return (
+                    <div className="flex justify-center">
+                        <Pill variant={variant}>{vendorType}</Pill>
+                    </div>
+                );
             },
+            size: 120,
         },
     ];
 
     const historyColumns: ColumnDef<GroupedHistoryData>[] = [
         ...(user.updateVendorAction ? [
             {
-                header: 'Action',
+                id: 'action_history',
+                header: () => <div className="text-center">Action</div>,
                 cell: ({ row }: { row: Row<GroupedHistoryData> }) => (
-                    <Button
-                        variant="outline"
-                        onClick={() => setSelectedHistory(row.original)}
-                    >
-                        View ({row.original.items.length})
-                    </Button>
+                    <div className="flex justify-center">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedHistory(row.original)}
+                            className="h-8 text-xs font-bold border-gray-200 text-gray-600 hover:bg-gray-50"
+                        >
+                            View ({row.original.items.length})
+                        </Button>
+                    </div>
                 ),
+                size: 100,
             },
         ] : []),
-        { accessorKey: 'date', header: 'Date' },
+        {
+            accessorKey: 'date',
+            id: 'date_history',
+            header: () => <div className="text-center">Date</div>,
+            cell: ({ getValue }) => (
+                <div className="text-xs font-medium text-center">
+                    {getValue() as string}
+                </div>
+            ),
+            size: 110,
+        },
         {
             accessorKey: 'indentNo',
-            header: 'Indent No.',
+            id: 'indentNo_history',
+            header: () => <div className="text-center">Indent No.</div>,
             cell: ({ getValue }) => (
-                <div className="font-medium text-xs sm:text-sm">
+                <div className="font-bold text-xs sm:text-sm text-center">
                     {(getValue() as string).split(/[_/]/)[0]}
                 </div>
             ),
+            size: 100,
         },
-        { accessorKey: 'indenter', header: 'Indenter' },
-        { accessorKey: 'department', header: 'Department' },
+        { 
+            accessorKey: 'indenter', 
+            id: 'indenter_history',
+            header: () => <div className="text-center">Indenter</div>,
+            cell: ({ getValue }) => <div className="text-xs font-medium text-center">{(getValue() as string)}</div>,
+            size: 140 
+        },
+        { 
+            accessorKey: 'department', 
+            id: 'department_history',
+            header: () => <div className="text-center">Department</div>,
+            cell: ({ getValue }) => <div className="text-center text-xs">{(getValue() as string) || '-'}</div>,
+            size: 130 
+        },
         {
             accessorKey: 'items',
-            header: 'Products',
+            id: 'products_history',
+            header: () => <div className="text-center">Products</div>,
             cell: ({ row }) => (
-                <div className="max-w-[200px] break-words whitespace-normal text-xs">
+                <div className="max-w-[250px] mx-auto text-center break-words whitespace-normal text-xs leading-tight">
                     {row.original.items.map(i => i.product).join(', ')}
                 </div>
             ),
+            size: 250,
         },
     ];
 

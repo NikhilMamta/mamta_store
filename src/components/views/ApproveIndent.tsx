@@ -89,8 +89,13 @@ export default () => {
                     date: formatDate(new Date(sheet.timestamp)),
                     searialNumber: sheet.searialNumber,
                     status: sheet.status,
+                    timestamp: sheet.timestamp,
                 }))
-                .reverse()
+                .sort((a, b) => {
+                    const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                    const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                    return dateB - dateA;
+                })
         );
 
         // HISTORY TAB: only show indents where status = 'Approved' from indent table
@@ -118,9 +123,20 @@ export default () => {
                             ? formatDate(new Date(approval.timestamp))
                             : 'Approved',
                         searialNumber: sheet.searialNumber,
+                        timestamp: sheet.timestamp,
+                        approvedTimestamp: approval?.timestamp || null,
                     };
                 })
-                .sort((a, b) => b.indentNo.localeCompare(a.indentNo))
+                .sort((a, b) => {
+                    const dateA = a.approvedTimestamp ? new Date(a.approvedTimestamp).getTime() : 0;
+                    const dateB = b.approvedTimestamp ? new Date(b.approvedTimestamp).getTime() : 0;
+                    
+                    // Prioritize approvedTimestamp, fallback to creation timestamp
+                    const finalA = dateA || (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+                    const finalB = dateB || (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+                    
+                    return finalB - finalA;
+                })
         );
     }, [indentSheet, approvedIndentSheet]);
 
@@ -589,9 +605,10 @@ export default () => {
             : []),
         {
             accessorKey: 'indentNo',
-            header: 'Indent No.',
+            id: 'indentNo',
+            header: () => <div className="text-center">Indent No.</div>,
             cell: ({ getValue }) => (
-                <div className="font-medium text-xs sm:text-sm">
+                <div className="font-medium text-xs sm:text-sm text-center">
                     {(getValue() as string).split(/[_/]/)[0]}
                 </div>
             ),
@@ -599,9 +616,10 @@ export default () => {
         },
         {
             accessorKey: 'indenter',
-            header: 'Indenter',
+            id: 'indenter',
+            header: () => <div className="text-center">Indenter</div>,
             cell: ({ getValue }) => (
-                <div className="text-xs sm:text-sm truncate max-w-[100px]">
+                <div className="text-xs sm:text-sm truncate max-w-[100px] text-center mx-auto">
                     {getValue() as string}
                 </div>
             ),
@@ -609,9 +627,10 @@ export default () => {
         },
         {
             accessorKey: 'department',
-            header: 'Department',
+            id: 'department',
+            header: () => <div className="text-center">Department</div>,
             cell: ({ getValue }) => (
-                <div className="text-xs sm:text-sm truncate max-w-[100px]">
+                <div className="text-xs sm:text-sm truncate max-w-[100px] text-center mx-auto">
                     {getValue() as string}
                 </div>
             ),
@@ -619,9 +638,10 @@ export default () => {
         },
         {
             accessorKey: 'product',
-            header: 'Product',
+            id: 'product',
+            header: () => <div className="text-center">Product</div>,
             cell: ({ getValue }) => (
-                <div className="max-w-[120px] sm:max-w-[150px] break-words whitespace-normal text-xs sm:text-sm">
+                <div className="max-w-[120px] sm:max-w-[150px] break-words whitespace-normal text-xs sm:text-sm text-center mx-auto">
                     {getValue() as string}
                 </div>
             ),
@@ -629,38 +649,34 @@ export default () => {
         },
         {
             accessorKey: 'quantity',
-            header: 'Quantity',
+            id: 'quantity',
+            header: () => <div className="text-center">Quantity</div>,
             cell: ({ row }: { row: Row<ApproveTableData> }) => {
                 const indent = row.original;
                 const identifier = getRowKey(indent);
                 const isSelected = selectedRows.has(identifier);
                 const currentValue = bulkUpdates.get(identifier)?.quantity || indent.quantity;
 
-                // Local state for input value
                 const [localValue, setLocalValue] = useState(String(currentValue));
 
-                // Update local value when currentValue changes
                 useEffect(() => {
                     setLocalValue(String(currentValue));
                 }, [currentValue]);
 
                 return (
-                    <div onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
                         <Input
                             type="number"
                             value={localValue}
-                            onChange={(e) => {
-                                setLocalValue(e.target.value); // Only update local state
-                            }}
+                            onChange={(e) => setLocalValue(e.target.value)}
                             onBlur={(e) => {
-                                // Update bulk updates only on blur
                                 const value = e.target.value;
                                 if (value === '' || !isNaN(Number(value))) {
                                     handleBulkUpdate(identifier, 'quantity', Number(value) || 0);
                                 }
                             }}
                             disabled={!isSelected}
-                            className={`w-16 sm:w-20 text-xs sm:text-sm ${!isSelected ? 'opacity-50' : ''}`}
+                            className={`w-16 sm:w-20 text-xs sm:text-sm text-center ${!isSelected ? 'opacity-50' : ''}`}
                             min="0"
                             step="1"
                         />
@@ -669,12 +685,12 @@ export default () => {
             },
             size: 80,
         },
-
         {
             accessorKey: 'uom',
-            header: 'UOM',
+            id: 'uom',
+            header: () => <div className="text-center">UOM</div>,
             cell: ({ getValue }) => (
-                <div className="text-xs sm:text-sm">
+                <div className="text-xs sm:text-sm text-center">
                     {getValue() as string}
                 </div>
             ),
@@ -682,7 +698,8 @@ export default () => {
         },
         {
             accessorKey: 'specifications',
-            header: 'Specifications',
+            id: 'specifications',
+            header: () => <div className="text-center">Specifications</div>,
             cell: ({ row }: { row: Row<ApproveTableData> }) => {
                 const indent = row.original;
                 const identifier = getRowKey(indent);
@@ -696,15 +713,13 @@ export default () => {
                 }, [currentValue]);
 
                 return (
-                    <div className="max-w-[120px] sm:max-w-[150px]" onClick={(e) => e.stopPropagation()}>
+                    <div className="max-w-[120px] sm:max-w-[150px] mx-auto" onClick={(e) => e.stopPropagation()}>
                         <Input
                             value={localValue}
                             onChange={(e) => setLocalValue(e.target.value)}
-                            onBlur={(e) => {
-                                handleBulkUpdate(identifier, 'specifications', e.target.value);
-                            }}
+                            onBlur={(e) => handleBulkUpdate(identifier, 'specifications', e.target.value)}
                             disabled={!isSelected}
-                            className={`border-none focus:border-1 text-xs sm:text-sm ${!isSelected ? 'opacity-50' : ''}`}
+                            className={`border-none focus:border-1 text-xs sm:text-sm text-center ${!isSelected ? 'opacity-50' : ''}`}
                             placeholder="Add specs..."
                         />
                     </div>
@@ -714,44 +729,48 @@ export default () => {
         },
         {
             accessorKey: 'attachment',
-            header: 'Attachment',
+            id: 'attachment',
+            header: () => <div className="text-center">Attachment</div>,
             cell: ({ row }: { row: Row<ApproveTableData> }) => {
                 const attachment = row.original.attachment;
                 return attachment ? (
-                    <a
-                        href={attachment}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:text-primary/80 text-xs sm:text-sm underline"
-                    >
-                        View
-                    </a>
+                    <div className="text-center">
+                        <a
+                            href={attachment}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:text-primary/80 text-xs sm:text-sm underline"
+                        >
+                            View
+                        </a>
+                    </div>
                 ) : (
-                    <span className="text-gray-400 text-xs sm:text-sm">-</span>
+                    <div className="text-center text-gray-400 text-xs sm:text-sm">-</div>
                 );
             },
             size: 80,
         },
         {
             accessorKey: 'date',
-            header: 'Date',
+            id: 'date',
+            header: () => <div className="text-center">Date</div>,
             cell: ({ getValue }) => (
-                <div className="text-xs sm:text-sm whitespace-nowrap">
+                <div className="text-xs sm:text-sm whitespace-nowrap text-center">
                     {getValue() as string}
                 </div>
             ),
             size: 100,
         },
-
     ], [selectedRows, bulkUpdates, submitting, user.indentApprovalAction, tableData]);
 
     // History columns with mobile responsiveness
     const historyColumns: ColumnDef<HistoryData>[] = useMemo(() => [
         {
             accessorKey: 'indentNo',
-            header: 'Indent No.',
+            id: 'indentNo_history',
+            header: () => <div className="text-center">Indent No.</div>,
             cell: ({ getValue }) => (
-                <div className="font-medium text-xs sm:text-sm">
+                <div className="font-medium text-xs sm:text-sm text-center">
                     {(getValue() as string).split(/[_/]/)[0]}
                 </div>
             ),
@@ -759,9 +778,10 @@ export default () => {
         },
         {
             accessorKey: 'indenter',
-            header: 'Indenter',
+            id: 'indenter_history',
+            header: () => <div className="text-center">Indenter</div>,
             cell: ({ getValue }) => (
-                <div className="text-xs sm:text-sm truncate max-w-[100px]">
+                <div className="text-xs sm:text-sm truncate max-w-[100px] text-center mx-auto">
                     {getValue() as string}
                 </div>
             ),
@@ -769,9 +789,10 @@ export default () => {
         },
         {
             accessorKey: 'department',
-            header: 'Department',
+            id: 'department_history',
+            header: () => <div className="text-center">Department</div>,
             cell: ({ getValue }) => (
-                <div className="text-xs sm:text-sm truncate max-w-[100px]">
+                <div className="text-xs sm:text-sm truncate max-w-[100px] text-center mx-auto">
                     {getValue() as string}
                 </div>
             ),
@@ -779,17 +800,20 @@ export default () => {
         },
         {
             accessorKey: 'product',
-            header: 'Product',
+            id: 'product_history',
+            header: () => <div className="text-center">Product</div>,
             cell: ({ row }) => {
                 const isEditing = editingRow === String(row.original.rowIndex);
                 return isEditing ? (
-                    <Input
-                        value={editValues.product ?? row.original.product}
-                        onChange={(e) => handleInputChange('product', e.target.value)}
-                        className="max-w-[120px] sm:max-w-[150px] text-xs sm:text-sm"
-                    />
+                    <div className="flex justify-center">
+                        <Input
+                            value={editValues.product ?? row.original.product}
+                            onChange={(e) => handleInputChange('product', e.target.value)}
+                            className="max-w-[120px] sm:max-w-[150px] text-xs sm:text-sm text-center"
+                        />
+                    </div>
                 ) : (
-                    <div className="flex items-center gap-1 sm:gap-2 max-w-[120px] sm:max-w-[150px] break-words whitespace-normal">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-[120px] sm:max-w-[150px] break-words whitespace-normal text-center mx-auto">
                         <span className="text-xs sm:text-sm">{row.original.product}</span>
                         {user.indentApprovalAction && (
                             <Button
@@ -808,18 +832,21 @@ export default () => {
         },
         {
             accessorKey: 'approvedQuantity',
-            header: 'Quantity',
+            id: 'approvedQuantity_history',
+            header: () => <div className="text-center">Quantity</div>,
             cell: ({ row }) => {
                 const isEditing = editingRow === String(row.original.rowIndex);
                 return isEditing ? (
-                    <Input
-                        type="number"
-                        value={editValues.approvedQuantity ?? row.original.approvedQuantity}
-                        onChange={(e) => handleInputChange('approvedQuantity', Number(e.target.value))}
-                        className="w-16 sm:w-20 text-xs sm:text-sm"
-                    />
+                    <div className="flex justify-center">
+                        <Input
+                            type="number"
+                            value={editValues.approvedQuantity ?? row.original.approvedQuantity}
+                            onChange={(e) => handleInputChange('approvedQuantity', Number(e.target.value))}
+                            className="w-16 sm:w-20 text-xs sm:text-sm text-center"
+                        />
+                    </div>
                 ) : (
-                    <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
                         <span className="text-xs sm:text-sm">{row.original.approvedQuantity}</span>
                         {user.indentApprovalAction && editingRow !== String(row.original.rowIndex) && (
                             <Button
@@ -838,17 +865,20 @@ export default () => {
         },
         {
             accessorKey: 'uom',
-            header: 'UOM',
+            id: 'uom_history',
+            header: () => <div className="text-center">UOM</div>,
             cell: ({ row }) => {
                 const isEditing = editingRow === String(row.original.rowIndex);
                 return isEditing ? (
-                    <Input
-                        value={editValues.uom ?? row.original.uom}
-                        onChange={(e) => handleInputChange('uom', e.target.value)}
-                        className="w-16 sm:w-20 text-xs sm:text-sm"
-                    />
+                    <div className="flex justify-center">
+                        <Input
+                            value={editValues.uom ?? row.original.uom}
+                            onChange={(e) => handleInputChange('uom', e.target.value)}
+                            className="w-16 sm:w-20 text-xs sm:text-sm text-center"
+                        />
+                    </div>
                 ) : (
-                    <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
                         <span className="text-xs sm:text-sm">{row.original.uom}</span>
                         {user.indentApprovalAction && editingRow !== String(row.original.rowIndex) && (
                             <Button
@@ -867,9 +897,10 @@ export default () => {
         },
         {
             accessorKey: 'specifications',
-            header: 'Specifications',
+            id: 'specifications_history',
+            header: () => <div className="text-center">Specifications</div>,
             cell: ({ getValue }) => (
-                <div className="max-w-[120px] sm:max-w-[150px] break-words whitespace-normal text-xs sm:text-sm">
+                <div className="max-w-[120px] sm:max-w-[150px] break-words whitespace-normal text-xs sm:text-sm text-center mx-auto">
                     {getValue() as string}
                 </div>
             ),
@@ -877,25 +908,28 @@ export default () => {
         },
         {
             accessorKey: 'vendorType',
-            header: 'Vendor Type',
+            id: 'vendorType_history',
+            header: () => <div className="text-center">Vendor Type</div>,
             cell: ({ row }) => {
                 const isEditing = editingRow === String(row.original.rowIndex);
                 return isEditing ? (
-                    <Select
-                        value={editValues.vendorType ?? row.original.vendorType}
-                        onValueChange={(value) => handleInputChange('vendorType', value)}
-                    >
-                        <SelectTrigger className="w-[120px] sm:w-[150px] text-xs sm:text-sm">
-                            <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Regular Vendor">Regular</SelectItem>
-                            <SelectItem value="Three Party">Three Party</SelectItem>
-                            <SelectItem value="Reject">Reject</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <div className="flex justify-center">
+                        <Select
+                            value={editValues.vendorType ?? row.original.vendorType}
+                            onValueChange={(value) => handleInputChange('vendorType', value)}
+                        >
+                            <SelectTrigger className="w-[120px] sm:w-[150px] text-xs sm:text-sm">
+                                <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Regular Vendor">Regular</SelectItem>
+                                <SelectItem value="Three Party">Three Party</SelectItem>
+                                <SelectItem value="Reject">Reject</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 ) : (
-                    <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2">
                         <Pill
                             variant={
                                 row.original.vendorType === 'Reject'
@@ -924,9 +958,10 @@ export default () => {
         },
         {
             accessorKey: 'date',
-            header: 'Request Date',
+            id: 'date_history',
+            header: () => <div className="text-center">Request Date</div>,
             cell: ({ getValue }) => (
-                <div className="text-xs sm:text-sm whitespace-nowrap">
+                <div className="text-xs sm:text-sm whitespace-nowrap text-center">
                     {getValue() as string}
                 </div>
             ),

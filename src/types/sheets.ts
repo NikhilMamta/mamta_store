@@ -192,6 +192,7 @@ export type ReceivedSheet = {
 
 export type InventorySheet = {
     rowIndex?: number;
+    lastUpdated?: string;
     groupHead: string;
     itemName: string;
     uom: string;
@@ -318,57 +319,49 @@ export type UserPermissions = {
     password: string;
     name: string;
 
-    administrate: boolean;
-    createIndent: boolean;
-    allIndent: boolean;
-    createPo: boolean;
-    indentApprovalView: boolean;
-    indentApprovalAction: boolean;
-    updateVendorView: boolean;
-    updateVendorAction: boolean;
-    threePartyApprovalView: boolean;
-    threePartyApprovalAction: boolean;
-    receiveItemView: boolean;
-    receiveItemAction: boolean;
-    storeOutApprovalView: boolean;
-    storeOutApprovalAction: boolean;
-    quotation: boolean;
-    pendingIndentsView: boolean;
-    ordersView: boolean;
-    poMaster: boolean;
-    getPurchase: boolean;
-
-    // New permissions for Dashboard and Inventory
     dashboard: boolean;
     inventory: boolean;
-    trainingVideo: boolean;
+    create_indent: boolean;
+    create_po: boolean;
+    get_purchase: boolean;
+    all_indent: boolean;
+    quotation: boolean;
+    training_video: boolean;
     license: boolean;
+    approve_indent: boolean;
+    vendor_rate_update: boolean;
+    three_party_approval: boolean;
+    pending_pos: boolean;
+    po_history: boolean;
+    po_approval: boolean;
+    receive_items: boolean;
+    store_out_approval: boolean;
+    store_out: boolean;
+    administration: boolean;
+    master_data: boolean;
 };
 
 export const allPermissionKeys = [
-    "administrate",
-    "createIndent",
-    "allIndent",
-    "createPo",
-    "indentApprovalView",
-    "indentApprovalAction",
-    "updateVendorView",
-    "updateVendorAction",
-    "threePartyApprovalView",
-    "threePartyApprovalAction",
-    "receiveItemView",
-    "receiveItemAction",
-    "storeOutApprovalView",
-    "storeOutApprovalAction",
-    "quotation",
-    "pendingIndentsView",
-    "ordersView",
-    "poMaster",
-    "getPurchase",
     "dashboard",
     "inventory",
-    "trainingVideo",
+    "create_indent",
+    "create_po",
+    "get_purchase",
+    "all_indent",
+    "quotation",
+    "training_video",
     "license",
+    "approve_indent",
+    "vendor_rate_update",
+    "three_party_approval",
+    "pending_pos",
+    "po_history",
+    "po_approval",
+    "receive_items",
+    "store_out_approval",
+    "store_out",
+    "administration",
+    "master_data",
 ] as const;
 
 

@@ -145,12 +145,11 @@ const INVENTORY_COLUMNS = [
 ];
 
 const USER_COLUMNS = [
-    'id', 'username', 'password', 'name', 'dashboard', 'inventory', 'administrate',
-    'create_indent', 'create_po', 'indent_approval_view', 'indent_approval_action',
-    'update_vendor_view', 'update_vendor_action', 'three_party_approval_view',
-    'three_party_approval_action', 'receive_item_view', 'receive_item_action',
-    'store_out_approval_view', 'store_out_approval_action', 'pending_indents_view',
-    'orders_view', 'get_purchase', 'po_master', 'all_indent', 'quotation', 'training_video', 'license', 'created_at'
+    'id', 'username', 'password', 'name', 'dashboard', 'inventory', 'create_indent',
+    'create_po', 'get_purchase', 'all_indent', 'quotation', 'created_at',
+    'training_video', 'license', 'approve_indent', 'vendor_rate_update',
+    'three_party_approval', 'pending_pos', 'po_history', 'po_approval',
+    'receive_items', 'store_out_approval', 'store_out', 'administration', 'master_data'
 ];
 
 // Utility to normalize table names
@@ -332,6 +331,8 @@ export async function fetchSheet(
     }
 
     // Automatically convert all Supabase data to camelCase to match app expectations
+    // EXCEPT for the USER table where we now use the raw snake_case schema for permissions
+    if (sheetName === 'USER') return data;
     return toCamelCase(data);
 }
 

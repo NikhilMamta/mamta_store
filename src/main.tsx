@@ -121,8 +121,16 @@ function DefaultRoute({ routes }: { routes: RouteAttributes[] }) {
         return <Navigate to={`/${firstAccessibleRoute.path}`} replace />;
     }
 
-    // If no accessible routes, logout or show error
-    return <Navigate to="/login" replace />;
+    // If no accessible routes, show error instead of looping back to login
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-slate-50">
+            <div className="text-center p-8 bg-white rounded-2xl shadow-xl border max-w-md">
+                <h2 className="text-2xl font-bold text-slate-900 mb-4">No Access</h2>
+                <p className="text-slate-600 mb-6">Your account does not have permission to access any modules. Please contact your system administrator to assign permissions.</p>
+                <Button onClick={() => window.location.href = '/login'}>Back to Login</Button>
+            </div>
+        </div>
+    );
 }
 
 const routes: RouteAttributes[] = [
@@ -144,7 +152,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'create-indent',
-        gateKey: 'createIndent',
+        gateKey: 'create_indent',
         name: 'Create Indent',
         icon: <ClipboardList size={20} />,
         element: <CreateIndent />,
@@ -155,7 +163,7 @@ const routes: RouteAttributes[] = [
 /*
     {
         path: 'all-indent',
-        gateKey: 'allIndent',
+        gateKey: 'all_indent',
         name: 'All Indent',
         icon: <ClipboardList size={20} />,
         element: <AllIndent />,
@@ -164,7 +172,7 @@ const routes: RouteAttributes[] = [
 */
     {
         path: 'approve-indent',
-        gateKey: 'indentApprovalView',
+        gateKey: 'approve_indent',
         name: 'Approve Indent',
         icon: <ClipboardCheck size={20} />,
         element: <ApproveIndent />,
@@ -178,7 +186,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'vendor-rate-update',
-        gateKey: 'updateVendorView',
+        gateKey: 'vendor_rate_update',
         name: 'Vendor Rate Update',
         icon: <UserCheck size={20} />,
         element: <VendorUpdate />,
@@ -187,7 +195,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'three-party-approval',
-        gateKey: 'threePartyApprovalView',
+        gateKey: 'three_party_approval',
         name: 'Three Party Approval',
         icon: <Users size={20} />,
         element: <RateApproval />,
@@ -201,7 +209,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'pending-pos',
-        gateKey: 'pendingIndentsView',
+        gateKey: 'pending_pos',
         name: 'Pending POs',
         icon: <ListTodo size={20} />,
         element: <PendingIndents />,
@@ -210,7 +218,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'create-po',
-        gateKey: 'createPo',
+        gateKey: 'create_po',
         name: 'Create PO',
         icon: <FilePlus2 size={20} />,
         element: <CreatePO />,
@@ -226,7 +234,7 @@ const routes: RouteAttributes[] = [
     // },
     {
         path: 'po-history',
-        gateKey: 'ordersView',
+        gateKey: 'po_history',
         name: 'PO History',
         icon: <Package2 size={20} />,
         element: <Order />,
@@ -234,7 +242,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'po-approval',
-        gateKey: 'poMaster',
+        gateKey: 'po_approval',
         name: 'PO Approval',
         icon: <PackageCheck size={20} />,
         element: <POApproval />,
@@ -243,7 +251,7 @@ const routes: RouteAttributes[] = [
 /*
     {
         path: 'get-purchase',
-        gateKey: 'getPurchase',
+        gateKey: 'get_purchase',
         name: 'Get Purchase',
         icon: <Package2 size={20} />,
         element: <GetPurchase />,
@@ -252,7 +260,7 @@ const routes: RouteAttributes[] = [
 */
     {
         path: 'receive-items',
-        gateKey: 'receiveItemView',
+        gateKey: 'receive_items',
         name: 'Receive Items',
         icon: <Truck size={20} />,
         element: <ReceiveItems />,
@@ -261,7 +269,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'store-out-approval',
-        gateKey: 'storeOutApprovalView',
+        gateKey: 'store_out_approval',
         name: 'Store Out Approval',
         icon: <PackageCheck size={20} />,
         element: <StoreOutApproval />,
@@ -275,7 +283,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'store-out',
-        gateKey: 'storeOutApprovalView',
+        gateKey: 'store_out',
         name: 'Store Out',
         icon: <PackageCheck size={20} />,
         element: <StoreOut />,
@@ -291,15 +299,15 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'administration',
-        gateKey: 'administrate',
-        name: 'Adminstration',
+        gateKey: 'administration',
+        name: 'Administration',
         icon: <ShieldUser size={20} />,
         element: <Administration />,
         notifications: () => 0,
     },
     {
         path: 'master-data',
-        gateKey: 'administrate',
+        gateKey: 'master_data',
         name: 'Master Data',
         icon: <Database size={20} />,
         element: <MasterData />,
@@ -307,6 +315,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'training-video',
+        gateKey: 'training_video',
         name: 'Training Video',
         icon: <Video size={20} />,
         element: <TrainnigVideo />,
@@ -314,6 +323,7 @@ const routes: RouteAttributes[] = [
     },
     {
         path: 'license',
+        gateKey: 'license',
         name: 'License',
         icon: <KeyRound size={20} />,
         element: <License />,

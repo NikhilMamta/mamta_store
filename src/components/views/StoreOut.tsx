@@ -45,6 +45,7 @@ interface GroupedStoreOutStatusData {
     floor: string;
     slip?: string;
     items: StoreOutTableData[];
+    timestamp?: string;
 }
 
 export default () => {
@@ -153,15 +154,30 @@ export default () => {
                         floor: item.floor,
                         slip: item.slip,
                         items: [],
+                        timestamp: item.originalRow.timestamp || item.originalRow.issueDate || '',
                     };
+                } else {
+                    // Update to latest timestamp in group
+                    const currentTimestamp = item.originalRow.timestamp || item.originalRow.issueDate || '';
+                    if (currentTimestamp && (!acc[baseId].timestamp || new Date(currentTimestamp) > new Date(acc[baseId].timestamp!))) {
+                        acc[baseId].timestamp = currentTimestamp;
+                    }
                 }
                 acc[baseId].items.push(item);
                 return acc;
             }, {} as Record<string, GroupedStoreOutStatusData>);
         };
 
-        const finalPending = Object.values(groupItems(pendingItems)).reverse();
-        const finalHistory = Object.values(groupItems(historyItems)).reverse();
+        const finalPending = Object.values(groupItems(pendingItems)).sort((a, b) => {
+            const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return dateB - dateA;
+        });
+        const finalHistory = Object.values(groupItems(historyItems)).sort((a, b) => {
+            const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return dateB - dateA;
+        });
 
         console.log('📊 GROUPED PENDING:', finalPending);
         console.log('📜 GROUPED HISTORY:', finalHistory);
@@ -173,49 +189,73 @@ export default () => {
     const pendingColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
             id: 'actions',
-            header: () => <div className="text-center w-full">View</div>,
+            header: () => <div className="text-center">View</div>,
             cell: ({ row }) => (
-                <div className="flex justify-center w-full">
+                <div className="flex justify-center">
                     <Button size="sm" variant="outline" onClick={() => setSelectedGroup(row.original)} className="h-8 px-3 text-xs border-primary/20 hover:bg-primary/5">
                         View ({row.original.items.length})
                     </Button>
                 </div>
             ),
         },
+        {
+            accessorKey: 'timestamp',
+            id: 'timestamp',
+            header: () => <div className="text-center">Date</div>,
+            cell: ({ row }) => {
+                const val = row.original.timestamp;
+                if (!val) return <div className="text-center">-</div>;
+                const d = new Date(val);
+                return (
+                    <div className="flex flex-col items-center justify-center text-center">
+                        <span className="text-xs font-bold text-foreground">
+                            {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                    </div>
+                );
+            },
+            size: 110,
+        },
         { 
             accessorKey: 'issueNo', 
-            header: () => <div className="text-left">Issue No.</div>,
-            cell: ({ row }) => <div className="text-left">{row.original.issueNo?.split(/[_/]/)[0]}</div>
+            id: 'issueNo',
+            header: () => <div className="text-center">Issue No.</div>,
+            cell: ({ row }) => <div className="text-center">{row.original.issueNo?.split(/[_/]/)[0]}</div>
         },
         { 
             accessorKey: 'indenterName', 
-            header: () => <div className="text-left">Indenter</div>,
-            cell: ({ row }) => <div className="text-left">{row.original.indenterName}</div>
+            id: 'indenterName',
+            header: () => <div className="text-center">Indenter</div>,
+            cell: ({ row }) => <div className="text-center">{row.original.indenterName}</div>
         },
         { 
             accessorKey: 'wardName', 
-            header: () => <div className="text-left">Ward Name</div>,
-            cell: ({ row }) => <div className="text-left">{row.original.wardName}</div>
+            id: 'wardName',
+            header: () => <div className="text-center">Ward Name</div>,
+            cell: ({ row }) => <div className="text-center">{row.original.wardName}</div>
         },
         {
             id: 'products',
-            header: () => <div className="text-left">Products</div>,
+            header: () => <div className="text-center">Products</div>,
             cell: ({ row }) => (
-                <div className="max-w-[300px] break-words text-xs text-left">
+                <div className="max-w-[300px] break-words text-xs text-center mx-auto">
                     {[...new Set(row.original.items.map(i => i.product))].join(', ')}
                 </div>
             )
         },
         {
             id: 'slip',
-            header: () => <div className="text-center w-full">Slip</div>,
+            header: () => <div className="text-center">Slip</div>,
             cell: ({ row }) => (
-                <div className="flex justify-center w-full">
+                <div className="flex justify-center">
                     {row.original.slip ? (
                         <a href={row.original.slip} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
                             <FileText size={14} /> View Slip
                         </a>
-                    ) : <span className="text-muted-foreground text-xs text-center w-full">No Slip</span>}
+                    ) : <span className="text-muted-foreground text-xs">-</span>}
                 </div>
             )
         }
@@ -224,44 +264,67 @@ export default () => {
     const historyColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
             id: 'actions',
-            header: () => <div className="text-center w-full">View</div>,
+            header: () => <div className="text-center">View</div>,
             cell: ({ row }) => (
-                <div className="flex justify-center w-full">
+                <div className="flex justify-center">
                     <Button size="sm" variant="outline" onClick={() => setSelectedHistory(row.original)} className="h-8 px-3 text-xs border-primary/20 hover:bg-primary/5">
                         View ({row.original.items.length})
                     </Button>
                 </div>
             ),
         },
+        {
+            accessorKey: 'timestamp',
+            id: 'timestamp_history',
+            header: () => <div className="text-center">Date</div>,
+            cell: ({ row }) => {
+                const val = row.original.timestamp;
+                if (!val) return <div className="text-center">-</div>;
+                const d = new Date(val);
+                return (
+                    <div className="flex flex-col items-center justify-center text-center">
+                        <span className="text-xs font-bold text-foreground">
+                            {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">
+                            {d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                    </div>
+                );
+            },
+            size: 110,
+        },
         { 
             accessorKey: 'issueNo', 
-            header: () => <div className="text-left">Issue No.</div>,
-            cell: ({ row }) => <div className="text-left">{row.original.issueNo?.split(/[_/]/)[0]}</div>
+            id: 'issueNo_history',
+            header: () => <div className="text-center">Issue No.</div>,
+            cell: ({ row }) => <div className="text-center">{row.original.issueNo?.split(/[_/]/)[0]}</div>
         },
         { 
             accessorKey: 'indenterName', 
-            header: () => <div className="text-left">Indenter</div>,
-            cell: ({ row }) => <div className="text-left">{row.original.indenterName}</div>
+            id: 'indenterName_history',
+            header: () => <div className="text-center">Indenter</div>,
+            cell: ({ row }) => <div className="text-center">{row.original.indenterName}</div>
         },
         {
             id: 'products',
-            header: () => <div className="text-left">Products</div>,
+            header: () => <div className="text-center">Products</div>,
             cell: ({ row }) => (
-                <div className="max-w-[300px] break-words text-xs text-left">
+                <div className="max-w-[300px] break-words text-xs text-center mx-auto">
                     {[...new Set(row.original.items.map(i => i.product))].join(', ')}
                 </div>
             )
         },
         {
             id: 'slip',
-            header: () => <div className="text-center w-full">Slip</div>,
+            header: () => <div className="text-center">Slip</div>,
             cell: ({ row }) => (
-                <div className="flex justify-center w-full">
+                <div className="flex justify-center">
                     {row.original.slip ? (
                         <a href={row.original.slip} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
                             <FileText size={14} /> View Slip
                         </a>
-                    ) : <span className="text-muted-foreground text-xs text-center w-full">No Slip</span>}
+                    ) : <span className="text-muted-foreground text-xs">-</span>}
                 </div>
             )
         }
