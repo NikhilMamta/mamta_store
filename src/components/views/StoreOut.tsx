@@ -3,7 +3,7 @@ import DataTable from '../element/DataTable';
 import { useEffect, useState } from 'react';
 import { useSheets } from '@/context/SheetsContext';
 import { Button } from '../ui/button';
-import { postToSheet } from '@/lib/fetchers';
+import { fetchSheet, postToSheet } from '@/lib/fetchers';
 import { toast } from 'sonner';
 import { PuffLoader as Loader } from 'react-spinners';
 import { ClipboardList, FileText, PackageSearch } from 'lucide-react';
@@ -48,29 +48,62 @@ interface GroupedStoreOutStatusData {
 }
 
 export default () => {
-    const { storeOutSheet, storeOutLoading, updateStoreOutSheet, indentSheet, storeOutApprovalSheet } = useSheets();
+    const { updateStoreOutSheet } = useSheets();
+    const [localStoreOutSheet, setLocalStoreOutSheet] = useState<any[]>([]);
+    const [localStoreOutApprovalSheet, setLocalStoreOutApprovalSheet] = useState<any[]>([]);
+    const [localIndentSheet, setLocalIndentSheet] = useState<any[]>([]);
+    const [localLoading, setLocalLoading] = useState(true);
 
     const [pendingData, setPendingData] = useState<GroupedStoreOutStatusData[]>([]);
     const [historyData, setHistoryData] = useState<GroupedStoreOutStatusData[]>([]);
     const [selectedGroup, setSelectedGroup] = useState<GroupedStoreOutStatusData | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutStatusData | null>(null);
 
+    // DIRECT FETCH ON MOUNT - NO CACHE
+    useEffect(() => {
+        const fetchFreshData = async () => {
+            setLocalLoading(true);
+            try {
+                console.log('🔄 Fetching DIRECT data for StoreOut (Bypassing Cache)...');
+                const [storeOut, storeOutApproval, indent] = await Promise.all([
+                    fetchSheet('STORE OUT APPROVAL'),
+                    fetchSheet('STORE OUT REQUEST'),
+                    fetchSheet('INDENT')
+                ]);
+                
+                setLocalStoreOutSheet(storeOut as any[]);
+                setLocalStoreOutApprovalSheet(storeOutApproval as any[]);
+                setLocalIndentSheet(indent as any[]);
+                console.log('✅ Fresh data received for StoreOut');
+            } catch (error) {
+                console.error('Error fetching fresh data:', error);
+                toast.error('Failed to fetch latest data');
+            } finally {
+                setLocalLoading(false);
+            }
+        };
+
+        fetchFreshData();
+    }, []);
+
     const mapRowToTableData = (row: any): StoreOutTableData => {
         // Smarter lookup for missing data from indentSheet and storeOutApprovalSheet
-        const lookupId = (row.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+        const lookupId = (row.indentNumber || '').replace(/_/g, '/').split(/[/]/)[0].toLowerCase();
 
-        const indentDetail = indentSheet?.find(i => {
+        const indentDetail = localIndentSheet?.find(i => {
             if (row.searialNumber && i.searialNumber) {
                 return String(i.searialNumber) === String(row.searialNumber);
             }
-            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+            const itemBaseId = (i.indentNumber || '').replace(/_/g, '/').split(/[/]/)[0].toLowerCase();
             return lookupId === itemBaseId;
         });
 
         // Direct lookup from storeOutApprovalSheet (STORE OUT REQUEST) as per user request
-        const requestDetail = storeOutApprovalSheet?.find(r => 
-            (r.issueNo || r.issue_no || r.indentNumber) === row.indentNumber
-        );
+        const requestDetail = localStoreOutApprovalSheet?.find(r => {
+            const rowId = (row.indentNumber || '').replace(/_/g, '/').toLowerCase();
+            const rId = (r.issueNo || r.issue_no || r.indentNumber || '').replace(/_/g, '/').toLowerCase();
+            return rowId === rId;
+        });
 
         return {
             id: row.id,
@@ -91,22 +124,23 @@ export default () => {
     };
 
     useEffect(() => {
-        if (!storeOutSheet) return;
-        console.log('--- STORE OUT RAW DATA ---', storeOutSheet);
+        if (!localStoreOutSheet.length) return;
+        console.log('🚀 STORE OUT RAW DATA (Direct):', localStoreOutSheet);
 
-        const allItems = storeOutSheet.map(mapRowToTableData);
-        console.log('--- STORE OUT PRODUCT NAMES ---', allItems.map(i => i.product));
+        const allItems = localStoreOutSheet.map(mapRowToTableData);
+        console.log('✨ MAPPED ITEMS:', allItems);
+        
         const pendingItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'pending');
         const historyItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'approved' || row.storeOutStatus?.toLowerCase() === 'rejected');
 
         const groupItems = (items: StoreOutTableData[]) => {
             return items.reduce((acc, item) => {
-                const baseId = (item.issueNo || '').split(/[_/]/)[0];
+                const baseId = (item.issueNo || '').replace(/_/g, '/').split(/[/]/)[0];
                 if (!acc[baseId]) {
                     // Smart lookup for department
                     const lookupId = baseId.toLowerCase();
-                    const indent = indentSheet?.find(i => {
-                        const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
+                    const indent = localIndentSheet?.find(i => {
+                        const itemBaseId = (i.indentNumber || '').replace(/_/g, '/').split(/[/]/)[0].toLowerCase();
                         return lookupId === itemBaseId;
                     });
 
@@ -126,9 +160,15 @@ export default () => {
             }, {} as Record<string, GroupedStoreOutStatusData>);
         };
 
-        setPendingData(Object.values(groupItems(pendingItems)).reverse());
-        setHistoryData(Object.values(groupItems(historyItems)).reverse());
-    }, [storeOutSheet, indentSheet]);
+        const finalPending = Object.values(groupItems(pendingItems)).reverse();
+        const finalHistory = Object.values(groupItems(historyItems)).reverse();
+
+        console.log('📊 GROUPED PENDING:', finalPending);
+        console.log('📜 GROUPED HISTORY:', finalHistory);
+
+        setPendingData(finalPending);
+        setHistoryData(finalHistory);
+    }, [localStoreOutSheet, localIndentSheet, localStoreOutApprovalSheet]);
 
     const pendingColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
@@ -246,10 +286,10 @@ export default () => {
                             <TabsTrigger value="history">History ({historyData.length})</TabsTrigger>
                         </TabsList>
                         <TabsContent value="pending">
-                            <DataTable data={pendingData} columns={pendingColumns} searchFields={['issueNo', 'indenterName']} dataLoading={storeOutLoading} />
+                            <DataTable data={pendingData} columns={pendingColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
                         </TabsContent>
                         <TabsContent value="history">
-                            <DataTable data={historyData} columns={historyColumns} searchFields={['issueNo', 'indenterName']} dataLoading={storeOutLoading} />
+                            <DataTable data={historyData} columns={historyColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
                         </TabsContent>
                     </Tabs>
                 </div>
@@ -276,7 +316,10 @@ export default () => {
                                     items={selectedGroup.items}
                                     onSuccess={() => {
                                         setSelectedGroup(null);
-                                        setTimeout(() => updateStoreOutSheet(), 1000);
+                                        // Still trigger global refresh for other tabs
+                                        updateStoreOutSheet();
+                                        // And local refresh for this page
+                                        window.location.reload(); 
                                     }}
                                 />
                             </div>

@@ -3,7 +3,7 @@ import { Shield, Clock } from 'lucide-react';
 
 export default ({ className }: { className?: string }) => {
     const currentYear = new Date().getFullYear();
-    
+
     return (
         <footer className={cn(
             "mt-auto border-t border-border/40 bg-background/80 backdrop-blur-sm px-4 py-1.5",
@@ -27,11 +27,11 @@ export default ({ className }: { className?: string }) => {
                         <Shield size={10} className="text-primary/60" />
                         <span>Secure Port</span>
                     </div>
-                    
+
                     <div className="text-[10px] text-muted-foreground font-medium">
                         &copy; {currentYear} <span className="font-bold text-foreground/80">Mamta Store</span>
                     </div>
-                    
+
                     <div className="text-[9px] px-1.5 py-0.5 rounded-sm bg-muted/50 font-bold text-muted-foreground/80 border border-border/40 leading-none">
                         v2.4.0
                     </div>

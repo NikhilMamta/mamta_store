@@ -208,7 +208,7 @@ function Sidebar({
             <div
                 data-slot="sidebar-gap"
                 className={cn(
-                    'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
+                    'relative w-(--sidebar-width) bg-transparent transition-[width] duration-300 ease-in-out',
                     'group-data-[collapsible=offcanvas]:w-0',
                     'group-data-[side=right]:rotate-180',
                     variant === 'floating' || variant === 'inset'
@@ -219,7 +219,7 @@ function Sidebar({
             <div
                 data-slot="sidebar-container"
                 className={cn(
-                    'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
+                    'fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-300 ease-in-out md:flex',
                     side === 'left'
                         ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
                         : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
@@ -244,7 +244,7 @@ function Sidebar({
 }
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
-    const { toggleSidebar } = useSidebar();
+    const { toggleSidebar, state } = useSidebar();
 
     return (
         <Button
@@ -252,15 +252,33 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
             data-slot="sidebar-trigger"
             variant="ghost"
             size="icon"
-            className={cn('size-7', className)}
+            className={cn('size-8 rounded-xl hover:bg-primary/10 transition-all active:scale-95', className)}
             onClick={(event) => {
                 onClick?.(event);
                 toggleSidebar();
             }}
             {...props}
         >
-            <Menu className="text-primary" />
-            <span className="sr-only"></span>
+            <div className={cn(
+                "transition-transform duration-500 ease-in-out",
+                state === "collapsed" ? "rotate-180" : "rotate-0"
+            )}>
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-primary"
+                >
+                    <path d="m15 18-6-6 6-6" />
+                </svg>
+            </div>
+            <span className="sr-only">Toggle Sidebar</span>
         </Button>
     );
 }
@@ -354,7 +372,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<'div'>) {
             data-slot="sidebar-content"
             data-sidebar="content"
             className={cn(
-                'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden',
+                'flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-y-auto',
                 className
             )}
             {...props}

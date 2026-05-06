@@ -68,7 +68,7 @@ interface GroupedStoreOutData {
 }
 
 export default () => {
-    const { storeOutApprovalSheet, storeOutSheet, indentSheet, poHistorySheet, indentLoading, updateStoreOutApprovalSheet, storeOutApprovalLoading, storeOutLoading } = useSheets();
+    const { storeOutApprovalSheet, updateStoreOutApprovalSheet, storeOutApprovalLoading, storeOutSheet, updateStoreOutSheet, storeOutLoading, indentSheet, updateIndentSheet, indentLoading, poHistorySheet } = useSheets();
     const { user } = useAuth();
     const [selectedGroup, setSelectedGroup] = useState<GroupedStoreOutData | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutData | null>(null);
@@ -76,10 +76,17 @@ export default () => {
     const [historyData, setHistoryData] = useState<GroupedStoreOutData[]>([]);
     const [loading, setLoading] = useState(false);
 
+    // Force refresh on mount
+    useEffect(() => {
+        updateStoreOutApprovalSheet();
+        updateStoreOutSheet();
+        updateIndentSheet();
+    }, []);
+
     const mapRowToTableData = (row: any): StoreOutTableData => {
         // Smarter lookup for missing data from indentSheet
         // Prioritize indentNumber as the link, then issueNo
-        const lookupId = (row.indentNumber || row.issueNo || '').split(/[_/]/)[0].toLowerCase();
+        const lookupId = (row.indentNumber || row.issueNo || '').replace(/_/g, '/').split(/[/]/)[0].toLowerCase();
 
         const indentDetail = indentSheet?.find(i => {
             if (row.searialNumber && i.searialNumber) {
@@ -363,33 +370,47 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
         }
     });
 
+    const setAllStatuses = (status: 'Approved' | 'Rejected') => {
+        items.forEach((_, index) => {
+            form.setValue(`approvals.${index}.status`, status, { shouldValidate: true, shouldDirty: true });
+        });
+        toast.info(`Set all items to ${status}`);
+    };
+
     const onSubmit = async (values: z.infer<typeof schema>) => {
         try {
-            // 0. Generate Store Out Slip PDF
-            const firstItem = items[0];
-            const pdfBlob = await generateStoreOutSlip({
-                issueNo: firstItem.issueNo.split(/[_/]/)[0],
-                date: formatDate(new Date()),
-                areaOfUse: firstItem.originalRow.areaOfUse || 'N/A',
-                indenterName: firstItem.indenterName,
-                department: firstItem.department,
-                wardName: firstItem.wardName,
-                category: firstItem.groupHead,
-                items: values.approvals.map(appr => ({
-                    searialNumber: appr.searialNumber,
-                    productName: appr.product,
-                    quantity: appr.approveQty,
-                    unit: appr.originalRow.uom || appr.originalRow.unit
-                })),
-                preparedBy: 'Nikhil Kumar Uranw',
-                approvedBy: 'Store Incharge'
-            });
+            // Strictly filter for 'Approved' status only
+            const approvedItems = values.approvals.filter(a => a.status?.trim() === 'Approved');
+            const rejectedItems = values.approvals.filter(a => a.status?.trim() === 'Rejected');
+            let slipUrl = '';
 
-            // Upload PDF to Supabase 'slip' bucket
-            const fileName = `Slip_${firstItem.issueNo}_${Date.now()}.pdf`;
-            const slipUrl = await uploadFileToSupabase(pdfBlob, 'slip', fileName);
+            if (approvedItems.length > 0) {
+                // 0. Generate Store Out Slip PDF ONLY for approved items
+                const firstItem = items[0];
+                const pdfBlob = await generateStoreOutSlip({
+                    issueNo: firstItem.issueNo.split(/[_/]/)[0],
+                    date: formatDate(new Date()),
+                    areaOfUse: firstItem.originalRow.areaOfUse || 'N/A',
+                    indenterName: firstItem.indenterName,
+                    department: firstItem.department,
+                    wardName: firstItem.wardName,
+                    category: firstItem.groupHead,
+                    items: approvedItems.map(appr => ({
+                        searialNumber: appr.searialNumber,
+                        productName: appr.product,
+                        quantity: appr.approveQty,
+                        unit: appr.originalRow.uom || appr.originalRow.unit
+                    })),
+                    preparedBy: 'Nikhil Kumar Uranw',
+                    approvedBy: 'Store Incharge'
+                });
 
-            // 1. Update the status in store_out_request table (which maps to STORE_OUT_REQUEST)
+                // Upload PDF to Supabase 'slip' bucket
+                const fileName = `Slip_${firstItem.issueNo}_${Date.now()}.pdf`;
+                slipUrl = await uploadFileToSupabase(pdfBlob, 'slip', fileName);
+            }
+
+            // 1. Update the status in store_out_request table for ALL items (Approved or Rejected)
             const updatePayload = values.approvals.map(appr => ({
                 id: appr.originalRow.id,
                 status: appr.status,
@@ -398,23 +419,25 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
 
             await postToSheet(updatePayload, 'update', 'STORE_OUT_REQUEST');
 
-            // 2. Insert into store_out_approval table for the final Store Out step
-            // Only insert if the status was Approved
-            const approvedItems = values.approvals.filter(a => a.status === 'Approved');
+            // 2. Insert into store_out_approval table ONLY if items were Approved
             if (approvedItems.length > 0) {
                 const insertPayload = approvedItems.map(appr => ({
                     indentNumber: (appr.originalRow.indentNumber || appr.originalRow.issueNo)?.replace('_', '/'),
                     approveQty: appr.approveQty,
                     slip: slipUrl,
-                    planned8: new Date().toISOString().split('T')[0], // Planned date for final store out
-                    status: 'Pending', // Status is Pending for the next stage
+                    planned8: new Date().toISOString().split('T')[0],
+                    status: 'Pending',
                     timestamp: new Date().toISOString(),
                     delay: 0
                 }));
                 await postToSheet(insertPayload, 'insert', 'STORE_OUT_APPROVAL');
             }
 
-            toast.success(`Approved ${items.length} items and generated slip`);
+            const message = approvedItems.length > 0 
+                ? `Processed: ${approvedItems.length} approved, ${rejectedItems.length} rejected.`
+                : `Processed: ${rejectedItems.length} items rejected.`;
+            
+            toast.success(message);
             onSuccess();
         } catch (error) {
             console.error('Approval error:', error);
@@ -423,30 +446,57 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
     };
 
     const handleDownload = () => {
+        const formValues = form.getValues();
+        const approvedOnly = formValues.approvals.filter(a => a.status === 'Approved');
+        
+        if (approvedOnly.length === 0) {
+            toast.error("No approved items to download");
+            return;
+        }
+
         const workbook = XLSX.utils.book_new();
-        const data = items.map(item => ({
-            'Issue No.': item.issueNo?.split(/[_/]/)[0],
-            'Product': item.product,
-            'Requested Qty': item.qty,
-            'Unit': item.unit,
-            'Ward': item.wardName,
-            'Department': item.department
+        const data = approvedOnly.map(appr => ({
+            'Issue No.': items[0].issueNo?.split(/[_/]/)[0],
+            'Product': appr.product,
+            'Quantity': appr.approveQty,
+            'Status': appr.status,
+            'Ward': items[0].wardName,
+            'Department': items[0].department
         }));
         const worksheet = XLSX.utils.json_to_sheet(data);
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Request Details');
-        XLSX.writeFile(workbook, `Request_${items[0].issueNo?.split(/[_/]/)[0]}.xlsx`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Approved Items');
+        XLSX.writeFile(workbook, `Approved_Request_${items[0].issueNo?.split(/[_/]/)[0]}.xlsx`);
     };
 
-    const handleCommonStatusChange = (status: string) => {
-        if (status === 'Rejected') return; // Do not auto-fill rejection for all items
-        items.forEach((_, index) => {
-            form.setValue(`approvals.${index}.status`, status);
-        });
-    };
 
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {items.length > 1 && (
+                    <div className="flex items-center justify-between bg-primary/5 p-3 rounded-lg border border-primary/10">
+                        <span className="text-xs font-semibold text-primary/80 uppercase tracking-wider">Bulk Actions</span>
+                        <div className="flex gap-2">
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7 text-[10px] bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                                onClick={() => setAllStatuses('Approved')}
+                            >
+                                Approve All
+                            </Button>
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7 text-[10px] bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                                onClick={() => setAllStatuses('Rejected')}
+                            >
+                                Reject All
+                            </Button>
+                        </div>
+                    </div>
+                )}
                 <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
                     {items.map((item, index) => (
                         <div key={item.searialNumber || index} className="border p-4 rounded-md bg-muted/20 space-y-3">
@@ -460,12 +510,9 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                                     name={`approvals.${index}.status`}
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel className="text-xs">Status (Applying to all will sync)</FormLabel>
+                                            <FormLabel className="text-xs">Status</FormLabel>
                                             <Select
-                                                onValueChange={(val) => {
-                                                    field.onChange(val);
-                                                    handleCommonStatusChange(val);
-                                                }}
+                                                onValueChange={field.onChange}
                                                 value={field.value}
                                             >
                                                 <FormControl>
@@ -511,7 +558,11 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                         disabled={form.formState.isSubmitting} 
                         className="flex-1 h-10"
                     >
-                        {form.formState.isSubmitting ? <Loader size={16} color="white" /> : `Approve ${items.length} Items`}
+                        {form.formState.isSubmitting ? (
+                            <Loader size={16} color="white" />
+                        ) : (
+                            `Submit ${items.length} Decisions`
+                        )}
                     </Button>
                 </div>
             </form>
