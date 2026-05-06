@@ -65,8 +65,6 @@ export default () => {
     const [tableData, setTableData] = useState<InventoryTable[]>([]);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [searchTerm, setSearchTerm] = useState('');
     const [formData, setFormData] = useState({
         itemName: '',
@@ -76,64 +74,31 @@ export default () => {
     });
 
     useEffect(() => {
-        // Helper to filter data by date range
-        const filterByDate = (data: any[]) => {
-            if (!startDate && !endDate) return data;
+        // Use raw sheets for everything
+        const filteredIndentSheet = indentSheet;
+        const filteredApprovedIndentSheet = approvedIndentSheet;
+        const filteredReceivedSheet = receivedSheet;
+        const filteredStoreOutSheet = storeOutSheet;
+        const filteredStoreOutApprovalSheet = storeOutApprovalSheet;
+        const filteredVendorRateUpdateSheet = vendorRateUpdateSheet;
 
-            const start = startDate ? new Date(startDate) : null;
-            const end = endDate ? new Date(endDate) : null;
-            if (start) start.setHours(0, 0, 0, 0);
-            if (end) end.setHours(23, 59, 59, 999);
-
-            return data.filter(item => {
-                const ts = item.timestamp || item.issueDate || item.poDate;
-                if (!ts) return true;
-
-                // Robust date parsing
-                let itemDate: Date;
-                if (typeof ts === 'string' && ts.includes('/')) {
-                    // Handle DD/MM/YYYY
-                    const [datePart, timePart] = ts.split(' ');
-                    const [d, m, y] = datePart.split('/');
-                    itemDate = new Date(`${y}-${m}-${d}${timePart ? 'T' + timePart : ''}`);
-                } else {
-                    itemDate = new Date(ts);
-                }
-
-                if (isNaN(itemDate.getTime())) return true;
-
-                if (start && itemDate < start) return false;
-                if (end && itemDate > end) return false;
-                return true;
-            });
-        };
-
-        const filteredIndentSheet = filterByDate(indentSheet);
-        const filteredApprovedIndentSheet = filterByDate(approvedIndentSheet);
-        const filteredReceivedSheet = filterByDate(receivedSheet);
-        const filteredStoreOutSheet = filterByDate(storeOutSheet);
-        const filteredStoreOutApprovalSheet = filterByDate(storeOutApprovalSheet);
-        const filteredVendorRateUpdateSheet = filterByDate(vendorRateUpdateSheet);
-
-        // 1. Create a mapping of indentNumber -> itemName from filtered sheets
+        // 1. Mapping of indentNumber -> itemName from FULL sheets (to resolve names for historical items)
         const indentToItem: Record<string, string> = {};
 
-        // Add Purchase indents
-        filteredIndentSheet.forEach(row => {
+        indentSheet.forEach(row => {
             if (row.indentNumber && row.productName) {
                 indentToItem[row.indentNumber] = row.productName.trim().toLowerCase();
             }
         });
 
-        // Add Store Out requests
-        filteredStoreOutApprovalSheet.forEach(row => {
+        storeOutApprovalSheet.forEach(row => {
             if ((row.indentNumber || row.issueNo) && row.productName) {
                 const id = row.indentNumber || row.issueNo;
                 indentToItem[id] = row.productName.trim().toLowerCase();
             }
         });
 
-        // 2. Track latest activity timestamp for each item across all sheets (normalized names)
+        // 2. Track latest activity timestamp using ONLY filtered sheets
         const latestActivityMap: Record<string, Date> = {};
         const updateLatest = (name: string, ts: any) => {
             if (!name || !ts) return;
@@ -151,17 +116,17 @@ export default () => {
             }
         };
 
-        // Populate latest activity from all movement sources
-        indentSheet.forEach(r => updateLatest(r.productName?.trim().toLowerCase(), r.timestamp));
-        approvedIndentSheet.forEach(r => updateLatest(indentToItem[r.indentNumber], r.timestamp));
-        receivedSheet.forEach(r => updateLatest(indentToItem[r.indentNumber], r.timestamp));
-        storeOutSheet.forEach(r => {
+        // Populate latest activity from filtered sheets
+        filteredIndentSheet.forEach(r => updateLatest(r.productName?.trim().toLowerCase(), r.timestamp));
+        filteredApprovedIndentSheet.forEach(r => updateLatest(indentToItem[r.indentNumber], r.timestamp));
+        filteredReceivedSheet.forEach(r => updateLatest(indentToItem[r.indentNumber], r.timestamp));
+        filteredStoreOutSheet.forEach(r => {
             const id = r.indentNumber || r.issueNo;
             const name = (r.productName || (id ? indentToItem[id] : '') || '').trim().toLowerCase();
             updateLatest(name, r.timestamp || r.issueDate);
         });
 
-        // 3. Calculate dynamic totals using FILTERED sheets
+        // 3. Calculate dynamic totals from filtered sheets
         const indentTotals: Record<string, number> = {};
         filteredIndentSheet.forEach(curr => {
             const name = curr.productName?.trim().toLowerCase();
@@ -195,6 +160,7 @@ export default () => {
             }
         });
 
+        // Latest rates from filtered vendor updates
         const latestRates: Record<string, number> = {};
         const sortedVendorUpdates = [...filteredVendorRateUpdateSheet].sort((a, b) =>
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
@@ -206,24 +172,24 @@ export default () => {
             }
         });
 
-        // 4. Group the inventorySheet items uniquely by name and incorporate latest activity
+        // 4. Group inventory sheet by unique item name
         const uniqueInventory: Record<string, any> = {};
         inventorySheet.forEach(i => {
             const name = i.itemName?.trim().toLowerCase();
             if (!name) return;
 
-            // Seed latest activity from the inventory sheet itself
+            // Seed latest activity from the inventory record itself
             updateLatest(name, i.lastUpdated || i.timestamp);
 
             if (!uniqueInventory[name]) {
                 uniqueInventory[name] = { ...i, opening: Number(i.opening || 0) };
             } else {
-                // If duplicate item exists in inventory sheet, sum the opening
                 uniqueInventory[name].opening += Number(i.opening || 0);
             }
         });
 
-        const sortedData = Object.values(uniqueInventory).map((i: any) => {
+        // Build final rows
+        let sortedData = Object.values(uniqueInventory).map((i: any) => {
             const itemName = i.itemName?.trim().toLowerCase();
             const indented = itemName ? (indentTotals[itemName] || 0) : 0;
             const approved = itemName ? (approvedTotals[itemName] || 0) : 0;
@@ -236,48 +202,51 @@ export default () => {
             const totalPrice = currentStock * rate;
 
             return {
-                totalPrice: totalPrice,
+                totalPrice,
                 uom: i.uom || '',
-                rate: rate,
-                currentStock: currentStock,
+                rate,
+                currentStock,
                 status: i.colorCode || '',
-                indented: indented,
-                opening: opening,
+                indented,
+                opening,
                 itemName: i.itemName || '',
                 groupHead: i.groupHead || '',
                 purchaseQuantity: purchased,
-                approved: approved,
+                approved,
                 outQuantity: issued,
                 lastUpdated: latestActivityMap[itemName]?.toISOString() || '',
             };
         });
 
-        // 4. Sort and Apply filters
-        const filteredAndSorted = sortedData
-            .sort((a: any, b: any) => {
-                const dateA = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
-                const dateB = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
-                return dateB - dateA; // Latest first
-            })
-            .filter(item => {
-                // Search filter
-                const search = searchTerm.toLowerCase();
-                const matchesSearch = !searchTerm || (
-                    item.itemName.toLowerCase().includes(search) ||
-                    item.groupHead.toLowerCase().includes(search) ||
-                    item.uom.toLowerCase().includes(search)
-                );
+        // ✅ PROFESSIONAL SEARCH & SORT:
+        // Sort by lastUpdated (most recent first)
+        sortedData.sort((a: any, b: any) => {
+            const dateA = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+            const dateB = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+            return dateB - dateA;
+        });
 
-                if (!matchesSearch) return false;
-
-                // Note: We show all items even if they don't have movement in the range,
-                // but their movement columns (Indented, Approved, etc.) will show 0 or period-specific totals.
-                // This is standard for an Inventory view.
-                return true;
-            });
+        // Apply search filter
+        const filteredAndSorted = sortedData.filter(item => {
+            const search = searchTerm.toLowerCase();
+            return !searchTerm || (
+                item.itemName.toLowerCase().includes(search) ||
+                item.groupHead.toLowerCase().includes(search) ||
+                item.uom.toLowerCase().includes(search)
+            );
+        });
 
         setTableData(filteredAndSorted);
-    }, [inventorySheet, indentSheet, approvedIndentSheet, receivedSheet, storeOutSheet, storeOutApprovalSheet, vendorRateUpdateSheet, startDate, endDate, searchTerm]);
+    }, [
+        inventorySheet,
+        indentSheet,
+        approvedIndentSheet,
+        receivedSheet,
+        storeOutSheet,
+        storeOutApprovalSheet,
+        vendorRateUpdateSheet,
+        searchTerm,
+    ]);
 
     const columns: ColumnDef<InventoryTable>[] = [
         {
@@ -436,11 +405,11 @@ export default () => {
                 [
                     {
                         lastUpdated: new Date().toISOString(),
-                        groupHead: formData.groupHead,                    // Col A
-                        itemName: formData.itemName,                       // Col B
-                        uom: formData.uom,                                 // Col C
-                        opening: parseFloat(formData.opening as any) || 0, // Col E
-                        currentStock: parseFloat(formData.opening as any) || 0, // Initial current stock = opening
+                        groupHead: formData.groupHead,
+                        itemName: formData.itemName,
+                        uom: formData.uom,
+                        opening: parseFloat(formData.opening as any) || 0,
+                        currentStock: parseFloat(formData.opening as any) || 0,
                     },
                 ],
                 'insert',
@@ -479,54 +448,27 @@ export default () => {
                         </div>
                     </div>
 
-                    {/* Section 2: Search & Filters (The combined part) */}
+                    {/* Section 2: Search & Filters */}
                     <div className="flex flex-1 items-center gap-2 bg-gray-50/50 p-1.5 rounded-xl border border-gray-100 min-w-[200px]">
-                        {/* Search Input */}
-                        <div className="relative flex-1 group min-w-[150px]">
+                        <div className="relative flex-1 group min-w-[200px]">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 transition-colors group-focus-within:text-primary" size={18} />
                             <Input
-                                placeholder="Quick search items..."
+                                placeholder="Search inventory items..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="h-9 pl-10 pr-4 border-none bg-transparent focus-visible:ring-0 shadow-none font-medium text-sm placeholder:text-gray-400 w-full"
+                                className="h-10 pl-10 pr-4 border-none bg-transparent focus-visible:ring-0 shadow-none font-medium text-sm placeholder:text-gray-400 w-full"
                             />
                         </div>
 
-                        <div className="h-6 w-[1px] bg-gray-200 hidden md:block mx-1" />
-
-                        {/* Date Range Picker (More Compact) */}
-                        <div className="flex items-center gap-2 px-2 py-0.5 bg-white border border-gray-200 rounded-lg shadow-sm hidden sm:flex">
-                            <Calendar size={14} className="text-gray-400" />
-                            <div className="flex items-center gap-1">
-                                <Input
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    className="h-7 w-[125px] text-[11px] border-none bg-transparent font-bold cursor-pointer focus-visible:ring-0 p-0"
-                                />
-                                <span className="text-[10px] font-bold text-gray-300">/</span>
-                                <Input
-                                    type="date"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    className="h-7 w-[125px] text-[11px] border-none bg-transparent font-bold cursor-pointer focus-visible:ring-0 p-0"
-                                />
-                            </div>
-                        </div>
-
-                        {(startDate || endDate || searchTerm) && (
+                        {searchTerm && (
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => {
-                                    setStartDate('');
-                                    setEndDate(new Date().toISOString().split('T')[0]);
-                                    setSearchTerm('');
-                                }}
-                                className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10 gap-1 text-[11px] font-bold rounded-lg"
+                                onClick={() => setSearchTerm('')}
+                                className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10 gap-1 text-[11px] font-bold rounded-lg mr-2"
                             >
                                 <X size={14} />
-                                <span>Reset</span>
+                                <span>Clear Search</span>
                             </Button>
                         )}
                     </div>
@@ -629,7 +571,7 @@ export default () => {
                 data={tableData}
                 columns={columns}
                 dataLoading={inventoryLoading}
-                searchFields={[]} // Disabled internal search
+                searchFields={[]}
                 className="h-[78dvh] rounded-2xl"
             />
         </div>

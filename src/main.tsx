@@ -40,7 +40,7 @@ import {
     Video,
     KeyRound,
     Database,
-
+    History,
 } from 'lucide-react';
 import type { UserPermissions } from './types/sheets';
 import Administration from './components/views/Administration';

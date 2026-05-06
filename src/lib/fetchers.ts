@@ -144,6 +144,7 @@ const INVENTORY_COLUMNS = [
     'total_price', 'color_code', 'last_updated'
 ];
 
+
 const USER_COLUMNS = [
     'id', 'username', 'password', 'name', 'dashboard', 'inventory', 'create_indent',
     'create_po', 'get_purchase', 'all_indent', 'quotation', 'created_at',
@@ -695,6 +696,7 @@ export async function postToSheet(
             return filteredRow;
         });
     }
+
 
     if (tableName === 'users') {
         sData = sData.map((row: any) => {

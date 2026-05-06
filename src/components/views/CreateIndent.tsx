@@ -1,4 +1,4 @@
-
+import { useAuth } from '@/context/AuthContext';
 
 
 
@@ -31,6 +31,7 @@ import { formatDate } from '@/lib/utils';
 
 export default () => {
     const { indentSheet: sheet, storeOutSheet, storeOutApprovalSheet, inventorySheet, updateIndentSheet, updateStoreOutSheet, updateInventorySheet, updateStoreOutApprovalSheet, masterSheet: options } = useSheets();
+    const { user } = useAuth();
     const [indentSheet, setIndentSheet] = useState<IndentSheet[]>([]);
     const [searchTermGroupHead, setSearchTermGroupHead] = useState("");
     const [searchTermProductName, setSearchTermProductName] = useState("");
@@ -132,7 +133,7 @@ export default () => {
     const form = useForm({
         resolver: zodResolver(schema),
         defaultValues: {
-            indenterName: '',
+            indenterName: user?.name || '',
             indentApproveBy: '',
             indentType: (typeParam as any) || 'Purchase',
             products: itemParam ? [

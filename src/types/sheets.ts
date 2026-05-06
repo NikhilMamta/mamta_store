@@ -209,6 +209,7 @@ export type InventorySheet = {
     currentStock?: number;
 };
 
+
 export type PoMasterSheet = {
     rowIndex?: number;
     discountPercent: number;
