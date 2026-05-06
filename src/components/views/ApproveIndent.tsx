@@ -554,7 +554,7 @@ export default () => {
             },
             size: 50,
         },
-        ...(user.indentApprovalAction
+        ...(user.approve_indent
             ? [
                 {
                     header: 'Vendor Type',
@@ -761,7 +761,7 @@ export default () => {
             ),
             size: 100,
         },
-    ], [selectedRows, bulkUpdates, submitting, user.indentApprovalAction, tableData]);
+    ], [selectedRows, bulkUpdates, submitting, user.approve_indent, tableData]);
 
     // History columns with mobile responsiveness
     const historyColumns: ColumnDef<HistoryData>[] = useMemo(() => [
@@ -815,7 +815,7 @@ export default () => {
                 ) : (
                     <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-[120px] sm:max-w-[150px] break-words whitespace-normal text-center mx-auto">
                         <span className="text-xs sm:text-sm">{row.original.product}</span>
-                        {user.indentApprovalAction && (
+                        {user.approve_indent && (
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -848,7 +848,7 @@ export default () => {
                 ) : (
                     <div className="flex items-center justify-center gap-1 sm:gap-2">
                         <span className="text-xs sm:text-sm">{row.original.approvedQuantity}</span>
-                        {user.indentApprovalAction && editingRow !== String(row.original.rowIndex) && (
+                        {user.approve_indent && editingRow !== String(row.original.rowIndex) && (
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -880,7 +880,7 @@ export default () => {
                 ) : (
                     <div className="flex items-center justify-center gap-1 sm:gap-2">
                         <span className="text-xs sm:text-sm">{row.original.uom}</span>
-                        {user.indentApprovalAction && editingRow !== String(row.original.rowIndex) && (
+                        {user.approve_indent && editingRow !== String(row.original.rowIndex) && (
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -941,7 +941,7 @@ export default () => {
                         >
                             <span className="text-xs sm:text-sm">{row.original.vendorType}</span>
                         </Pill>
-                        {user.indentApprovalAction && editingRow !== String(row.original.rowIndex) && (
+                        {user.approve_indent && editingRow !== String(row.original.rowIndex) && (
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -977,7 +977,7 @@ export default () => {
             ),
             size: 100,
         },
-        ...(user.indentApprovalAction
+        ...(user.approve_indent
             ? [
                 {
                     id: 'editActions',
@@ -1009,7 +1009,7 @@ export default () => {
                 },
             ]
             : []),
-    ], [editingRow, editValues, user.indentApprovalAction]);
+    ], [editingRow, editValues, user.approve_indent]);
 
     return (
         <div className="flex flex-col gap-5 h-full w-full max-w-full overflow-hidden">

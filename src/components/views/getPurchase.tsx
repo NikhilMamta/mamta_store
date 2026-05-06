@@ -233,7 +233,7 @@ export default () => {
 
     // Creating table columns
     const columns: ColumnDef<GetPurchaseData>[] = [
-        ...(user.receiveItemAction
+        ...(user.receive_items
             ? [
                 {
                     header: 'Action',

@@ -72,6 +72,7 @@ interface HistoryData {
     _count?: number;
     poCopy?: string;
     indentNumber?: string;
+    timestamp?: string;
 }
 
 export default () => {
@@ -257,7 +258,7 @@ export default () => {
     };
 
     const columns: ColumnDef<RecieveItemsData>[] = [
-        ...(user.receiveItemView
+        ...(user.receive_items
             ? [
                 {
                     header: 'Action',

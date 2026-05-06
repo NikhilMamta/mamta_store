@@ -40,11 +40,11 @@ import {
     Video,
     KeyRound,
     Database,
-    History,
 } from 'lucide-react';
 import type { UserPermissions } from './types/sheets';
 import Administration from './components/views/Administration';
 import Loading from './components/views/Loading';
+import { Button } from './components/ui/button';
 import CreatePO from './components/views/CreatePO';
 import PendingIndents from './components/views/PendingIndents';
 import Order from './components/views/Order';

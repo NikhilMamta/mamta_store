@@ -612,7 +612,7 @@ export default () => {
     }, [indentSheet, approvedIndentSheet, vendorRateUpdateSheet]);
 
     const columns: ColumnDef<GroupedVendorUpdateData>[] = [
-        ...(user.updateVendorAction
+        ...(user.vendor_rate_update
             ? [
                 {
                     header: 'Action',
@@ -708,7 +708,7 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<GroupedHistoryData>[] = [
-        ...(user.updateVendorAction ? [
+        ...(user.vendor_rate_update ? [
             {
                 id: 'action_history',
                 header: () => <div className="text-center">Action</div>,

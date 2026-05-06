@@ -179,7 +179,7 @@ export default () => {
             if (!name) return;
 
             // Seed latest activity from the inventory record itself
-            updateLatest(name, i.lastUpdated || i.timestamp);
+            updateLatest(name, i.lastUpdated);
 
             if (!uniqueInventory[name]) {
                 uniqueInventory[name] = { ...i, opening: Number(i.opening || 0) };

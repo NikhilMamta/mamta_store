@@ -242,11 +242,11 @@ export default () => {
     }, [selectedRole, form]);
 
     // Handle initial state and user selection
-    const lastSelectedUserId = useRef<string | null>(null);
+    const lastSelectedUserId = useRef<number | null>(null);
     useEffect(() => {
         if (selectedUser) {
-            if (lastSelectedUserId.current !== selectedUser.id) {
-                lastSelectedUserId.current = selectedUser.id;
+            if (lastSelectedUserId.current !== (selectedUser.id ?? null)) {
+                lastSelectedUserId.current = selectedUser.id ?? null;
                 form.reset({
                     name: selectedUser.name,
                     username: selectedUser.username,

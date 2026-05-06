@@ -169,7 +169,7 @@ export default () => {
     }, [indentSheet, vendorRateUpdateSheet, approvedIndentSheet, threePartyApprovalSheet]);
 
     const columns: ColumnDef<GroupedRateApprovalData>[] = [
-        ...(user.threePartyApprovalAction
+        ...(user.three_party_approval
             ? [
                 {
                     header: 'Action',
