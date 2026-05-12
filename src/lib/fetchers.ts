@@ -233,6 +233,30 @@ export async function uploadFileToSupabase(file: File | Blob, bucketName: string
     return publicUrl;
 }
 
+type SendPoEmailPayload = {
+    to: string;
+    vendorName: string;
+    poNumber: string;
+    pdfUrl: string;
+    fileName: string;
+};
+
+export async function sendPoEmail(payload: SendPoEmailPayload) {
+    const { data, error } = await supabase.functions.invoke('send-po-email', {
+        body: payload,
+    });
+
+    if (error) {
+        throw error;
+    }
+
+    if (data?.success === false) {
+        throw new Error(data.message || 'Failed to send PO email');
+    }
+
+    return data;
+}
+
 export async function fetchSheet(
     sheetName: Sheet
 ): Promise<MasterSheet | IndentSheet[] | ReceivedSheet[] | UserPermissions[] | PoMasterSheet[] | InventorySheet[] | ThreePartyApprovalSheet[]> {

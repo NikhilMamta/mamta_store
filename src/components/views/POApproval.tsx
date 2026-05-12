@@ -456,6 +456,7 @@ export default () => {
 
             // 2. REGENERATE PDF with the new approval status
             let updatedPdfUrl = selectedItem.pdf;
+            let approvedPdfFile: File | null = null;
             
             try {
                 const pdfProps: POPdfProps = {
@@ -518,6 +519,7 @@ export default () => {
                 const file = new File([blob], `PO-${selectedItem.poNumber}-Approved.pdf`, {
                     type: 'application/pdf',
                 });
+                approvedPdfFile = file;
 
                 updatedPdfUrl = await uploadFileToSupabase(file, 'pdf');
                 console.log('Updated PO PDF uploaded:', updatedPdfUrl);
@@ -548,6 +550,8 @@ export default () => {
             } catch (err) {
                 console.error('PO APPROVAL table save failed:', err);
             }
+
+            // Email sending is disabled for now. Approval should submit without showing email errors.
 
             toast.success(`PO ${values.status} successfully`);
             setOpenDialog(false);

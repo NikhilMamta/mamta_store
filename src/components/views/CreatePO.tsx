@@ -9,7 +9,7 @@ import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
 import type { PoHistorySheet, PoMasterSheet } from '@/types';
-import { postToSheet, uploadFile, uploadFileToSupabase, postToPoHistory, fetchVendorDetails } from '@/lib/fetchers';
+import { postToSheet, uploadFile, uploadFileToSupabase, postToPoHistory, fetchVendorDetails, sendPoEmail } from '@/lib/fetchers';
 import { useEffect, useState } from 'react';
 import { useSheets } from '@/context/SheetsContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -381,27 +381,32 @@ export default () => {
     // Helper to find indent across sheets
     const findIndentWithFallback = (id: string, serial?: number | string) => {
         const hasSerial = serial !== undefined && serial !== null && String(serial).trim() !== '';
-        const targetBaseId = (id || '').split(/[_/]/)[0].toLowerCase();
+        const targetId = (id || '').trim().toLowerCase();
+        const targetBaseId = targetId.split(/[_/]/)[0];
+
+        const matchesIndent = (indentNumber?: string, itemSerial?: number | string) => {
+            const itemId = (indentNumber || '').trim().toLowerCase();
+            if (targetId && itemId === targetId) return true;
+            if (hasSerial && itemSerial && String(itemSerial) === String(serial)) return true;
+            return itemId.split(/[_/]/)[0] === targetBaseId;
+        };
 
         // 1. Search in master Indent Sheet
-        let found = indentSheet.find((i) => {
-            if (hasSerial && i.searialNumber) return String(i.searialNumber) === String(serial);
-            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
-            return itemBaseId === targetBaseId;
-        });
+        const found =
+            indentSheet.find((i) => (i.indentNumber || '').trim().toLowerCase() === targetId) ||
+            indentSheet.find((i) => hasSerial && i.searialNumber && String(i.searialNumber) === String(serial)) ||
+            indentSheet.find((i) => matchesIndent(i.indentNumber, i.searialNumber));
 
         // 2. Search in Approved Indent Sheet (often contains updated quantities)
-        const approved = approvedIndentSheet.find((i) => {
-            if (hasSerial && i.searialNumber) return String(i.searialNumber) === String(serial);
-            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
-            return itemBaseId === targetBaseId;
-        });
+        const approved =
+            approvedIndentSheet.find((i) => (i.indentNumber || '').trim().toLowerCase() === targetId) ||
+            approvedIndentSheet.find((i) => hasSerial && i.searialNumber && String(i.searialNumber) === String(serial)) ||
+            approvedIndentSheet.find((i) => matchesIndent(i.indentNumber, i.searialNumber));
 
         // 3. Search in Three Party Approval (contains the final approved rate and vendor)
-        const tpa = threePartyApprovalSheet.find((i) => {
-            const itemBaseId = (i.indentNumber || '').split(/[_/]/)[0].toLowerCase();
-            return itemBaseId === targetBaseId;
-        });
+        const tpa =
+            threePartyApprovalSheet.find((i) => (i.indentNumber || '').trim().toLowerCase() === targetId) ||
+            threePartyApprovalSheet.find((i) => matchesIndent(i.indentNumber));
 
         if (found || approved || tpa) {
             // Merge data from all sources
@@ -653,14 +658,20 @@ export default () => {
                 url = await uploadFileToSupabase(file, 'pdf');
 
                 if (email) {
-                    console.log(`PO PDF uploaded to Supabase: ${url}. Email sending to ${email} would happen here.`);
-                    toast.success('PO created and PDF saved to Supabase');
+                    await sendPoEmail({
+                        to: email,
+                        vendorName: values.supplierName,
+                        poNumber,
+                        pdfUrl: url,
+                        fileName: file.name,
+                    });
+                    toast.success('PO created, PDF saved, and email sent');
                 } else {
-                    toast.success('PO created and PDF saved to Supabase');
+                    toast.warning('PO created and PDF saved, but vendor email is missing');
                 }
             } catch (uploadError) {
-                console.error("Supabase Storage upload error:", uploadError);
-                toast.error("Failed to upload PDF to Supabase.");
+                console.error("PO PDF upload or email error:", uploadError);
+                toast.error("Failed to upload PDF or send PO email.");
                 // URL remains empty but we proceed to save the record
             }
 
@@ -1562,7 +1573,7 @@ export default () => {
                                 {form.formState.isSubmitting && (
                                     <Loader size={20} color="white" aria-label="Loading Spinner" />
                                 )}
-                                Save And Send PO
+                                Save PO
                             </Button>
                         </div>
                     </form>
