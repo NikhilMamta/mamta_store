@@ -480,7 +480,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                         unit: appr.originalRow.uom || appr.originalRow.unit
                     })),
                     preparedBy: 'Nikhil Kumar Uranw',
-                    approvedBy: 'Store Incharge'
+                    approvedBy: user?.name || user?.username || 'Store Incharge'
                 });
 
                 // Upload PDF to Supabase 'slip' bucket
@@ -493,6 +493,7 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                 id: appr.originalRow.id,
                 status: appr.status,
                 qty: appr.approveQty,
+                approved_by: user?.name || user?.username || 'Unknown',
             }));
 
             await postToSheet(updatePayload, 'update', 'STORE_OUT_REQUEST');

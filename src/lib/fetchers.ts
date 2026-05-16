@@ -127,7 +127,7 @@ const RECEIVES_ITEMS_COLUMNS = [
 const STORE_OUT_REQUEST_COLUMNS = [
     'id', 'timestamp', 'indent_number', 'product_name', 'issue_no', 'issue_date', 'indenter_name', 'indent_type',
     'approval_needed', 'requested_by', 'floor', 'ward_name', 'qty', 'unit', 'department',
-    'category', 'area_of_use', 'planned_7', 'delay', 'status'
+    'category', 'area_of_use', 'planned_7', 'delay', 'status', 'approved_by'
 ];
 
 const STORE_OUT_APPROVAL_COLUMNS = [

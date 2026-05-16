@@ -226,7 +226,7 @@ export default () => {
             .from('indent')
             .select('indent_number')
             .ilike('indent_number', `${prefix}%`)
-            .order('id', { ascending: false })
+            .order('indent_number', { ascending: false })
             .limit(200);
 
         if (error) {
@@ -322,8 +322,8 @@ export default () => {
             second: '2-digit',
             hour12: false
         });
-        const timestamp = `${day}/${month}/${year} ${time}`;
-        const issueDate = `${day}/${month}/${year}`;
+        const timestamp = `${year}-${month}-${day} ${time}`;
+        const issueDate = `${year}-${month}-${day}`;
 
         // ─── STORE OUT PATH ───────────────────────────────────────────────────────
         if (data.indentType === 'Store Out') {
@@ -340,9 +340,7 @@ export default () => {
                         timestamp: timestamp,
                         issue_no: `${baseNumber}/${idx + 1}`,
                         product_name: product.productName || '',
-                        issue_date: product.issueDate
-                            ? formatDate(new Date(product.issueDate))
-                            : issueDate,
+                        issue_date: product.issueDate || issueDate,
                         indenter_name: data.indenterName || '',
                         indent_type: 'Store Out',
                         approval_needed: data.indentApproveBy || '',
