@@ -132,7 +132,7 @@ export default () => {
         console.log('✨ MAPPED ITEMS:', allItems);
         
         const pendingItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'pending');
-        const historyItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'approved' || row.storeOutStatus?.toLowerCase() === 'rejected');
+        const historyItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'approved' || row.storeOutStatus?.toLowerCase() === 'rejected' || row.storeOutStatus?.toLowerCase() === 'done');
 
         const groupItems = (items: StoreOutTableData[]) => {
             return items.reduce((acc, item) => {
@@ -445,7 +445,7 @@ const StoreOutStatusForm = ({ items, onSuccess }: { items: StoreOutTableData[], 
         resolver: zodResolver(schema),
         defaultValues: {
             updates: items.map(item => ({
-                status: '',
+                status: 'Done',
                 id: item.id
             }))
         }
@@ -522,8 +522,7 @@ const StoreOutStatusForm = ({ items, onSuccess }: { items: StoreOutTableData[], 
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="Approved">Approved</SelectItem>
-                                                <SelectItem value="Rejected">Rejected</SelectItem>
+                                                <SelectItem value="Done">Done</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </FormItem>
