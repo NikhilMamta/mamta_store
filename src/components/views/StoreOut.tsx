@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { fetchSheet, postToSheet } from '@/lib/fetchers';
 import { toast } from 'sonner';
 import { PuffLoader as Loader } from 'react-spinners';
-import { ClipboardList, FileText, PackageSearch } from 'lucide-react';
+import { ClipboardList, FileText, PackageSearch, Search } from 'lucide-react';
 import Heading from '../element/Heading';
 import type { StoreOutSheet } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog";
@@ -18,6 +18,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Pill } from '../ui/pill';
 import { formatDate } from '@/lib/utils';
+import { Input } from '../ui/input';
 
 interface StoreOutTableData {
     id: string;
@@ -60,6 +61,44 @@ export default () => {
     const [selectedGroup, setSelectedGroup] = useState<GroupedStoreOutStatusData | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutStatusData | null>(null);
 
+    const [filterDate, setFilterDate] = useState('');
+    const [filterWard, setFilterWard] = useState('');
+    const [filterProduct, setFilterProduct] = useState('');
+    const [searchWard, setSearchWard] = useState('');
+    const [searchProduct, setSearchProduct] = useState('');
+
+    const filteredPending = pendingData.filter(group => {
+        const dateMatch = !filterDate || (group.timestamp && !isNaN(Date.parse(group.timestamp)) && new Date(group.timestamp).toLocaleDateString('en-CA') === filterDate);
+        const wardMatch = !filterWard || group.wardName === filterWard;
+        const productMatch = !filterProduct || group.items.some(item => item.product === filterProduct);
+        return dateMatch && wardMatch && productMatch;
+    });
+
+    const filteredHistory = historyData.filter(group => {
+        const dateMatch = !filterDate || (group.timestamp && !isNaN(Date.parse(group.timestamp)) && new Date(group.timestamp).toLocaleDateString('en-CA') === filterDate);
+        const wardMatch = !filterWard || group.wardName === filterWard;
+        const productMatch = !filterProduct || group.items.some(item => item.product === filterProduct);
+        return dateMatch && wardMatch && productMatch;
+    });
+
+    const allWards = Array.from(
+        new Set([
+            ...pendingData.map((d) => d.wardName),
+            ...historyData.map((d) => d.wardName),
+        ])
+    )
+        .filter(Boolean)
+        .sort();
+
+    const allProducts = Array.from(
+        new Set([
+            ...pendingData.flatMap((d) => d.items.map((i) => i.product)),
+            ...historyData.flatMap((d) => d.items.map((i) => i.product)),
+        ])
+    )
+        .filter(Boolean)
+        .sort();
+
     // DIRECT FETCH ON MOUNT - NO CACHE
     useEffect(() => {
         const fetchFreshData = async () => {
@@ -71,7 +110,7 @@ export default () => {
                     fetchSheet('STORE OUT REQUEST'),
                     fetchSheet('INDENT')
                 ]);
-                
+
                 setLocalStoreOutSheet(storeOut as any[]);
                 setLocalStoreOutApprovalSheet(storeOutApproval as any[]);
                 setLocalIndentSheet(indent as any[]);
@@ -130,7 +169,7 @@ export default () => {
 
         const allItems = localStoreOutSheet.map(mapRowToTableData);
         console.log('✨ MAPPED ITEMS:', allItems);
-        
+
         const pendingItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'pending');
         const historyItems = allItems.filter((row) => row.storeOutStatus?.toLowerCase() === 'approved' || row.storeOutStatus?.toLowerCase() === 'rejected' || row.storeOutStatus?.toLowerCase() === 'done');
 
@@ -219,20 +258,20 @@ export default () => {
             },
             size: 110,
         },
-        { 
-            accessorKey: 'issueNo', 
+        {
+            accessorKey: 'issueNo',
             id: 'issueNo',
             header: () => <div className="text-center">Issue No.</div>,
             cell: ({ row }) => <div className="text-center">{row.original.issueNo?.split(/[_/]/)[0]}</div>
         },
-        { 
-            accessorKey: 'indenterName', 
+        {
+            accessorKey: 'indenterName',
             id: 'indenterName',
             header: () => <div className="text-center">Indenter</div>,
             cell: ({ row }) => <div className="text-center">{row.original.indenterName}</div>
         },
-        { 
-            accessorKey: 'wardName', 
+        {
+            accessorKey: 'wardName',
             id: 'wardName',
             header: () => <div className="text-center">Ward Name</div>,
             cell: ({ row }) => <div className="text-center">{row.original.wardName}</div>
@@ -294,14 +333,14 @@ export default () => {
             },
             size: 110,
         },
-        { 
-            accessorKey: 'issueNo', 
+        {
+            accessorKey: 'issueNo',
             id: 'issueNo_history',
             header: () => <div className="text-center">Issue No.</div>,
             cell: ({ row }) => <div className="text-center">{row.original.issueNo?.split(/[_/]/)[0]}</div>
         },
-        { 
-            accessorKey: 'indenterName', 
+        {
+            accessorKey: 'indenterName',
             id: 'indenterName_history',
             header: () => <div className="text-center">Indenter</div>,
             cell: ({ row }) => <div className="text-center">{row.original.indenterName}</div>
@@ -343,16 +382,82 @@ export default () => {
                 }
             }}>
                 <div className="p-5">
+                    <div className="flex flex-wrap gap-4 mb-4 items-end bg-muted/10 p-3 rounded-lg border border-muted-foreground/10">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-xs font-semibold text-muted-foreground">Date</span>
+                            <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-40 h-9" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-xs font-semibold text-muted-foreground">Ward Name</span>
+                            <Select value={filterWard || 'all'} onValueChange={(val) => setFilterWard(val === 'all' ? '' : val)}>
+                                <SelectTrigger className="w-48 h-9 bg-background">
+                                    <SelectValue placeholder="All Wards" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px] overflow-y-auto">
+                                    <div className="flex items-center border-b px-2 pb-2 pt-1 sticky top-0 bg-background z-10">
+                                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                                        <input
+                                            placeholder="Search wards..."
+                                            value={searchWard}
+                                            onChange={(e) => setSearchWard(e.target.value)}
+                                            onKeyDown={(e) => e.stopPropagation()}
+                                            className="flex h-8 w-full rounded-md border-0 bg-transparent py-2 text-xs outline-none placeholder:text-muted-foreground"
+                                        />
+                                    </div>
+                                    <SelectItem value="all">All Wards</SelectItem>
+                                    {allWards
+                                        .filter(ward => ward.toLowerCase().includes(searchWard.toLowerCase()))
+                                        .map(ward => (
+                                            <SelectItem key={ward} value={ward}>{ward}</SelectItem>
+                                        ))
+                                    }
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-xs font-semibold text-muted-foreground">Product</span>
+                            <Select value={filterProduct || 'all'} onValueChange={(val) => setFilterProduct(val === 'all' ? '' : val)}>
+                                <SelectTrigger className="w-56 h-9 bg-background">
+                                    <SelectValue placeholder="All Products" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px] overflow-y-auto">
+                                    <div className="flex items-center border-b px-2 pb-2 pt-1 sticky top-0 bg-background z-10">
+                                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                                        <input
+                                            placeholder="Search products..."
+                                            value={searchProduct}
+                                            onChange={(e) => setSearchProduct(e.target.value)}
+                                            onKeyDown={(e) => e.stopPropagation()}
+                                            className="flex h-8 w-full rounded-md border-0 bg-transparent py-2 text-xs outline-none placeholder:text-muted-foreground"
+                                        />
+                                    </div>
+                                    <SelectItem value="all">All Products</SelectItem>
+                                    {allProducts
+                                        .filter(product => product.toLowerCase().includes(searchProduct.toLowerCase()))
+                                        .map(product => (
+                                            <SelectItem key={product} value={product}>{product}</SelectItem>
+                                        ))
+                                    }
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {(filterDate || filterWard || filterProduct) && (
+                            <Button variant="ghost" onClick={() => { setFilterDate(''); setFilterWard(''); setFilterProduct(''); setSearchWard(''); setSearchProduct(''); }} className="h-9 text-xs text-destructive hover:bg-destructive/10">
+                                Clear Filters
+                            </Button>
+                        )}
+                    </div>
+
                     <Tabs defaultValue="pending" className="w-full">
                         <TabsList className="mb-4">
-                            <TabsTrigger value="pending">Pending ({pendingData.length})</TabsTrigger>
-                            <TabsTrigger value="history">History ({historyData.length})</TabsTrigger>
+                            <TabsTrigger value="pending">Pending ({filteredPending.length})</TabsTrigger>
+                            <TabsTrigger value="history">History ({filteredHistory.length})</TabsTrigger>
                         </TabsList>
                         <TabsContent value="pending">
-                            <DataTable data={pendingData} columns={pendingColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
+                            <DataTable data={filteredPending} columns={pendingColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
                         </TabsContent>
                         <TabsContent value="history">
-                            <DataTable data={historyData} columns={historyColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
+                            <DataTable data={filteredHistory} columns={historyColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
                         </TabsContent>
                     </Tabs>
                 </div>
@@ -382,7 +487,7 @@ export default () => {
                                         // Still trigger global refresh for other tabs
                                         updateStoreOutSheet();
                                         // And local refresh for this page
-                                        window.location.reload(); 
+                                        window.location.reload();
                                     }}
                                 />
                             </div>

@@ -73,6 +73,10 @@ export default () => {
         opening: '',
     });
 
+    const [filterDate, setFilterDate] = useState('');
+    const [filterItem, setFilterItem] = useState('');
+    const [searchItemTerm, setSearchItemTerm] = useState('');
+
     useEffect(() => {
         // Use raw sheets for everything
         const filteredIndentSheet = indentSheet;
@@ -226,14 +230,17 @@ export default () => {
             return dateB - dateA;
         });
 
-        // Apply search filter
+        // Apply search and dropdown filters
         const filteredAndSorted = sortedData.filter(item => {
             const search = searchTerm.toLowerCase();
-            return !searchTerm || (
+            const searchMatch = !searchTerm || (
                 item.itemName.toLowerCase().includes(search) ||
                 item.groupHead.toLowerCase().includes(search) ||
                 item.uom.toLowerCase().includes(search)
             );
+            const dateMatch = !filterDate || (item.lastUpdated && !isNaN(Date.parse(item.lastUpdated)) && new Date(item.lastUpdated).toLocaleDateString('en-CA') === filterDate);
+            const itemMatch = !filterItem || item.itemName === filterItem;
+            return searchMatch && dateMatch && itemMatch;
         });
 
         setTableData(filteredAndSorted);
@@ -246,6 +253,8 @@ export default () => {
         storeOutApprovalSheet,
         vendorRateUpdateSheet,
         searchTerm,
+        filterDate,
+        filterItem,
     ]);
 
     const columns: ColumnDef<InventoryTable>[] = [
@@ -426,6 +435,10 @@ export default () => {
         }
     };
 
+    const allUniqueItems = Array.from(
+        new Set((inventorySheet || []).map((i: any) => i.itemName).filter(Boolean))
+    ).sort();
+
     return (
         <div className="flex flex-col gap-4 p-4">
             {/* Unified Professional Industrial Header */}
@@ -565,6 +578,46 @@ export default () => {
                         </Dialog>
                     </div>
                 </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="flex flex-wrap gap-4 items-end bg-muted/10 p-3 rounded-2xl border border-muted-foreground/10">
+                <div className="flex flex-col gap-1">
+                    <span className="text-xs font-semibold text-muted-foreground">Date</span>
+                    <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-40 h-9" />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <span className="text-xs font-semibold text-muted-foreground">Item</span>
+                    <Select value={filterItem || 'all'} onValueChange={(val) => setFilterItem(val === 'all' ? '' : val)}>
+                        <SelectTrigger className="w-64 h-9 bg-background">
+                            <SelectValue placeholder="All Items" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px] overflow-y-auto">
+                            <div className="flex items-center border-b px-2 pb-2 pt-1 sticky top-0 bg-background z-10">
+                                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                                <input
+                                    placeholder="Search items..."
+                                    value={searchItemTerm}
+                                    onChange={(e) => setSearchItemTerm(e.target.value)}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    className="flex h-8 w-full rounded-md border-0 bg-transparent py-2 text-xs outline-none placeholder:text-muted-foreground"
+                                />
+                            </div>
+                            <SelectItem value="all">All Items</SelectItem>
+                            {allUniqueItems
+                                .filter(item => item.toLowerCase().includes(searchItemTerm.toLowerCase()))
+                                .map(item => (
+                                    <SelectItem key={item} value={item}>{item}</SelectItem>
+                                ))
+                            }
+                        </SelectContent>
+                    </Select>
+                </div>
+                {(filterDate || filterItem) && (
+                    <Button variant="ghost" onClick={() => { setFilterDate(''); setFilterItem(''); setSearchItemTerm(''); }} className="h-9 text-xs text-destructive hover:bg-destructive/10">
+                        Clear Filters
+                    </Button>
+                )}
             </div>
 
             <DataTable
