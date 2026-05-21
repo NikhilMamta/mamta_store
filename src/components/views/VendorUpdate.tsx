@@ -486,7 +486,7 @@ export default () => {
 
         // Get all approved indents that need vendor update
         const pendingApprovedIndents = approvedIndentSheet.filter(
-            (approved) => approved.status?.trim().toLowerCase() === 'pending' && approved.vendorType === 'Regular'
+            (approved) => approved.status?.trim().toLowerCase() === 'pending' && approved.vendorType !== 'Three Party'
         );
 
         const pendingItems = indentSheet
@@ -506,7 +506,8 @@ export default () => {
                 );
                 
                 // Use vendorType from approved_indent first, then indent_sheet, then default to 'Regular'
-                const vendorType = (approvedRecord?.vendorType || sheet.vendorType || 'Regular') as VendorUpdateData['vendorType'];
+                const rawVendorType = approvedRecord?.vendorType || sheet.vendorType || 'Regular';
+                const vendorType = (rawVendorType === 'Pending' ? 'Regular' : rawVendorType) as VendorUpdateData['vendorType'];
                 
                 console.log(`📋 Indent ${sheet.indentNumber} - VendorType:`, vendorType);
                 

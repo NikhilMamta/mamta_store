@@ -84,7 +84,7 @@ export default () => {
         }
 
         const pendingApprovedIndents = approvedIndentSheet.filter(
-            (ai) => ai.vendorType?.trim() === 'Three Party' && ai.status?.trim() === 'Pending'
+            (ai) => ai.vendorType?.trim().toLowerCase() === 'three party' && ai.status?.trim().toLowerCase() === 'pending'
         );
 
         const pendingIndentNumbers = new Set(pendingApprovedIndents.map(ai => ai.indentNumber));
