@@ -594,7 +594,13 @@ export default () => {
 
                         {fields.map((field, index) => {
                             const groupHead = indentType === 'Store Out' ? products[index]?.category : products[index]?.groupHead;
-                            const productOptions = allProducts;
+                            const productOptions = groupHead 
+                                ? allProducts.filter(p => productToGroupHeadMap[p] === groupHead)
+                                : allProducts;
+                            
+                            const productVal = products[index]?.productName;
+                            const inventoryItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === productVal?.toLowerCase());
+                            const isUomPreFilled = !!inventoryItem?.uom;
 
 
                             return (
@@ -801,6 +807,11 @@ export default () => {
                                                                         : `products.${index}.groupHead`;
                                                                     form.setValue(fieldName as any, mappedGroup);
                                                                 }
+                                                                // Auto-fill UOM
+                                                                const inventoryItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === val.toLowerCase());
+                                                                if (inventoryItem?.uom) {
+                                                                    form.setValue(`products.${index}.uom`, inventoryItem.uom);
+                                                                }
                                                             }} 
                                                             value={field.value}
                                                         >
@@ -853,7 +864,7 @@ export default () => {
                                             render={({ field }) => (
                                                 <FormItem className="md:col-span-1">
                                                     <FormLabel className="text-sm">UOM<span className="text-destructive">*</span></FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                    <Select onValueChange={field.onChange} value={field.value} disabled={isUomPreFilled}>
                                                         <FormControl>
                                                             <SelectTrigger className="w-full h-9"><SelectValue placeholder="Unit" /></SelectTrigger>
                                                         </FormControl>

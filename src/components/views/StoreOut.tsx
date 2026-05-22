@@ -61,21 +61,40 @@ export default () => {
     const [selectedGroup, setSelectedGroup] = useState<GroupedStoreOutStatusData | null>(null);
     const [selectedHistory, setSelectedHistory] = useState<GroupedStoreOutStatusData | null>(null);
 
-    const [filterDate, setFilterDate] = useState('');
+    const [filterFromDate, setFilterFromDate] = useState('');
+    const [filterToDate, setFilterToDate] = useState('');
     const [filterWard, setFilterWard] = useState('');
     const [filterProduct, setFilterProduct] = useState('');
     const [searchWard, setSearchWard] = useState('');
     const [searchProduct, setSearchProduct] = useState('');
 
     const filteredPending = pendingData.filter(group => {
-        const dateMatch = !filterDate || (group.timestamp && !isNaN(Date.parse(group.timestamp)) && new Date(group.timestamp).toLocaleDateString('en-CA') === filterDate);
+        let dateMatch = true;
+        if (filterFromDate || filterToDate) {
+            if (group.timestamp && !isNaN(Date.parse(group.timestamp))) {
+                const groupDateStr = new Date(group.timestamp).toLocaleDateString('en-CA');
+                if (filterFromDate && groupDateStr < filterFromDate) dateMatch = false;
+                if (filterToDate && groupDateStr > filterToDate) dateMatch = false;
+            } else {
+                dateMatch = false;
+            }
+        }
         const wardMatch = !filterWard || group.wardName === filterWard;
         const productMatch = !filterProduct || group.items.some(item => item.product === filterProduct);
         return dateMatch && wardMatch && productMatch;
     });
 
     const filteredHistory = historyData.filter(group => {
-        const dateMatch = !filterDate || (group.timestamp && !isNaN(Date.parse(group.timestamp)) && new Date(group.timestamp).toLocaleDateString('en-CA') === filterDate);
+        let dateMatch = true;
+        if (filterFromDate || filterToDate) {
+            if (group.timestamp && !isNaN(Date.parse(group.timestamp))) {
+                const groupDateStr = new Date(group.timestamp).toLocaleDateString('en-CA');
+                if (filterFromDate && groupDateStr < filterFromDate) dateMatch = false;
+                if (filterToDate && groupDateStr > filterToDate) dateMatch = false;
+            } else {
+                dateMatch = false;
+            }
+        }
         const wardMatch = !filterWard || group.wardName === filterWard;
         const productMatch = !filterProduct || group.items.some(item => item.product === filterProduct);
         return dateMatch && wardMatch && productMatch;
@@ -227,6 +246,12 @@ export default () => {
 
     const pendingColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
+            id: 'serialNo',
+            header: () => <div className="text-center">S.No.</div>,
+            cell: ({ row }) => <div className="text-center font-medium">{row.index + 1}</div>,
+            size: 50,
+        },
+        {
             id: 'actions',
             header: () => <div className="text-center">View</div>,
             cell: ({ row }) => (
@@ -301,6 +326,12 @@ export default () => {
     ];
 
     const historyColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
+        {
+            id: 'serialNo',
+            header: () => <div className="text-center">S.No.</div>,
+            cell: ({ row }) => <div className="text-center font-medium">{row.index + 1}</div>,
+            size: 50,
+        },
         {
             id: 'actions',
             header: () => <div className="text-center">View</div>,
@@ -384,8 +415,12 @@ export default () => {
                 <div className="p-5">
                     <div className="flex flex-wrap gap-4 mb-4 items-end bg-muted/10 p-3 rounded-lg border border-muted-foreground/10">
                         <div className="flex flex-col gap-1">
-                            <span className="text-xs font-semibold text-muted-foreground">Date</span>
-                            <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-40 h-9" />
+                            <span className="text-xs font-semibold text-muted-foreground">From Date</span>
+                            <Input type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="w-40 h-9" />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-xs font-semibold text-muted-foreground">To Date</span>
+                            <Input type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="w-40 h-9" />
                         </div>
                         <div className="flex flex-col gap-1">
                             <span className="text-xs font-semibold text-muted-foreground">Ward Name</span>
@@ -441,8 +476,8 @@ export default () => {
                                 </SelectContent>
                             </Select>
                         </div>
-                        {(filterDate || filterWard || filterProduct) && (
-                            <Button variant="ghost" onClick={() => { setFilterDate(''); setFilterWard(''); setFilterProduct(''); setSearchWard(''); setSearchProduct(''); }} className="h-9 text-xs text-destructive hover:bg-destructive/10">
+                        {(filterFromDate || filterToDate || filterWard || filterProduct) && (
+                            <Button variant="ghost" onClick={() => { setFilterFromDate(''); setFilterToDate(''); setFilterWard(''); setFilterProduct(''); setSearchWard(''); setSearchProduct(''); }} className="h-9 text-xs text-destructive hover:bg-destructive/10">
                                 Clear Filters
                             </Button>
                         )}
@@ -509,6 +544,7 @@ export default () => {
                                 <table className="w-full text-sm">
                                     <thead className="bg-primary">
                                         <tr className="border-b text-primary-foreground font-bold text-left">
+                                            <th className="py-2 px-2 w-12 text-center">S.No.</th>
                                             <th className="py-2 px-2">Product</th>
                                             <th className="py-2 px-2">Qty</th>
                                             <th className="py-2 px-2">Status</th>
@@ -518,6 +554,7 @@ export default () => {
                                     <tbody>
                                         {selectedHistory.items.map((item, idx) => (
                                             <tr key={idx} className="border-b last:border-0 border-muted/20">
+                                                <td className="py-2 px-2 text-center font-medium">{idx + 1}</td>
                                                 <td className="py-2 px-2">{item.product}</td>
                                                 <td className="py-2 px-2">{item.qty} {item.unit}</td>
                                                 <td className="py-2 px-2"><Pill variant="secondary">{item.storeOutStatus}</Pill></td>

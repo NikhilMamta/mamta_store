@@ -36,6 +36,7 @@ interface MasterRow {
     item_name?: string;
     ward_name?: string;
     unit_of_measurement?: string;
+    mux?: string;
     approved_by?: string;
     company_name?: string;
     company_address?: string;
@@ -152,6 +153,7 @@ export default function MasterData() {
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                                     <TableRow>
+                                        <TableHead className="w-12 text-center">S.No.</TableHead>
                                         <TableHead>Vendor Name</TableHead>
                                         <TableHead>GSTIN</TableHead>
                                         <TableHead>Email</TableHead>
@@ -160,9 +162,10 @@ export default function MasterData() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {loading ? <LoadingRows cols={5} /> :
+                                    {loading ? <LoadingRows cols={6} /> :
                                         masterData.filter(r => r.vendor_name).map((r, i) => (
                                             <TableRow key={i}>
+                                                <TableCell className="text-center font-medium">{i + 1}</TableCell>
                                                 <TableCell className="font-medium">{r.vendor_name}</TableCell>
                                                 <TableCell>{r.vendor_gstin}</TableCell>
                                                 <TableCell>{r.vendor_email}</TableCell>
@@ -199,14 +202,16 @@ export default function MasterData() {
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                                     <TableRow>
+                                        <TableHead className="w-12 text-center">S.No.</TableHead>
                                         <TableHead>Department Name</TableHead>
                                         <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {loading ? <LoadingRows cols={2} /> :
+                                    {loading ? <LoadingRows cols={3} /> :
                                         unique('department').map((dep, i) => (
                                             <TableRow key={i}>
+                                                <TableCell className="text-center font-medium">{i + 1}</TableCell>
                                                 <TableCell className="font-medium">{dep}</TableCell>
                                                 <TableCell className="flex gap-1">
                                                     <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
@@ -243,19 +248,23 @@ export default function MasterData() {
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                                     <TableRow>
+                                        <TableHead className="w-12 text-center">S.No.</TableHead>
                                         <TableHead>Group Head</TableHead>
                                         <TableHead>Item Name</TableHead>
                                         <TableHead>UOM</TableHead>
+                                        <TableHead>Mux</TableHead>
                                         <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {loading ? <LoadingRows cols={4} /> :
+                                    {loading ? <LoadingRows cols={6} /> :
                                         masterData.filter(r => r.item_name).map((r, i) => (
                                             <TableRow key={i}>
+                                                <TableCell className="text-center font-medium">{i + 1}</TableCell>
                                                 <TableCell>{r.group_head}</TableCell>
                                                 <TableCell className="font-medium">{r.item_name}</TableCell>
                                                 <TableCell>{r.unit_of_measurement}</TableCell>
+                                                <TableCell>{r.mux || '—'}</TableCell>
                                                 <TableCell className="flex gap-1">
                                                     <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
                                                         onClick={() => { setEditingRow(r); setForm(r as any); setOpenDialog('item'); }}>
@@ -288,14 +297,16 @@ export default function MasterData() {
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                                     <TableRow>
+                                        <TableHead className="w-12 text-center">S.No.</TableHead>
                                         <TableHead>Ward / Floor Name</TableHead>
                                         <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {loading ? <LoadingRows cols={2} /> :
+                                    {loading ? <LoadingRows cols={3} /> :
                                         unique('ward_name').map((ward, i) => (
                                             <TableRow key={i}>
+                                                <TableCell className="text-center font-medium">{i + 1}</TableCell>
                                                 <TableCell className="font-medium">{ward}</TableCell>
                                                 <TableCell className="flex gap-1">
                                                     <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
@@ -448,13 +459,23 @@ export default function MasterData() {
                                 )}
                             </div>
                         ))}
+                        <div>
+                            <label className="text-xs font-medium">Mux</label>
+                            <Input
+                                className="mt-1"
+                                value={form.mux || ''}
+                                onChange={e => setForm(p => ({ ...p, mux: e.target.value }))}
+                                placeholder="Enter mux value..."
+                            />
+                        </div>
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
                         <Button disabled={saving} onClick={() => saveRow({
                             group_head: form.group_head,
                             item_name: form.item_name,
-                            unit_of_measurement: form.unit_of_measurement
+                            unit_of_measurement: form.unit_of_measurement,
+                            mux: form.mux
                         })}>
                             {saving ? 'Saving...' : editingRow ? 'Update Item' : 'Save Item'}
                         </Button>

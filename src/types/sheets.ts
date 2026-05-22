@@ -302,6 +302,7 @@ export type MasterSheet = {
     paymentTerms: string[];
     departments: string[];
     groupHeads: Record<string, string[]>; // category: items[]
+    itemMux?: Record<string, string>; // itemName (lowercase) -> mux value
     companyName: string;
     companyAddress: string;
     companyGstin: string;

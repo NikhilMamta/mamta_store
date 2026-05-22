@@ -285,6 +285,7 @@ export async function fetchSheet(
         const defaultTerms = new Set<string>();
         const units = new Set<string>();
         const wardNames = new Set<string>();
+        const itemMux: Record<string, string> = {};
 
         let companyInfo: any = {};
 
@@ -315,6 +316,10 @@ export async function fetchSheet(
                 groupHeads[cRow.groupHead].add(cRow.itemName);
             }
 
+            if (cRow.itemName && cRow.mux) {
+                itemMux[cRow.itemName.trim().toLowerCase()] = cRow.mux;
+            }
+
             if (!companyInfo.companyName && cRow.companyName) {
                 companyInfo = {
                     companyName: cRow.companyName,
@@ -333,6 +338,7 @@ export async function fetchSheet(
             departments: [...departments],
             paymentTerms: [...paymentTerms],
             groupHeads: Object.fromEntries(Object.entries(groupHeads).map(([k, v]) => [k, [...v]])),
+            itemMux,
             companyPan: companyInfo.companyPan,
             companyName: companyInfo.companyName,
             companyAddress: companyInfo.companyAddress,
@@ -385,6 +391,7 @@ async function fetchSheetGAS(sheetName: Sheet) {
         const defaultTerms = new Set<string>();
         const units = new Set<string>();
         const wardNames = new Set<string>();
+        const itemMux: Record<string, string> = {};
 
         for (let i = 0; i < length; i++) {
             const vendorName = data.vendorName?.[i];
@@ -402,9 +409,13 @@ async function fetchSheetGAS(sheetName: Sheet) {
 
             const group = data.groupHead?.[i];
             const item = data.itemName?.[i];
+            const mux = data.mux?.[i];
             if (group && item) {
                 if (!groupHeads[group]) groupHeads[group] = new Set();
                 groupHeads[group].add(item);
+            }
+            if (item && mux) {
+                itemMux[item.trim().toLowerCase()] = mux;
             }
         }
 
@@ -413,6 +424,7 @@ async function fetchSheetGAS(sheetName: Sheet) {
             departments: [...departments],
             paymentTerms: [...paymentTerms],
             groupHeads: Object.fromEntries(Object.entries(groupHeads).map(([k, v]) => [k, [...v]])),
+            itemMux,
             companyPan: data.companyPan,
             companyName: data.companyName,
             companyAddress: data.companyAddress,
