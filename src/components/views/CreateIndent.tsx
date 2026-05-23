@@ -27,6 +27,7 @@ import Heading from '../element/Heading';
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatDate } from '@/lib/utils';
+import { sendStoreOutNotification } from '@/lib/whatsappService';
 
 
 export default () => {
@@ -375,6 +376,26 @@ export default () => {
 
                     // SUCCESS
                     toast.success(`Store Out ${baseNumber} created successfully!`);
+
+                    // Send WhatsApp Notification asynchronously
+                    sendStoreOutNotification({
+                        baseNumber,
+                        indenterName: data.indenterName || '',
+                        indentApproveBy: data.indentApproveBy || '',
+                        products: data.products.map(p => ({
+                            productName: p.productName,
+                            quantity: Number(p.quantity) || 0,
+                            uom: p.uom,
+                            wardName: p.wardName,
+                            category: p.category,
+                            department: p.department,
+                            issueDate: p.issueDate,
+                            floor: p.floor,
+                            areaOfUse: p.areaOfUse
+                        }))
+                    }).catch(err => {
+                        console.error("[WhatsApp] Notification trigger failed:", err);
+                    });
 
                     for (const product of data.products) {
                         if (product.wardName) submitToMaster(product.wardName);
