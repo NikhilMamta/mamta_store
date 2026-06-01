@@ -519,7 +519,7 @@ export default () => {
 
                 setTimeout(() => updateIndentSheet(), 1000);
             } else {
-                toast.error(res.message || 'Failed to create indent');
+                toast.error('Failed to create indent');
             }
         } catch (error) {
             console.error('=== SUBMIT ERROR ===', error);
