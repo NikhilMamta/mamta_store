@@ -264,7 +264,7 @@ export default () => {
     // Submit to master table in Supabase directly
     const submitProductToMasterSheet = async (productName: string, groupHead: string) => {
         const { error } = await supabase
-            .from('master')
+            .from('items')
             .insert([{ item_name: productName, group_head: groupHead }]);
 
         if (error) {
@@ -333,25 +333,44 @@ export default () => {
                     const baseNumber = await getNextIssueBase();
 
                     // 2. Build rows with snake_case column names the table expects
-                    const rows = data.products.map((product, idx) => ({
-                        timestamp: timestamp,
-                        issue_no: `${baseNumber}/${idx + 1}`,
-                        product_name: product.productName || '',
-                        issue_date: product.issueDate || issueDate,
-                        indenter_name: data.indenterName || '',
-                        indent_type: 'Store Out',
-                        approval_needed: data.indentApproveBy || '',
-                        requested_by: data.indenterName || '',
-                        floor: product.floor || '',
-                        ward_name: product.wardName || '',
-                        qty: Number(product.quantity) || 0,
-                        unit: product.uom || '',
-                        department: product.department || '',
-                        category: product.category || '',
-                        area_of_use: product.areaOfUse || '',
-                        planned_7: timestamp,
-                        status: 'Pending',
-                    }));
+                    const rows = data.products.map((product, idx) => {
+                        // Look up inventory item to snapshot unit conversion data
+                        const invItem = inventorySheet?.find(inv =>
+                            inv.itemName?.toLowerCase() === product.productName?.toLowerCase()
+                        );
+                        const itemId = invItem?.id;
+                        const purchaseUom = invItem?.uom || '';
+                        const prodNameLower = product.productName?.trim().toLowerCase();
+                        const issueUom = prodNameLower ? options?.itemIssueUom?.[prodNameLower] : undefined;
+                        const masterFactor = prodNameLower ? (options?.itemIssueUomFactor?.[prodNameLower] ?? 1) : 1;
+                        // If user selected the issue UOM → snapshot the factor; else factor = 1
+                        const isIssuingInIssueUom = issueUom && product.uom === issueUom;
+                        const snapshotFactor = isIssuingInIssueUom ? masterFactor : 1;
+
+                        return ({
+                            timestamp: timestamp,
+                            issue_no: `${baseNumber}/${idx + 1}`,
+                            product_name: product.productName || '',
+                            issue_date: product.issueDate || issueDate,
+                            indenter_name: data.indenterName || '',
+                            indent_type: 'Store Out',
+                            approval_needed: data.indentApproveBy || '',
+                            requested_by: data.indenterName || '',
+                            floor: product.floor || '',
+                            ward_name: product.wardName || '',
+                            qty: Number(product.quantity) || 0,
+                            unit: product.uom || '',
+                            department: product.department || '',
+                            category: product.category || '',
+                            area_of_use: product.areaOfUse || '',
+                            planned_7: timestamp,
+                            status: 'Pending',
+                            // Unit normalization snapshot fields
+                            inventory_item_id: itemId ?? null,
+                            purchase_uom: purchaseUom,
+                            conversion_factor: snapshotFactor,
+                        });
+                    });
 
                     console.log('=== STORE OUT REQUEST SUBMISSION ===', JSON.stringify(rows, null, 2));
 
@@ -465,48 +484,6 @@ export default () => {
 
             if (res.success) {
                 toast.success(`Purchase indent created! Indent No: ${indentRows.map(r => r.indentNumber).join(', ')}`);
-
-                // Auto-register new products in inventory
-                const uniqueProductNames = Array.from(
-                    new Set(data.products.map(p => p.productName?.trim()).filter(Boolean))
-                );
-                const inventoryRowsToInsert: Partial<InventorySheet>[] = [];
-
-                for (const prodName of uniqueProductNames) {
-                    const exists = inventorySheet?.some(
-                        inv => inv.itemName?.toLowerCase() === prodName?.toLowerCase()
-                    );
-                    if (!exists) {
-                        const productDetails = data.products.find(p => p.productName?.trim() === prodName);
-                        if (productDetails) {
-                            inventoryRowsToInsert.push({
-                                groupHead: productDetails.groupHead || productDetails.category || '',
-                                itemName: prodName || '',
-                                uom: productDetails.uom || '',
-                                maxLevel: 0,
-                                opening: 0,
-                                individualRate: 0,
-                                indented: 0,
-                                approved: 0,
-                                purchaseQuantity: 0,
-                                outQuantity: 0,
-                                currentStock: 0,
-                                totalPrice: 0,
-                                colorCode: '#000000',
-                            });
-                        }
-                    }
-                }
-
-                if (inventoryRowsToInsert.length > 0) {
-                    try {
-                        await postToSheet(inventoryRowsToInsert, 'insert', 'INVENTORY');
-                        console.log(`Auto-registered ${inventoryRowsToInsert.length} new inventory items.`);
-                        updateInventorySheet();
-                    } catch (invErr) {
-                        console.error('Failed to auto-register inventory items:', invErr);
-                    }
-                }
 
                 for (const product of data.products) {
                     if (product.areaOfUse) submitToMaster(product.areaOfUse);
@@ -826,7 +803,11 @@ export default () => {
                                                                 }
                                                                 // Auto-fill UOM
                                                                 const inventoryItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === val.toLowerCase());
-                                                                if (inventoryItem?.uom) {
+                                                                if (indentType === 'Store Out' && inventoryItem) {
+                                                                    const prodNameLower = val?.trim().toLowerCase();
+                                                                    const issueUom = prodNameLower ? options?.itemIssueUom?.[prodNameLower] : undefined;
+                                                                    form.setValue(`products.${index}.uom`, issueUom || inventoryItem?.uom || '');
+                                                                } else if (inventoryItem?.uom) {
                                                                     form.setValue(`products.${index}.uom`, inventoryItem.uom);
                                                                 }
                                                             }} 
@@ -878,21 +859,38 @@ export default () => {
                                         <FormField
                                             control={form.control}
                                             name={`products.${index}.uom`}
-                                            render={({ field }) => (
-                                                <FormItem className="md:col-span-1">
-                                                    <FormLabel className="text-sm">UOM<span className="text-destructive">*</span></FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value} disabled={isUomPreFilled}>
-                                                        <FormControl>
-                                                            <SelectTrigger className="w-full h-9"><SelectValue placeholder="Unit" /></SelectTrigger>
-                                                        </FormControl>
-                                                        <SelectContent>
-                                                            {(options?.units || []).map((u) => (
-                                                                <SelectItem key={u} value={u}>{u}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </FormItem>
-                                            )}
+                                            render={({ field }) => {
+                                                // Build UOM options: for Store Out show only [purchaseUOM, issueUOM]
+                                                const invItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === productVal?.toLowerCase());
+                                                const purchaseUom = invItem?.uom;
+                                                const prodNameLower = productVal?.trim().toLowerCase();
+                                                const issueUom = prodNameLower ? options?.itemIssueUom?.[prodNameLower] : undefined;
+                                                const issueFactor = prodNameLower ? options?.itemIssueUomFactor?.[prodNameLower] : undefined;
+                                                const uomList = indentType === 'Store Out' && purchaseUom
+                                                    ? [...new Set([issueUom, purchaseUom].filter(Boolean) as string[])]
+                                                    : (options?.units || []);
+                                                return (
+                                                    <FormItem className="md:col-span-1">
+                                                        <FormLabel className="text-sm">UOM<span className="text-destructive">*</span></FormLabel>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl>
+                                                                <SelectTrigger className="w-full h-9"><SelectValue placeholder="Unit" /></SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                {uomList.map((u) => (
+                                                                    <SelectItem key={u} value={u}>{u}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {/* Conversion badge — shown only for Store Out when both UOMs are configured */}
+                                                        {indentType === 'Store Out' && issueUom && purchaseUom && issueFactor && issueUom !== purchaseUom && (
+                                                            <p className="text-[10px] text-muted-foreground mt-1">
+                                                                1 {purchaseUom} = {issueFactor} {issueUom}
+                                                            </p>
+                                                        )}
+                                                    </FormItem>
+                                                );
+                                            }}
                                         />
 
                                         {/* Row 3: Attachment & Specifications (Purchase Only) */}

@@ -24,8 +24,12 @@ function toBase64(bytes: Uint8Array) {
 }
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight request explicitly with 200 OK
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { 
+      status: 200, 
+      headers: corsHeaders 
+    });
   }
 
   try {
@@ -33,18 +37,24 @@ Deno.serve(async (req) => {
     const fromEmail = Deno.env.get('PO_FROM_EMAIL') || Deno.env.get('FROM_EMAIL');
 
     if (!resendApiKey || !fromEmail) {
-      return Response.json(
-        { success: false, message: 'Email provider is not configured' },
-        { status: 500, headers: corsHeaders }
+      return new Response(
+        JSON.stringify({ success: false, message: 'Email provider is not configured (RESEND_API_KEY or PO_FROM_EMAIL/FROM_EMAIL is missing)' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       );
     }
 
     const { to, vendorName, poNumber, pdfUrl, fileName } = await req.json() as SendPoEmailPayload;
 
     if (!to || !pdfUrl || !poNumber) {
-      return Response.json(
-        { success: false, message: 'Missing email, PO number, or PDF URL' },
-        { status: 400, headers: corsHeaders }
+      return new Response(
+        JSON.stringify({ success: false, message: 'Missing email, PO number, or PDF URL' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       );
     }
 
@@ -83,17 +93,29 @@ Deno.serve(async (req) => {
     const result = await resendResponse.json();
 
     if (!resendResponse.ok) {
-      return Response.json(
-        { success: false, message: result?.message || 'Email provider failed', details: result },
-        { status: resendResponse.status, headers: corsHeaders }
+      return new Response(
+        JSON.stringify({ success: false, message: result?.message || 'Email provider failed', details: result }),
+        { 
+          status: resendResponse.status, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
       );
     }
 
-    return Response.json({ success: true, data: result }, { headers: corsHeaders });
+    return new Response(
+      JSON.stringify({ success: true, data: result }),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
   } catch (error) {
-    return Response.json(
-      { success: false, message: error instanceof Error ? error.message : 'Failed to send email' },
-      { status: 500, headers: corsHeaders }
+    return new Response(
+      JSON.stringify({ success: false, message: error instanceof Error ? error.message : 'Failed to send email' }),
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     );
   }
 });

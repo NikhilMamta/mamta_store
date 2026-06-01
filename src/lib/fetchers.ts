@@ -126,11 +126,15 @@ const RECEIVES_ITEMS_COLUMNS = [
 const STORE_OUT_REQUEST_COLUMNS = [
     'id', 'timestamp', 'indent_number', 'product_name', 'issue_no', 'issue_date', 'indenter_name', 'indent_type',
     'approval_needed', 'requested_by', 'floor', 'ward_name', 'qty', 'unit', 'department',
-    'category', 'area_of_use', 'planned_7', 'delay', 'status', 'approved_by'
+    'category', 'area_of_use', 'planned_7', 'delay', 'status', 'approved_by',
+    // Unit normalization snapshot fields
+    'purchase_uom', 'conversion_factor', 'inventory_item_id'
 ];
 
 const STORE_OUT_APPROVAL_COLUMNS = [
-    'id', 'timestamp', 'indent_number', 'approve_qty', 'slip', 'planned_8', 'delay', 'status'
+    'id', 'timestamp', 'indent_number', 'approve_qty', 'slip', 'planned_8', 'delay', 'status',
+    // Unit normalization snapshot fields (propagated from store_out_request at approval time)
+    'purchase_uom', 'conversion_factor', 'inventory_item_id'
 ];
 
 const STORE_OUT_COLUMNS = [
@@ -138,7 +142,7 @@ const STORE_OUT_COLUMNS = [
 ];
 
 const INVENTORY_COLUMNS = [
-    'id', 'group_head', 'item_name', 'uom', 'max_level', 'opening', 'individual_rate',
+    'id', 'item_id', 'max_level', 'opening', 'individual_rate',
     'indented', 'approved', 'purchase_quantity', 'out_quantity', 'current_stock',
     'total_price', 'color_code', 'last_updated'
 ];
@@ -226,13 +230,15 @@ export async function fetchSheet(
 
     // Special handling for MASTER sheet to maintain backward compatibility with the object structure
     if (sheetName === 'MASTER') {
-        const { data, error } = await supabase
-            .from('master')
-            .select('*');
+        const [masterRes, vendorsRes, itemsRes] = await Promise.all([
+            supabase.from('master').select('*'),
+            supabase.from('vendors').select('*'),
+            supabase.from('items').select('*')
+        ]);
 
-        if (error) {
-            console.error('Supabase error fetching MASTER:', error);
-            throw error;
+        if (masterRes.error) {
+            console.error('Supabase error fetching MASTER:', masterRes.error);
+            throw masterRes.error;
         }
 
         const vendors: Vendor[] = [];
@@ -243,38 +249,88 @@ export async function fetchSheet(
         const units = new Set<string>();
         const wardNames = new Set<string>();
         const itemMux: Record<string, string> = {};
+        // Name-keyed maps for unit conversion (avoids ID mismatches between master and inventory tables)
+        const itemIssueUom: Record<string, string> = {};
+        const itemIssueUomFactor: Record<string, number> = {};
+        const itemIdByName: Record<string, number> = {}; // itemName.toLowerCase() -> master row id
 
         let companyInfo: any = {};
 
-        data.forEach((row: any) => {
-            // Normalize row to camelCase for consistent processing
-            const cRow = toCamelCase(row);
-
-            if (cRow.vendorName) {
-                // Avoid duplicates if same vendor appears in multiple rows
-                if (!vendors.some(v => v.vendorName === cRow.vendorName)) {
+        // 1. Process new Vendors table data
+        if (vendorsRes.data) {
+            vendorsRes.data.forEach((row: any) => {
+                const cRow = toCamelCase(row);
+                if (cRow.vendorName) {
                     vendors.push({
                         vendorName: cRow.vendorName,
                         gstin: cRow.vendorGstin || '',
                         address: cRow.vendorAddress || '',
                         email: cRow.vendorEmail || ''
                     });
+                    if (cRow.paymentTerm) paymentTerms.add(cRow.paymentTerm);
                 }
-            }
+            });
+        }
 
-            if (cRow.department) departments.add(cRow.department);
+        // 2. Process new Items table data
+        if (itemsRes.data) {
+            itemsRes.data.forEach((row: any) => {
+                const cRow = toCamelCase(row);
+                const itemId = Number(cRow.id);
+                const itemName = cRow.itemName?.trim();
+                const itemNameLower = itemName?.toLowerCase();
+
+                if (itemName) {
+                    if (cRow.groupHead) {
+                        if (!groupHeads[cRow.groupHead]) groupHeads[cRow.groupHead] = new Set();
+                        groupHeads[cRow.groupHead].add(itemName);
+                    }
+                    if (cRow.purchaseUom || cRow.unitOfMeasurement) {
+                        units.add(cRow.purchaseUom || cRow.unitOfMeasurement);
+                    }
+                    if (itemId && itemNameLower) {
+                        itemIdByName[itemNameLower] = itemId;
+                        if (cRow.issueUom) {
+                            itemIssueUom[itemNameLower] = cRow.issueUom;
+                            itemMux[itemNameLower] = cRow.issueUom;
+                        }
+                        if (cRow.issueUomFactor && Number(cRow.issueUomFactor) > 0) {
+                            itemIssueUomFactor[itemNameLower] = Number(cRow.issueUomFactor);
+                        }
+                    }
+                }
+            });
+        }
+
+        // 3. Process remaining metadata (company info, departments, ward names) from legacy master table
+        masterRes.data.forEach((row: any) => {
+            const cRow = toCamelCase(row);
+
+            // Backward compatibility fallback in case some data wasn't fully migrated:
+            if (cRow.vendorName && vendors.length === 0) {
+                vendors.push({
+                    vendorName: cRow.vendorName,
+                    gstin: cRow.vendorGstin || '',
+                    address: cRow.vendorAddress || '',
+                    email: cRow.vendorEmail || ''
+                });
+            }
             if (cRow.paymentTerm) paymentTerms.add(cRow.paymentTerm);
+            if (cRow.department) departments.add(cRow.department);
             if (cRow.defaultTerms) defaultTerms.add(cRow.defaultTerms);
-            if (cRow.unitOfMeasurement || cRow.unitOfMeasurment) units.add(cRow.unitOfMeasurement || cRow.unitOfMeasurment);
+            if (cRow.unitOfMeasurement || cRow.unitOfMeasurment) {
+                units.add(cRow.unitOfMeasurement || cRow.unitOfMeasurment);
+            }
             if (cRow.wardName) wardNames.add(cRow.wardName);
 
-            if (cRow.groupHead && cRow.itemName) {
+            if (cRow.groupHead && cRow.itemName && Object.keys(groupHeads).length === 0) {
                 if (!groupHeads[cRow.groupHead]) groupHeads[cRow.groupHead] = new Set();
                 groupHeads[cRow.groupHead].add(cRow.itemName);
             }
 
-            if (cRow.itemName && cRow.mux) {
+            if (cRow.itemName && cRow.mux && Object.keys(itemIssueUom).length === 0) {
                 itemMux[cRow.itemName.trim().toLowerCase()] = cRow.mux;
+                itemIssueUom[cRow.itemName.trim().toLowerCase()] = cRow.mux;
             }
 
             if (!companyInfo.companyName && cRow.companyName) {
@@ -296,6 +352,9 @@ export async function fetchSheet(
             paymentTerms: [...paymentTerms],
             groupHeads: Object.fromEntries(Object.entries(groupHeads).map(([k, v]) => [k, [...v]])),
             itemMux,
+            itemIssueUom,
+            itemIssueUomFactor,
+            itemIdByName,
             companyPan: companyInfo.companyPan,
             companyName: companyInfo.companyName,
             companyAddress: companyInfo.companyAddress,
@@ -307,6 +366,59 @@ export async function fetchSheet(
             units: [...units],
             wardNames: [...wardNames]
         };
+    }
+
+    if (sheetName === 'INVENTORY') {
+        const { data: invData, error: invError } = await supabase
+            .from('inventory')
+            .select(`
+                id,
+                max_level,
+                opening,
+                individual_rate,
+                indented,
+                approved,
+                purchase_quantity,
+                out_quantity,
+                current_stock,
+                total_price,
+                color_code,
+                last_updated,
+                item_id,
+                items (
+                    item_name,
+                    group_head,
+                    purchase_uom
+                )
+            `);
+
+        if (invError) {
+            console.error('Supabase error fetching INVENTORY:', invError);
+            throw invError;
+        }
+
+        const flattened = invData.map((row: any) => {
+            const item = row.items || {};
+            return {
+                id: row.id,
+                itemId: row.item_id,
+                maxLevel: Number(row.max_level) || 0,
+                opening: Number(row.opening) || 0,
+                individualRate: Number(row.individual_rate) || 0,
+                indented: Number(row.indented) || 0,
+                approved: Number(row.approved) || 0,
+                purchaseQuantity: Number(row.purchase_quantity) || 0,
+                outQuantity: Number(row.out_quantity) || 0,
+                currentStock: Number(row.current_stock) || 0,
+                totalPrice: Number(row.total_price) || 0,
+                colorCode: row.color_code || '',
+                lastUpdated: row.last_updated || '',
+                itemName: item.item_name || '',
+                groupHead: item.group_head || '',
+                uom: item.purchase_uom || ''
+            };
+        });
+        return flattened as any;
     }
 
     const { data, error } = await supabase
@@ -388,7 +500,7 @@ export async function postToPoHistory(rows: PoHistorySheet[]) {
 
 export async function fetchVendorDetails(vendorName: string) {
     const { data, error } = await supabase
-        .from('master')
+        .from('vendors')
         .select('vendor_name, vendor_gstin, vendor_address, vendor_email')
         .ilike('vendor_name', vendorName.trim())
         .limit(1);
@@ -411,7 +523,7 @@ export async function fetchVendorDetails(vendorName: string) {
 
 export async function fetchVendors() {
     const { data, error } = await supabase
-        .from('master')
+        .from('vendors')
         .select('vendor_name, vendor_gstin, vendor_address, vendor_email')
         .not('vendor_name', 'is', null);
 

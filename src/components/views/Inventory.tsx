@@ -28,6 +28,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { postToSheet } from '@/lib/fetchers';
+import { convertIssueToBaseUOM } from '@/lib/unitConversion';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -35,14 +36,16 @@ interface InventoryTable {
     id?: number;
     itemName: string;
     groupHead: string;
-    uom: string;
+    uom: string;           // Purchase UOM
+    issueUom?: string;     // Store-out UOM (e.g., 'ml')
     status: string;
     opening: number;
     rate: number;
     indented: number;
     approved: number;
     purchaseQuantity: number;
-    outQuantity: number;
+    outQuantity: number;       // Issued qty in purchase UOM (post-conversion)
+    outQuantityRaw?: number;   // Issued qty in issue UOM (raw, for display)
     currentStock: number;
     totalPrice: number;
     lastUpdated: string;
@@ -156,12 +159,30 @@ export default () => {
             }
         });
 
-        const outTotals: Record<string, number> = {};
+        // outTotals: keyed by inventory item ID (stable) where available, with factor from transaction snapshot
+        // outTotalsRaw: raw issue qty for display
+        const outTotals: Record<string, number> = {};    // key: item name (for row builder join)
+        const outTotalsRaw: Record<string, number> = {}; // key: item name (raw issue qty)
         filteredStoreOutSheet.forEach(curr => {
-            const id = curr.indentNumber || curr.issueNo;
-            const name = (curr.productName || (id ? indentToItem[id] : '') || '').trim().toLowerCase();
-            if (name) {
-                outTotals[name] = (outTotals[name] || 0) + (Number(curr.approveQty || curr.qty) || 0);
+            const rawQty = Number(curr.approveQty || curr.qty) || 0;
+
+            if (curr.inventoryItemId) {
+                // NEW PATH: use stable item ID + snapshotted conversion factor from the transaction
+                const factor = Number(curr.conversionFactor) > 0 ? Number(curr.conversionFactor) : 1;
+                // Map item ID back to name for the row builder (which groups by name)
+                const nameKey = inventorySheet.find(i => i.id === curr.inventoryItemId)?.itemName?.trim().toLowerCase();
+                if (nameKey) {
+                    outTotalsRaw[nameKey] = (outTotalsRaw[nameKey] || 0) + rawQty;
+                    outTotals[nameKey] = (outTotals[nameKey] || 0) + convertIssueToBaseUOM(rawQty, factor);
+                }
+            } else {
+                // LEGACY FALLBACK: no inventoryItemId (old record) — use name match, factor=1
+                const id = curr.indentNumber || curr.issueNo;
+                const name = (curr.productName || (id ? indentToItem[id] : '') || '').trim().toLowerCase();
+                if (name) {
+                    outTotalsRaw[name] = (outTotalsRaw[name] || 0) + rawQty;
+                    outTotals[name] = (outTotals[name] || 0) + rawQty; // factor=1: no conversion
+                }
             }
         });
 
@@ -199,18 +220,22 @@ export default () => {
             const indented = itemName ? (indentTotals[itemName] || 0) : 0;
             const approved = itemName ? (approvedTotals[itemName] || 0) : 0;
             const purchased = itemName ? (purchaseTotals[itemName] || 0) : 0;
-            const issued = itemName ? (outTotals[itemName] || 0) : 0;
+            const issued = itemName ? (outTotals[itemName] || 0) : 0;         // In purchase UOM
+            const issuedRaw = itemName ? (outTotalsRaw[itemName] || 0) : 0;  // In issue UOM (for display)
             const opening = i.opening || 0;
 
             const currentStock = opening + purchased - issued;
             const rate = itemName ? (latestRates[itemName] || i.individualRate || 0) : (i.individualRate || 0);
             const totalPrice = currentStock * rate;
             const mux = itemName ? (masterSheet?.itemMux?.[itemName] || '') : '';
+            // issueUom from name-keyed map (preferred) or fall back to legacy mux label
+            const issueUom = itemName ? (masterSheet?.itemIssueUom?.[itemName] || mux) : mux;
 
             return {
                 id: i.id,
                 totalPrice,
                 uom: i.uom || '',
+                issueUom,
                 rate,
                 currentStock,
                 status: i.colorCode || '',
@@ -222,6 +247,7 @@ export default () => {
                 purchaseQuantity: purchased,
                 approved,
                 outQuantity: issued,
+                outQuantityRaw: issuedRaw,
                 lastUpdated: latestActivityMap[itemName]?.toISOString() || '',
             };
         });
@@ -456,12 +482,27 @@ export default () => {
         {
             accessorKey: 'outQuantity',
             id: 'outQuantity',
-            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[110px] pr-4">Issued</div>,
-            cell: ({ getValue }) => (
-                <div className="text-right font-black text-rose-600 min-w-[110px] pr-4">
-                    {Number(getValue()).toLocaleString('en-IN')}
-                </div>
-            )
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[130px] pr-4">Issued</div>,
+            cell: ({ row }) => {
+                const issued = row.original.outQuantity;
+                const issuedRaw = row.original.outQuantityRaw;
+                const issueUom = row.original.issueUom;
+                const purchaseUom = row.original.uom;
+                // Show raw only if there was a unit conversion (raw != issued and issueUom differs)
+                const hasConversion = issuedRaw !== undefined && issueUom && issueUom !== purchaseUom && Math.abs(issuedRaw - issued) > 0.0001;
+                return (
+                    <div className="text-right min-w-[130px] pr-4">
+                        <div className="font-black text-rose-600">
+                            {Number(issued).toLocaleString('en-IN', { maximumFractionDigits: 4 })} <span className="text-[10px] font-normal text-slate-400">{purchaseUom}</span>
+                        </div>
+                        {hasConversion && (
+                            <div className="text-[10px] text-slate-400 font-medium">
+                                {Number(issuedRaw).toLocaleString('en-IN')} {issueUom}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             accessorKey: 'currentStock',

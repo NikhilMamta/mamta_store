@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Heading from '../element/Heading';
-import { Database, Building2, Users, Layers, MapPin, Plus, Trash2, Building, RefreshCw, Pencil } from 'lucide-react';
+import { Database, Building2, Users, Layers, MapPin, Plus, Trash2, Building, RefreshCw, Pencil, Search } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +36,9 @@ interface MasterRow {
     item_name?: string;
     ward_name?: string;
     unit_of_measurement?: string;
-    mux?: string;
+    mux?: string;            // Legacy: kept for backward compat
+    issue_uom?: string;      // Issue / Store-Out UOM label (e.g., 'ml', 'pcs')
+    issue_uom_factor?: string; // Numeric factor as string (e.g., '1000' for LTR→ml)
     approved_by?: string;
     company_name?: string;
     company_address?: string;
@@ -51,44 +53,85 @@ interface MasterRow {
 
 export default function MasterData() {
     const [masterData, setMasterData] = useState<MasterRow[]>([]);
+    const [vendors, setVendors] = useState<any[]>([]);
+    const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [openDialog, setOpenDialog] = useState<string | null>(null);
     const [form, setForm] = useState<Record<string, string>>({});
-    const [editingRow, setEditingRow] = useState<MasterRow | null>(null);
+    const [editingRow, setEditingRow] = useState<any | null>(null);
     const [saving, setSaving] = useState(false);
+    const [itemSearch, setItemSearch] = useState('');
 
     async function fetchMaster() {
         setLoading(true);
-        const { data, error } = await supabase.from('master').select('*');
-        if (error) { toast.error('Failed to load master data'); }
-        else setMasterData(data || []);
+        const [masterRes, vendorsRes, itemsRes] = await Promise.all([
+            supabase.from('master').select('*'),
+            supabase.from('vendors').select('*'),
+            supabase.from('items').select('*')
+        ]);
+
+        if (masterRes.error) {
+            toast.error('Failed to load master data');
+        } else {
+            setMasterData(masterRes.data || []);
+        }
+
+        if (vendorsRes.error) {
+            console.error('Failed to load vendors:', vendorsRes.error);
+        } else {
+            setVendors(vendorsRes.data || []);
+        }
+
+        if (itemsRes.error) {
+            console.error('Failed to load items:', itemsRes.error);
+        } else {
+            setItems(itemsRes.data || []);
+        }
+
         setLoading(false);
     }
 
     useEffect(() => { fetchMaster(); }, []);
 
-    async function saveRow(fields: Record<string, string>) {
+    async function saveRow(fields: Record<string, any>, entityType: 'vendor' | 'item' | 'department' | 'ward' | 'company') {
         setSaving(true);
         let res;
-        if (editingRow) {
-            const idField = 
-                editingRow.vendor_name ? 'vendor_name' :
-                editingRow.department ? 'department' :
-                editingRow.item_name ? 'item_name' :
-                editingRow.ward_name ? 'ward_name' :
-                editingRow.company_name ? 'company_name' : null;
+        const targetTable = entityType === 'vendor' ? 'vendors' : entityType === 'item' ? 'items' : 'master';
 
-            if (idField) {
-                res = await supabase.from('master').update(fields).eq(idField, (editingRow as any)[idField]);
+        if (editingRow) {
+            if (entityType === 'vendor') {
+                const id = editingRow.id;
+                if (id !== undefined) {
+                    res = await supabase.from('vendors').update(fields).eq('id', id);
+                } else {
+                    res = await supabase.from('vendors').update(fields).eq('vendor_name', editingRow.vendor_name);
+                }
+            } else if (entityType === 'item') {
+                const id = editingRow.id;
+                if (id !== undefined) {
+                    res = await supabase.from('items').update(fields).eq('id', id);
+                } else {
+                    res = await supabase.from('items').update(fields).eq('item_name', editingRow.item_name);
+                }
             } else {
-                res = await supabase.from('master').insert([fields]);
+                const idField = 
+                    editingRow.department ? 'department' :
+                    editingRow.ward_name ? 'ward_name' :
+                    editingRow.company_name ? 'company_name' : null;
+
+                if (idField) {
+                    res = await supabase.from('master').update(fields).eq(idField, (editingRow as any)[idField]);
+                } else {
+                    res = await supabase.from('master').insert([fields]);
+                }
             }
         } else {
-            res = await supabase.from('master').insert([fields]);
+            res = await supabase.from(targetTable).insert([fields]);
         }
 
-        if (res.error) { toast.error('Failed to save: ' + res.error.message); }
-        else {
+        if (res.error) {
+            toast.error('Failed to save: ' + res.error.message);
+        } else {
             toast.success(editingRow ? '✅ Updated successfully' : '✅ Saved successfully');
             setOpenDialog(null);
             setForm({});
@@ -98,15 +141,36 @@ export default function MasterData() {
         setSaving(false);
     }
 
-    async function deleteRow(field: string, value: string) {
+    async function deleteRow(field: string, value: string, entityType?: 'vendor' | 'item') {
         if (!confirm(`Delete "${value}"?`)) return;
-        const { error } = await supabase.from('master').delete().eq(field, value);
-        if (error) toast.error('Delete failed');
-        else { toast.success('Deleted'); fetchMaster(); }
+        
+        let res;
+        if (entityType === 'vendor') {
+            res = await supabase.from('vendors').delete().eq('vendor_name', value);
+        } else if (entityType === 'item') {
+            res = await supabase.from('items').delete().eq('item_name', value);
+        } else {
+            res = await supabase.from('master').delete().eq(field, value);
+        }
+
+        if (res.error) {
+            toast.error('Delete failed: ' + res.error.message);
+        } else {
+            toast.success('Deleted');
+            fetchMaster();
+        }
     }
 
-    const unique = (field: keyof MasterRow) =>
-        [...new Set(masterData.map(r => r[field]).filter(Boolean))] as string[];
+    const unique = (field: keyof MasterRow | 'purchase_uom') => {
+        if (field === 'vendor_name' || field === 'vendor_gstin' || field === 'vendor_address' || field === 'vendor_email' || field === 'payment_term') {
+            return [...new Set(vendors.map(r => r[field]).filter(Boolean))] as string[];
+        }
+        if (field === 'item_name' || field === 'group_head' || field === 'unit_of_measurement' || field === 'purchase_uom' || field === 'issue_uom' || field === 'issue_uom_factor') {
+            const mappedField = field === 'unit_of_measurement' ? 'purchase_uom' : field;
+            return [...new Set(items.map(r => r[mappedField]).filter(Boolean))] as string[];
+        }
+        return [...new Set(masterData.map(r => r[field]).filter(Boolean))] as string[];
+    };
 
     const LoadingRows = ({ cols }: { cols: number }) => (
         <>
@@ -163,7 +227,7 @@ export default function MasterData() {
                                 </TableHeader>
                                 <TableBody>
                                     {loading ? <LoadingRows cols={6} /> :
-                                        masterData.filter(r => r.vendor_name).map((r, i) => (
+                                        vendors.map((r, i) => (
                                             <TableRow key={i}>
                                                 <TableCell className="text-center font-medium">{i + 1}</TableCell>
                                                 <TableCell className="font-medium">{r.vendor_name}</TableCell>
@@ -176,7 +240,7 @@ export default function MasterData() {
                                                         <Pencil size={14} />
                                                     </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
-                                                        onClick={() => deleteRow('vendor_name', r.vendor_name!)}>
+                                                        onClick={() => deleteRow('vendor_name', r.vendor_name!, 'vendor')}>
                                                         <Trash2 size={14} />
                                                     </Button>
                                                 </TableCell>
@@ -238,11 +302,22 @@ export default function MasterData() {
                 {/* ── ITEMS ── */}
                 <TabsContent value="items" className="mt-4">
                     <div className="bg-card border rounded-lg">
-                        <div className="p-4 border-b flex justify-between items-center">
+                        <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <h3 className="font-semibold text-sm">Items / Group Heads</h3>
-                            <Button size="sm" className="gap-1" onClick={() => { setForm({}); setEditingRow(null); setOpenDialog('item'); }}>
-                                <Plus size={14} /> Add Item
-                            </Button>
+                            <div className="flex items-center gap-3">
+                                <div className="relative w-64">
+                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search items or group heads..."
+                                        value={itemSearch}
+                                        onChange={(e) => setItemSearch(e.target.value)}
+                                        className="pl-9 h-9 text-xs"
+                                    />
+                                </div>
+                                <Button size="sm" className="gap-1" onClick={() => { setForm({}); setEditingRow(null); setOpenDialog('item'); }}>
+                                    <Plus size={14} /> Add Item
+                                </Button>
+                            </div>
                         </div>
                         <ScrollArea className="h-[60vh]">
                             <Table>
@@ -251,33 +326,63 @@ export default function MasterData() {
                                         <TableHead className="w-12 text-center">S.No.</TableHead>
                                         <TableHead>Group Head</TableHead>
                                         <TableHead>Item Name</TableHead>
-                                        <TableHead>UOM</TableHead>
-                                        <TableHead>Mux</TableHead>
+                                        <TableHead>Purchase UOM</TableHead>
+                                        <TableHead>Issue UOM</TableHead>
+                                        <TableHead>Issue Factor</TableHead>
                                         <TableHead className="w-24">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {loading ? <LoadingRows cols={6} /> :
-                                        masterData.filter(r => r.item_name).map((r, i) => (
+                                    {loading ? <LoadingRows cols={6} /> : (() => {
+                                        const filtered = items
+                                            .filter(r => r.item_name)
+                                            .filter(r => {
+                                                if (!itemSearch) return true;
+                                                const searchLower = itemSearch.toLowerCase();
+                                                return (
+                                                    r.item_name?.toLowerCase().includes(searchLower) ||
+                                                    r.group_head?.toLowerCase().includes(searchLower)
+                                                );
+                                            });
+
+                                        if (filtered.length === 0) {
+                                            return (
+                                                <TableRow>
+                                                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                                                        No items found matching "{itemSearch}"
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        }
+
+                                        return filtered.map((r, i) => (
                                             <TableRow key={i}>
                                                 <TableCell className="text-center font-medium">{i + 1}</TableCell>
                                                 <TableCell>{r.group_head}</TableCell>
                                                 <TableCell className="font-medium">{r.item_name}</TableCell>
-                                                <TableCell>{r.unit_of_measurement}</TableCell>
-                                                <TableCell>{r.mux || '—'}</TableCell>
+                                                <TableCell>{r.purchase_uom || r.unit_of_measurement}</TableCell>
+                                                <TableCell>
+                                                    {r.issue_uom || '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {r.issue_uom_factor
+                                                        ? <span className="text-xs font-mono bg-primary/10 px-1.5 py-0.5 rounded">{r.issue_uom_factor}</span>
+                                                        : <span className="text-muted-foreground">—</span>
+                                                    }
+                                                </TableCell>
                                                 <TableCell className="flex gap-1">
                                                     <Button variant="ghost" size="sm" className="text-primary h-7 w-7 p-0"
-                                                        onClick={() => { setEditingRow(r); setForm(r as any); setOpenDialog('item'); }}>
+                                                        onClick={() => { setEditingRow(r); setForm({ ...r, unit_of_measurement: r.purchase_uom || r.unit_of_measurement } as any); setOpenDialog('item'); }}>
                                                         <Pencil size={14} />
                                                     </Button>
                                                     <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0"
-                                                        onClick={() => deleteRow('item_name', r.item_name!)}>
+                                                        onClick={() => deleteRow('item_name', r.item_name!, 'item')}>
                                                         <Trash2 size={14} />
                                                     </Button>
                                                 </TableCell>
                                             </TableRow>
-                                        ))
-                                    }
+                                        ));
+                                    })()}
                                 </TableBody>
                             </Table>
                         </ScrollArea>
@@ -410,7 +515,7 @@ export default function MasterData() {
                             vendor_email: form.vendor_email,
                             vendor_address: form.vendor_address,
                             payment_term: form.payment_term
-                        })}>
+                        }, 'vendor')}>
                             {saving ? 'Saving...' : editingRow ? 'Update Vendor' : 'Save Vendor'}
                         </Button>
                     </DialogFooter>
@@ -427,14 +532,13 @@ export default function MasterData() {
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                        <Button disabled={saving} onClick={() => saveRow({ department: form.department })}>
+                        <Button disabled={saving} onClick={() => saveRow({ department: form.department }, 'department')}>
                             {saving ? 'Saving...' : editingRow ? 'Update' : 'Save'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Item Dialog */}
             <Dialog open={openDialog === 'item'} onOpenChange={o => !o && setOpenDialog(null)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader><DialogTitle>{editingRow ? 'Edit Item' : 'Add Item'}</DialogTitle></DialogHeader>
@@ -442,7 +546,7 @@ export default function MasterData() {
                         {[
                             ['group_head', 'Group Head / Category'],
                             ['item_name', 'Item Name'],
-                            ['unit_of_measurement', 'Unit of Measurement']
+                            ['unit_of_measurement', 'Purchase UOM (e.g., LTR, KG, Box)']
                         ].map(([key, label]) => (
                             <div key={key}>
                                 <label className="text-xs font-medium">{label}</label>
@@ -459,14 +563,39 @@ export default function MasterData() {
                                 )}
                             </div>
                         ))}
-                        <div>
-                            <label className="text-xs font-medium">Mux</label>
-                            <Input
-                                className="mt-1"
-                                value={form.mux || ''}
-                                onChange={e => setForm(p => ({ ...p, mux: e.target.value }))}
-                                placeholder="Enter mux value..."
-                            />
+                        {/* Issue UOM section */}
+                        <div className="border-t pt-3 space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Store-Out Unit (Issue UOM)</p>
+                            <div>
+                                <label className="text-xs font-medium">Issue UOM <span className="text-muted-foreground">(e.g., ml, g, pcs, tablet)</span></label>
+                                <Input
+                                    className="mt-1"
+                                    value={form.issue_uom || ''}
+                                    onChange={e => setForm(p => ({ ...p, issue_uom: e.target.value }))}
+                                    placeholder="e.g., ml"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium">
+                                    Issue Factor <span className="text-muted-foreground">(1 Purchase UOM = ? Issue units)</span>
+                                </label>
+                                <Input
+                                    className="mt-1"
+                                    type="number"
+                                    min="1"
+                                    value={form.issue_uom_factor || ''}
+                                    onChange={e => setForm(p => ({ ...p, issue_uom_factor: e.target.value }))}
+                                    placeholder="e.g., 1000 for LTR→ml"
+                                />
+                            </div>
+                            {/* Live preview */}
+                            {(form.unit_of_measurement || form.purchase_uom) && form.issue_uom && form.issue_uom_factor && (
+                                <div className="bg-primary/5 border border-primary/10 rounded-md px-3 py-2 text-xs text-muted-foreground">
+                                    Preview: <span className="font-semibold text-foreground">
+                                        1 {form.unit_of_measurement || form.purchase_uom} = {form.issue_uom_factor} {form.issue_uom}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
                     <DialogFooter>
@@ -474,9 +603,10 @@ export default function MasterData() {
                         <Button disabled={saving} onClick={() => saveRow({
                             group_head: form.group_head,
                             item_name: form.item_name,
-                            unit_of_measurement: form.unit_of_measurement,
-                            mux: form.mux
-                        })}>
+                            purchase_uom: form.unit_of_measurement || form.purchase_uom,
+                            issue_uom: form.issue_uom,
+                            issue_uom_factor: form.issue_uom_factor ? Number(form.issue_uom_factor) : null
+                        }, 'item')}>
                             {saving ? 'Saving...' : editingRow ? 'Update Item' : 'Save Item'}
                         </Button>
                     </DialogFooter>
@@ -493,7 +623,7 @@ export default function MasterData() {
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                        <Button disabled={saving} onClick={() => saveRow({ ward_name: form.ward_name })}>
+                        <Button disabled={saving} onClick={() => saveRow({ ward_name: form.ward_name }, 'ward')}>
                             {saving ? 'Saving...' : editingRow ? 'Update' : 'Save'}
                         </Button>
                     </DialogFooter>
@@ -514,7 +644,7 @@ export default function MasterData() {
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                        <Button disabled={saving} onClick={() => saveRow(form)}>
+                        <Button disabled={saving} onClick={() => saveRow(form, 'company')}>
                             {saving ? 'Saving...' : editingRow ? 'Update Company Info' : 'Save Company Info'}
                         </Button>
                     </DialogFooter>

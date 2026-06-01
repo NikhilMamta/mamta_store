@@ -134,6 +134,7 @@ export type IndentSheet = {
 
 export type StoreOutSheet = {
     rowIndex?: number;
+    id?: number;
     timestamp: string;
     issueNo: string;
     indentNumber?: string; // Robustness
@@ -164,7 +165,10 @@ export type StoreOutSheet = {
     storeOutStatus?: string; // Optional manual mapping
     groupOfHead?: string; // Actual key from fetcher
     slip?: string; // Column W
-    // Keeping internal mapped names if needed, but safer to match fetcher keys directly
+    // Unit normalization snapshot fields (set at transaction creation, never changed)
+    conversionFactor?: number;   // Factor used at time of store-out (e.g., 1000 for LTR→ml)
+    purchaseUom?: string;        // Purchase UOM at time of store-out (e.g., 'LTR')
+    inventoryItemId?: number;    // FK to inventory.id — stable item reference
 };
 
 export type ReceivedSheet = {
@@ -191,11 +195,13 @@ export type ReceivedSheet = {
 };
 
 export type InventorySheet = {
+    id?: number;           // Stable item ID — used as key for unit conversion lookups
+    itemId?: number;       // FK to items.id
     rowIndex?: number;
     lastUpdated?: string;
     groupHead: string;
     itemName: string;
-    uom: string;
+    uom: string;           // Purchase UOM (e.g., LTR, KG)
     maxLevel: number;
     opening: number;
     individualRate: number;
@@ -302,7 +308,13 @@ export type MasterSheet = {
     paymentTerms: string[];
     departments: string[];
     groupHeads: Record<string, string[]>; // category: items[]
-    itemMux?: Record<string, string>; // itemName (lowercase) -> mux value
+    // Legacy name-keyed map (kept for backward compat during transition)
+    itemMux?: Record<string, string>; // itemName (lowercase) -> issue UOM label
+    // Name-keyed maps for issue configuration (avoids master vs inventory ID mismatches)
+    itemIssueUom?: Record<string, string>;        // item_name (lowercase) -> issue UOM label (e.g., 'ml')
+    itemIssueUomFactor?: Record<string, number>;  // item_name (lowercase) -> conversion factor (e.g., 1000)
+    // itemName -> inventory item_id — used to look up by name when needed
+    itemIdByName?: Record<string, number>;
     companyName: string;
     companyAddress: string;
     companyGstin: string;

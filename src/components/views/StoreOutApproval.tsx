@@ -507,7 +507,11 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                     planned8: new Date().toISOString().split('T')[0],
                     status: 'Pending',
                     timestamp: new Date().toISOString(),
-                    delay: 0
+                    delay: 0,
+                    // Propagate unit normalization snapshot from the original request
+                    inventoryItemId: appr.originalRow.inventoryItemId ?? null,
+                    purchaseUom: appr.originalRow.purchaseUom ?? null,
+                    conversionFactor: appr.originalRow.conversionFactor ?? 1,
                 }));
                 await postToSheet(insertPayload, 'insert', 'STORE_OUT_APPROVAL');
             }
@@ -581,7 +585,15 @@ const StoreOutApprovalForm = ({ items, onSuccess }: { items: StoreOutTableData[]
                         <div key={item.searialNumber || index} className="border p-4 rounded-md bg-muted/20 space-y-3">
                             <div className="flex justify-between items-center border-b pb-2">
                                 <span className="font-semibold text-sm">{item.product}</span>
-                                <span className="text-xs text-muted-foreground bg-primary/5 px-2 py-1 rounded">S.No: {item.searialNumber} | Req Qty: {item.qty} {item.unit}</span>
+                                <span className="text-xs text-muted-foreground bg-primary/5 px-2 py-1 rounded">
+                                                S.No: {item.searialNumber} | Req Qty: {item.qty} {item.unit}
+                                                {/* Show purchase UOM equivalent if conversion is active */}
+                                                {item.originalRow?.conversionFactor && item.originalRow.conversionFactor !== 1 && item.originalRow.purchaseUom && (
+                                                    <span className="ml-1 text-amber-600 font-medium">
+                                                        ≈ {(item.qty / item.originalRow.conversionFactor).toFixed(3)} {item.originalRow.purchaseUom}
+                                                    </span>
+                                                )}
+                                            </span>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <FormField
