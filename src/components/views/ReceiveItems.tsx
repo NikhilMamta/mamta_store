@@ -23,7 +23,7 @@ import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Input } from '../ui/input';
-import { postToSheet, uploadFile, uploadFileToSupabase } from '@/lib/fetchers';
+import { postToSheet, uploadFileToSupabase } from '@/lib/fetchers';
 import type { ReceivedSheet } from '@/types';
 import { Truck, Eye } from 'lucide-react';
 import { Tabs, TabsContent } from '../ui/tabs';

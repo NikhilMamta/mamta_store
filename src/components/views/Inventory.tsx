@@ -273,28 +273,48 @@ export default () => {
 
     const columns: ColumnDef<InventoryTable>[] = [
         {
+            id: 'actions',
+            header: () => <div className="text-slate-500 text-center text-[11px] font-bold tracking-wider uppercase min-w-[80px]">Actions</div>,
+            cell: ({ row }) => (
+                <div className="flex justify-center min-w-[80px]">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-emerald-700 h-8 w-8 p-0 hover:bg-emerald-50 hover:text-emerald-800 border border-transparent hover:border-emerald-100 rounded-md transition-all active:scale-90"
+                        onClick={() => {
+                            setEditingInventoryItem(row.original);
+                            setEditOpeningValue(row.original.opening.toString());
+                            setIsEditOpen(true);
+                        }}
+                        title="Edit Opening Quantity"
+                    >
+                        <Pencil size={14} />
+                    </Button>
+                </div>
+            ),
+        },
+        {
             id: 'serialNo',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">S.No.</div>,
-            cell: ({ row }) => <div className="text-center font-bold text-xs text-gray-400">#{(row.index + 1).toString().padStart(2, '0')}</div>,
-            size: 50,
+            header: () => <div className="text-slate-400 text-center text-[11px] font-bold tracking-wider uppercase min-w-[60px]">S.No.</div>,
+            cell: ({ row }) => <div className="text-center font-bold text-xs text-slate-400 min-w-[60px]">#{(row.index + 1).toString().padStart(2, '0')}</div>,
         },
         {
             accessorKey: 'lastUpdated',
             id: 'lastUpdated',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Last Updated</div>,
+            header: () => <div className="text-slate-500 text-center text-[11px] font-bold tracking-wider uppercase min-w-[150px]">Last Updated</div>,
             cell: ({ row }) => {
                 const date = row.original.lastUpdated;
-                if (!date) return <div className="text-center text-gray-300">—</div>;
+                if (!date) return <div className="text-center text-slate-300 min-w-[150px]">—</div>;
                 return (
-                    <div className="flex flex-col items-center justify-center text-center text-xs gap-0.5">
-                        <span className="font-bold text-gray-800 bg-gray-50 px-2 py-0.5 rounded border border-gray-200/40 whitespace-nowrap">
+                    <div className="flex flex-col items-center justify-center text-center text-xs gap-1 min-w-[150px]">
+                        <span className="font-bold text-slate-700 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/50 whitespace-nowrap shadow-sm">
                             {new Date(date).toLocaleDateString('en-IN', {
                                 day: '2-digit',
                                 month: 'short',
                                 year: 'numeric',
                             }).replace(/ /g, '-')}
                         </span>
-                        <span className="text-[10px] text-muted-foreground font-bold tracking-wider uppercase opacity-80">
+                        <span className="text-[10px] text-slate-400 font-extrabold tracking-wider uppercase">
                             {new Date(date).toLocaleTimeString('en-IN', {
                                 hour: '2-digit',
                                 minute: '2-digit',
@@ -308,10 +328,10 @@ export default () => {
         {
             accessorKey: 'itemName',
             id: 'itemName',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Item Name</div>,
+            header: () => <div className="text-left text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[260px] pl-4">Item Name</div>,
             cell: ({ row }) => {
                 return (
-                    <div className="text-wrap max-w-44 text-center font-extrabold text-slate-800 leading-snug mx-auto">
+                    <div className="text-left font-extrabold text-slate-800 leading-snug min-w-[260px] pl-4 whitespace-normal break-words pr-2">
                         {row.original.itemName}
                     </div>
                 );
@@ -320,10 +340,10 @@ export default () => {
         {
             accessorKey: 'groupHead',
             id: 'groupHead',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Group Head</div>,
+            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[140px]">Group Head</div>,
             cell: ({ getValue }) => (
-                <div className="text-center">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100/50">
+                <div className="text-center min-w-[140px]">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100/50 shadow-sm">
                         {getValue() as string}
                     </span>
                 </div>
@@ -332,10 +352,10 @@ export default () => {
         {
             accessorKey: 'uom',
             id: 'uom',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">UOM</div>,
+            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[90px]">UOM</div>,
             cell: ({ getValue }) => (
-                <div className="text-center">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200/60 uppercase">
+                <div className="text-center min-w-[90px]">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black bg-slate-100 text-slate-600 border border-slate-200/60 uppercase tracking-wider">
                         {getValue() as string}
                     </span>
                 </div>
@@ -344,17 +364,17 @@ export default () => {
         {
             accessorKey: 'mux',
             id: 'mux',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Mux</div>,
+            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[100px]">Mux</div>,
             cell: ({ getValue }) => {
                 const val = getValue() as string;
                 return (
-                    <div className="text-center">
+                    <div className="text-center min-w-[100px]">
                         {val ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-100/50">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-extrabold bg-amber-50 text-amber-700 border border-amber-100/50 shadow-sm">
                                 {val}
                             </span>
                         ) : (
-                            <span className="text-gray-300">—</span>
+                            <span className="text-slate-300">—</span>
                         )}
                     </div>
                 );
@@ -363,17 +383,17 @@ export default () => {
         {
             accessorKey: 'rate',
             id: 'rate',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Rate</div>,
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[120px] pr-4">Rate</div>,
             cell: ({ row }) => (
-                <div className="text-center font-bold text-slate-700">
-                    ₹{Number(row.original.rate).toLocaleString('en-IN')}
+                <div className="text-right font-extrabold text-slate-700 min-w-[120px] pr-4">
+                    ₹{Number(row.original.rate).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
             ),
         },
         {
             accessorKey: 'status',
             id: 'status',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Status</div>,
+            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[130px]">Status</div>,
             cell: ({ row }) => {
                 const code = row.original.status?.toLowerCase() || '';
                 let content;
@@ -387,7 +407,7 @@ export default () => {
                     content = <Pill variant="secondary">In Stock</Pill>;
                 }
                 return (
-                    <div className="flex justify-center">
+                    <div className="flex justify-center min-w-[130px]">
                         {content}
                     </div>
                 );
@@ -396,9 +416,9 @@ export default () => {
         {
             accessorKey: 'indented',
             id: 'indented',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Indented</div>,
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[110px] pr-4">Indented</div>,
             cell: ({ getValue }) => (
-                <div className="text-center font-bold text-slate-600">
+                <div className="text-right font-extrabold text-slate-600 min-w-[110px] pr-4">
                     {Number(getValue()).toLocaleString('en-IN')}
                 </div>
             )
@@ -406,9 +426,9 @@ export default () => {
         {
             accessorKey: 'approved',
             id: 'approved',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Approved</div>,
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[110px] pr-4">Approved</div>,
             cell: ({ getValue }) => (
-                <div className="text-center font-bold text-sky-600">
+                <div className="text-right font-extrabold text-sky-600 min-w-[110px] pr-4">
                     {Number(getValue()).toLocaleString('en-IN')}
                 </div>
             )
@@ -416,9 +436,9 @@ export default () => {
         {
             accessorKey: 'opening',
             id: 'opening',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Opening</div>,
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[110px] pr-4">Opening</div>,
             cell: ({ getValue }) => (
-                <div className="text-center font-medium text-slate-500">
+                <div className="text-right font-semibold text-slate-500 min-w-[110px] pr-4">
                     {Number(getValue()).toLocaleString('en-IN')}
                 </div>
             )
@@ -426,9 +446,9 @@ export default () => {
         {
             accessorKey: 'purchaseQuantity',
             id: 'purchaseQuantity',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Purchased</div>,
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[115px] pr-4">Purchased</div>,
             cell: ({ getValue }) => (
-                <div className="text-center font-extrabold text-emerald-600">
+                <div className="text-right font-black text-emerald-600 min-w-[115px] pr-4">
                     {Number(getValue()).toLocaleString('en-IN')}
                 </div>
             )
@@ -436,9 +456,9 @@ export default () => {
         {
             accessorKey: 'outQuantity',
             id: 'outQuantity',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Issued</div>,
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[110px] pr-4">Issued</div>,
             cell: ({ getValue }) => (
-                <div className="text-center font-extrabold text-rose-600">
+                <div className="text-right font-black text-rose-600 min-w-[110px] pr-4">
                     {Number(getValue()).toLocaleString('en-IN')}
                 </div>
             )
@@ -446,7 +466,7 @@ export default () => {
         {
             accessorKey: 'currentStock',
             id: 'currentStock',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Current Quantity</div>,
+            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[140px]">Current Quantity</div>,
             cell: ({ getValue, row }) => {
                 const qty = getValue() as number;
                 const code = row.original.status?.toLowerCase() || '';
@@ -459,8 +479,8 @@ export default () => {
                     bgClass = "bg-violet-50 text-violet-700 border-violet-200/60";
                 }
                 return (
-                    <div className="flex justify-center">
-                        <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-extrabold border shadow-sm", bgClass)}>
+                    <div className="flex justify-center min-w-[140px]">
+                        <span className={cn("inline-flex items-center px-3 py-1 rounded-md text-xs font-black border shadow-sm", bgClass)}>
                             {qty.toLocaleString('en-IN')}
                         </span>
                     </div>
@@ -470,34 +490,12 @@ export default () => {
         {
             accessorKey: 'totalPrice',
             id: 'totalPrice',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Total Value</div>,
+            header: () => <div className="text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase min-w-[140px] pr-4">Total Value</div>,
             cell: ({ row }) => (
-                <div className="text-center font-extrabold text-emerald-800">
-                    ₹{Number(row.original.totalPrice).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                <div className="text-right font-black text-emerald-800 min-w-[140px] pr-4">
+                    ₹{Number(row.original.totalPrice).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
             ),
-        },
-        {
-            id: 'actions',
-            header: () => <div className="text-center text-[11px] font-bold tracking-wider text-muted-foreground uppercase">Actions</div>,
-            cell: ({ row }) => (
-                <div className="flex justify-center">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-emerald-700 h-7 w-7 p-0 hover:bg-emerald-50 hover:text-emerald-800 border border-transparent hover:border-emerald-100 rounded-md transition-all active:scale-90"
-                        onClick={() => {
-                            setEditingInventoryItem(row.original);
-                            setEditOpeningValue(row.original.opening.toString());
-                            setIsEditOpen(true);
-                        }}
-                        title="Edit Opening Quantity"
-                    >
-                        <Pencil size={13} />
-                    </Button>
-                </div>
-            ),
-            size: 60,
         },
     ];
 
@@ -677,8 +675,8 @@ export default () => {
                 columns={columns}
                 dataLoading={inventoryLoading}
                 searchFields={[]}
-                className="h-[78dvh] rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden"
-                tableClassName="[&_td]:py-2 [&_td]:px-2.5 [&_td]:h-auto [&_td]:text-[13px] [&_th]:py-3 [&_th]:px-2.5 [&_th]:h-auto [&_th]:text-[11px] [&_th]:font-bold [&_th]:tracking-wider [&_th]:uppercase [&_th]:bg-slate-50 [&_th]:text-slate-500 [&_th]:border-b [&_th]:border-slate-200/80 [&_tr]:border-slate-100 hover:[&_tr]:bg-slate-50/50"
+                className="h-[74dvh] rounded-2xl bg-white border border-gray-100 shadow-sm overflow-auto"
+                tableClassName="min-w-[2050px] w-full [&_td]:py-3.5 [&_td]:px-4 [&_td]:h-auto [&_td]:text-[13px] [&_td]:font-medium [&_th]:py-4 [&_th]:px-4 [&_th]:h-auto [&_th]:text-[11px] [&_th]:font-bold [&_th]:tracking-wider [&_th]:uppercase [&_th]:bg-slate-50/80 [&_th]:text-slate-500 [&_th]:border-b [&_th]:border-slate-200/60 [&_tr]:border-slate-100 hover:[&_tr]:bg-slate-50/70 [&_tr]:transition-all [&_tr]:duration-200"
             />
 
             {/* Edit Opening Quantity Dialog */}

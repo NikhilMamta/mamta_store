@@ -13,7 +13,7 @@ import {
     DialogFooter,
     DialogClose,
 } from '../ui/dialog';
-import { postToSheet, uploadFile, fetchVendors } from '@/lib/fetchers';
+import { postToSheet, uploadFileToSupabase, fetchVendors } from '@/lib/fetchers';
 import { z } from 'zod';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -203,9 +203,9 @@ const VendorUpdateForm = ({ items, vendorType, vendors, options, onSuccess }: an
     const onSubmit = async (values: any) => {
         try {
             let commonUrl = '';
-            if (isThreeParty && values.comparisonSheet) {
-                commonUrl = await uploadFile(values.comparisonSheet, import.meta.env.VITE_COMPARISON_SHEET_FOLDER);
-            }
+             if (isThreeParty && values.comparisonSheet) {
+                 commonUrl = await uploadFileToSupabase(values.comparisonSheet, 'pdf');
+             }
 
             const now = formatDate(new Date());
             const indentNumber = items[0]?.indentNo;

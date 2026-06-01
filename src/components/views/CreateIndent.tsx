@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import { ClipLoader as Loader } from 'react-spinners';
 import { ClipboardList, Trash, Search, Plus, Paperclip } from 'lucide-react'; // Plus ko import karo
-import { postToSheet, submitToMaster, uploadFile } from '@/lib/fetchers';
+import { postToSheet, submitToMaster, uploadFileToSupabase } from '@/lib/fetchers';
 import { supabase } from '@/lib/supabase';
 import type { IndentSheet, StoreOutSheet, InventorySheet } from '@/types';
 import { useSheets } from '@/context/SheetsContext';
@@ -261,21 +261,17 @@ export default () => {
 
 
 
-    // Better approach using image tag
-    const submitProductToMasterSheet = (productName: string, groupHead: string) => {
-        const MASTER_SHEET_URL = 'https://script.google.com/a/macros/jjspl.in/s/AKfycbyybfRgC2y9wLktUTQ9fTqp-qGMleFrj1c3pQJbLEQiMWr9-hNEaZyoqkWpeV9HF9Az/exec';
+    // Submit to master table in Supabase directly
+    const submitProductToMasterSheet = async (productName: string, groupHead: string) => {
+        const { error } = await supabase
+            .from('master')
+            .insert([{ item_name: productName, group_head: groupHead }]);
 
-        const params = new URLSearchParams({
-            sheetName: 'Items And Location',
-            productName: productName,
-            groupHead: groupHead
-        });
-
-        // Use image tag trick (no CORS issue)
-        const img = new Image();
-        img.src = `${MASTER_SHEET_URL}?${params.toString()}`;
-
-        return Promise.resolve(true);
+        if (error) {
+            console.error('[submitProductToMasterSheet] Supabase error:', error);
+            return false;
+        }
+        return true;
     };
 
     // Update addNewProductLocally - sync version
@@ -455,9 +451,9 @@ export default () => {
                 };
 
                 if (product.attachment !== undefined) {
-                    row.attachment = await uploadFile(
+                    row.attachment = await uploadFileToSupabase(
                         product.attachment,
-                        import.meta.env.VITE_IDENT_ATTACHMENT_FOLDER
+                        'pdf'
                     );
                 }
                 indentRows.push(row);

@@ -12,7 +12,7 @@ import { useFieldArray, useForm, type Control, type FieldValues } from 'react-ho
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '../ui/form';
 import type { PoMasterSheet, QuotationHistorySheet } from '@/types';
-import { postToSheet, uploadFile, fetchSheet } from '@/lib/fetchers';
+import { postToSheet, uploadFileToSupabase, fetchSheet, sendPoEmail } from '@/lib/fetchers';
 import { useEffect, useMemo, useState } from 'react';
 import { useSheets } from '@/context/SheetsContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -415,12 +415,15 @@ export default function QuotationPage() {
           continue;
         }
 
-        const pdfUrl = await uploadFile(
-          file,
-          import.meta.env.VITE_PURCHASE_ORDERS_FOLDER,
-          'email',
-          supplierInfo.email
-        );
+        const pdfUrl = await uploadFileToSupabase(file, 'pdf');
+
+        await sendPoEmail({
+          to: supplierInfo.email,
+          vendorName: supplierInfo.name,
+          poNumber: uniqueQuotationNumber,
+          pdfUrl: pdfUrl,
+          fileName: `QUOTATION-${uniqueQuotationNumber}-${supplierInfo.name}.pdf`
+        });
 
         // Type-safe mapping to QuotationHistorySheet
         const quotationHistoryRows: QuotationHistorySheet[] = selectedItemsData.map(item => ({

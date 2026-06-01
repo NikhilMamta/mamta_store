@@ -15,7 +15,7 @@ import {
     DialogFooter,
     DialogClose,
 } from '../ui/dialog';
-import { postToSheet, uploadFile } from '@/lib/fetchers';
+import { postToSheet, uploadFileToSupabase } from '@/lib/fetchers';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -327,9 +327,9 @@ export default () => {
 
                                                 // agar naya file select hua hai to upload karo
                                                 if (currentEdit?.photoOfBillFile) {
-                                                    photoUrl = await uploadFile(
+                                                    photoUrl = await uploadFileToSupabase(
                                                         currentEdit.photoOfBillFile,
-                                                        import.meta.env.VITE_BILL_PHOTO_FOLDER || 'bill-photos'
+                                                        'bill'
                                                     );
                                                 }
 
@@ -906,9 +906,9 @@ export default () => {
         try {
             let photoUrl: string | undefined;
             if (values.photoOfBill) {
-                photoUrl = await uploadFile(
+                photoUrl = await uploadFileToSupabase(
                     values.photoOfBill,
-                    import.meta.env.VITE_BILL_PHOTO_FOLDER || 'bill-photos'
+                    'bill'
                 );
             }
 
