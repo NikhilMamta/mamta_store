@@ -61,6 +61,18 @@ export default function MasterData() {
     const [editingRow, setEditingRow] = useState<any | null>(null);
     const [saving, setSaving] = useState(false);
     const [itemSearch, setItemSearch] = useState('');
+    const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+    const [bulkUomForm, setBulkUomForm] = useState({
+        target: 'selected' as 'selected' | 'group',
+        groupHead: '',
+        updatePurchaseUom: false,
+        purchaseUom: '',
+        updateIssueUom: false,
+        issueUom: '',
+        updateIssueUomFactor: false,
+        issueUomFactor: '',
+        overwrite: false
+    });
 
     async function fetchMaster() {
         setLoading(true);
@@ -92,6 +104,147 @@ export default function MasterData() {
     }
 
     useEffect(() => { fetchMaster(); }, []);
+
+    const handleSelectItem = (id: number, checked: boolean) => {
+        if (checked) {
+            setSelectedItemIds(prev => [...prev, id]);
+        } else {
+            setSelectedItemIds(prev => prev.filter(x => x !== id));
+        }
+    };
+
+    const handleSelectAll = (checked: boolean, filteredList: any[]) => {
+        if (checked) {
+            setSelectedItemIds(filteredList.map(item => item.id).filter(Boolean));
+        } else {
+            setSelectedItemIds([]);
+        }
+    };
+
+    const openBulkUomDialog = () => {
+        const uniqueGroups = unique('group_head');
+        setBulkUomForm({
+            target: selectedItemIds.length > 0 ? 'selected' : 'group',
+            groupHead: uniqueGroups[0] || '',
+            updatePurchaseUom: false,
+            purchaseUom: '',
+            updateIssueUom: false,
+            issueUom: '',
+            updateIssueUomFactor: false,
+            issueUomFactor: '',
+            overwrite: false
+        });
+        setOpenDialog('bulk-uom');
+    };
+
+    async function saveBulkUom(options: {
+        target: 'selected' | 'group';
+        groupHead?: string;
+        updatePurchaseUom: boolean;
+        purchaseUom: string;
+        updateIssueUom: boolean;
+        issueUom: string;
+        updateIssueUomFactor: boolean;
+        issueUomFactor: number | null;
+        overwrite: boolean;
+    }) {
+        setSaving(true);
+        try {
+            // Get target items to update
+            let targetItems: any[] = [];
+            if (options.target === 'selected') {
+                targetItems = items.filter(item => selectedItemIds.includes(item.id));
+            } else if (options.target === 'group' && options.groupHead) {
+                targetItems = items.filter(item => item.group_head === options.groupHead);
+            }
+
+            if (targetItems.length === 0) {
+                toast.error('No items selected for update');
+                setSaving(false);
+                return;
+            }
+
+            // Determine fields to update
+            const fieldsToUpdate: Record<string, any> = {};
+            if (options.updatePurchaseUom) {
+                fieldsToUpdate.purchase_uom = options.purchaseUom;
+            }
+            if (options.updateIssueUom) {
+                fieldsToUpdate.issue_uom = options.issueUom;
+            }
+            if (options.updateIssueUomFactor) {
+                fieldsToUpdate.issue_uom_factor = options.issueUomFactor;
+            }
+
+            if (Object.keys(fieldsToUpdate).length === 0) {
+                toast.error('Please select at least one field to update');
+                setSaving(false);
+                return;
+            }
+
+            let res;
+            if (options.overwrite) {
+                // Bulk update all at once
+                if (options.target === 'selected') {
+                    res = await supabase.from('items').update(fieldsToUpdate).in('id', selectedItemIds);
+                } else {
+                    res = await supabase.from('items').update(fieldsToUpdate).eq('group_head', options.groupHead);
+                }
+            } else {
+                // Update only empty fields
+                const updates = targetItems.map(item => {
+                    const itemUpdate: Record<string, any> = {};
+                    let needsUpdate = false;
+
+                    if (options.updatePurchaseUom && (!item.purchase_uom && !item.unit_of_measurement)) {
+                        itemUpdate.purchase_uom = options.purchaseUom;
+                        needsUpdate = true;
+                    }
+                    if (options.updateIssueUom && !item.issue_uom) {
+                        itemUpdate.issue_uom = options.issueUom;
+                        needsUpdate = true;
+                    }
+                    if (options.updateIssueUomFactor && !item.issue_uom_factor) {
+                        itemUpdate.issue_uom_factor = options.issueUomFactor;
+                        needsUpdate = true;
+                    }
+
+                    if (needsUpdate) {
+                        return supabase.from('items').update(itemUpdate).eq('id', item.id);
+                    }
+                    return null;
+                }).filter(Boolean);
+
+                if (updates.length === 0) {
+                    toast.info('No items needed updating (all relevant fields are already set)');
+                    setOpenDialog(null);
+                    setSaving(false);
+                    return;
+                }
+
+                const results = await Promise.all(updates);
+                const firstError = results.find(r => r.error);
+                if (firstError) {
+                    res = { error: firstError.error };
+                } else {
+                    res = { error: null };
+                }
+            }
+
+            if (res.error) {
+                toast.error('Bulk update failed: ' + res.error.message);
+            } else {
+                toast.success('✅ Bulk updated items successfully');
+                setOpenDialog(null);
+                setSelectedItemIds([]);
+                fetchMaster();
+            }
+        } catch (err: any) {
+            toast.error('An error occurred during bulk update: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    }
 
     async function saveRow(fields: Record<string, any>, entityType: 'vendor' | 'item' | 'department' | 'ward' | 'company') {
         setSaving(true);
@@ -183,6 +336,17 @@ export default function MasterData() {
             ))}
         </>
     );
+
+    const filteredItems = items
+        .filter(r => r.item_name)
+        .filter(r => {
+            if (!itemSearch) return true;
+            const searchLower = itemSearch.toLowerCase();
+            return (
+                r.item_name?.toLowerCase().includes(searchLower) ||
+                r.group_head?.toLowerCase().includes(searchLower)
+            );
+        });
 
     return (
         <div className="space-y-6">
@@ -314,6 +478,19 @@ export default function MasterData() {
                                         className="pl-9 h-9 text-xs"
                                     />
                                 </div>
+                                {selectedItemIds.length > 0 && (
+                                    <span className="text-xs text-muted-foreground mr-1">
+                                        {selectedItemIds.length} selected
+                                    </span>
+                                )}
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="gap-1 border-primary/30 text-primary hover:bg-primary/5" 
+                                    onClick={openBulkUomDialog}
+                                >
+                                    <Layers size={14} /> Bulk Edit UOMs
+                                </Button>
                                 <Button size="sm" className="gap-1" onClick={() => { setForm({}); setEditingRow(null); setOpenDialog('item'); }}>
                                     <Plus size={14} /> Add Item
                                 </Button>
@@ -323,6 +500,14 @@ export default function MasterData() {
                             <Table>
                                 <TableHeader className="sticky top-0 z-10 bg-primary text-primary-foreground">
                                     <TableRow>
+                                        <TableHead className="w-12 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={filteredItems.length > 0 && selectedItemIds.length === filteredItems.length}
+                                                onChange={(e) => handleSelectAll(e.target.checked, filteredItems)}
+                                                className="w-4 h-4 cursor-pointer align-middle"
+                                            />
+                                        </TableHead>
                                         <TableHead className="w-12 text-center">S.No.</TableHead>
                                         <TableHead>Group Head</TableHead>
                                         <TableHead>Item Name</TableHead>
@@ -333,30 +518,23 @@ export default function MasterData() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {loading ? <LoadingRows cols={6} /> : (() => {
-                                        const filtered = items
-                                            .filter(r => r.item_name)
-                                            .filter(r => {
-                                                if (!itemSearch) return true;
-                                                const searchLower = itemSearch.toLowerCase();
-                                                return (
-                                                    r.item_name?.toLowerCase().includes(searchLower) ||
-                                                    r.group_head?.toLowerCase().includes(searchLower)
-                                                );
-                                            });
-
-                                        if (filtered.length === 0) {
-                                            return (
-                                                <TableRow>
-                                                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                                                        No items found matching "{itemSearch}"
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        }
-
-                                        return filtered.map((r, i) => (
+                                    {loading ? <LoadingRows cols={8} /> : filteredItems.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                                                No items found matching "{itemSearch}"
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        filteredItems.map((r, i) => (
                                             <TableRow key={i}>
+                                                <TableCell className="text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedItemIds.includes(r.id)}
+                                                        onChange={(e) => handleSelectItem(r.id, e.target.checked)}
+                                                        className="w-4 h-4 cursor-pointer align-middle"
+                                                    />
+                                                </TableCell>
                                                 <TableCell className="text-center font-medium">{i + 1}</TableCell>
                                                 <TableCell>{r.group_head}</TableCell>
                                                 <TableCell className="font-medium">{r.item_name}</TableCell>
@@ -381,8 +559,8 @@ export default function MasterData() {
                                                     </Button>
                                                 </TableCell>
                                             </TableRow>
-                                        ));
-                                    })()}
+                                        ))
+                                    )}
                                 </TableBody>
                             </Table>
                         </ScrollArea>
@@ -608,6 +786,177 @@ export default function MasterData() {
                             issue_uom_factor: form.issue_uom_factor ? Number(form.issue_uom_factor) : null
                         }, 'item')}>
                             {saving ? 'Saving...' : editingRow ? 'Update Item' : 'Save Item'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk UOM Dialog */}
+            <Dialog open={openDialog === 'bulk-uom'} onOpenChange={o => !o && setOpenDialog(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Bulk Edit Units of Measurement (UOM)</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        {/* Target Selection */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Target</label>
+                            <div className="flex gap-4">
+                                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="bulk-target"
+                                        checked={bulkUomForm.target === 'selected'}
+                                        onChange={() => setBulkUomForm(p => ({ ...p, target: 'selected' }))}
+                                        disabled={selectedItemIds.length === 0}
+                                        className="h-4 w-4 text-primary focus:ring-primary cursor-pointer"
+                                    />
+                                    <span>Selected Items ({selectedItemIds.length})</span>
+                                </label>
+                                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="bulk-target"
+                                        checked={bulkUomForm.target === 'group'}
+                                        onChange={() => setBulkUomForm(p => ({ ...p, target: 'group' }))}
+                                        className="h-4 w-4 text-primary focus:ring-primary cursor-pointer"
+                                    />
+                                    <span>By Group / Category</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* Group Selection Dropdown */}
+                        {bulkUomForm.target === 'group' && (
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium">Group Head / Category</label>
+                                <select
+                                    value={bulkUomForm.groupHead}
+                                    onChange={e => setBulkUomForm(p => ({ ...p, groupHead: e.target.value }))}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                                >
+                                    <option value="" disabled>Select a Group Head</option>
+                                    {unique('group_head').map(g => (
+                                        <option key={g} value={g}>{g}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <div className="border-t pt-3 space-y-3">
+                            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fields to Update</label>
+                            
+                            {/* Purchase UOM */}
+                            <div className="space-y-1">
+                                <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={bulkUomForm.updatePurchaseUom}
+                                        onChange={e => setBulkUomForm(p => ({ ...p, updatePurchaseUom: e.target.checked }))}
+                                        className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer"
+                                    />
+                                    <span>Purchase UOM (e.g., LTR, KG, Box)</span>
+                                </label>
+                                {bulkUomForm.updatePurchaseUom && (
+                                    <Input
+                                        className="mt-1"
+                                        placeholder="e.g., Box"
+                                        list="bulk-purchase-uom-list"
+                                        value={bulkUomForm.purchaseUom}
+                                        onChange={e => setBulkUomForm(p => ({ ...p, purchaseUom: e.target.value }))}
+                                    />
+                                )}
+                                <datalist id="bulk-purchase-uom-list">
+                                    {unique('purchase_uom').map(v => <option key={v} value={v} />)}
+                                </datalist>
+                            </div>
+
+                            {/* Issue UOM */}
+                            <div className="space-y-1">
+                                <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={bulkUomForm.updateIssueUom}
+                                        onChange={e => setBulkUomForm(p => ({ ...p, updateIssueUom: e.target.checked }))}
+                                        className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer"
+                                    />
+                                    <span>Issue UOM (e.g., ml, g, pcs, tablet)</span>
+                                </label>
+                                {bulkUomForm.updateIssueUom && (
+                                    <Input
+                                        className="mt-1"
+                                        placeholder="e.g., pcs"
+                                        value={bulkUomForm.issueUom}
+                                        onChange={e => setBulkUomForm(p => ({ ...p, issueUom: e.target.value }))}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Issue Factor */}
+                            <div className="space-y-1">
+                                <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={bulkUomForm.updateIssueUomFactor}
+                                        onChange={e => setBulkUomForm(p => ({ ...p, updateIssueUomFactor: e.target.checked }))}
+                                        className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer"
+                                    />
+                                    <span>Issue Factor (1 Purchase UOM = ? Issue units)</span>
+                                </label>
+                                {bulkUomForm.updateIssueUomFactor && (
+                                    <Input
+                                        className="mt-1"
+                                        type="number"
+                                        min="1"
+                                        placeholder="e.g., 100"
+                                        value={bulkUomForm.issueUomFactor}
+                                        onChange={e => setBulkUomForm(p => ({ ...p, issueUomFactor: e.target.value }))}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Live Preview */}
+                            {((bulkUomForm.updatePurchaseUom && bulkUomForm.purchaseUom) ||
+                              (bulkUomForm.updateIssueUom && bulkUomForm.issueUom) ||
+                              (bulkUomForm.updateIssueUomFactor && bulkUomForm.issueUomFactor)) && (
+                                <div className="bg-primary/5 border border-primary/10 rounded-md px-3 py-2 text-xs text-muted-foreground mt-2">
+                                    Preview: <span className="font-semibold text-foreground">
+                                        1 {bulkUomForm.updatePurchaseUom && bulkUomForm.purchaseUom ? bulkUomForm.purchaseUom : '[Purchase UOM]'} = {bulkUomForm.updateIssueUomFactor && bulkUomForm.issueUomFactor ? bulkUomForm.issueUomFactor : '?' } {bulkUomForm.updateIssueUom && bulkUomForm.issueUom ? bulkUomForm.issueUom : '[Issue UOM]'}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Overwrite Toggle */}
+                        <div className="border-t pt-3">
+                            <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-muted-foreground hover:text-foreground">
+                                <input
+                                    type="checkbox"
+                                    checked={bulkUomForm.overwrite}
+                                    onChange={e => setBulkUomForm(p => ({ ...p, overwrite: e.target.checked }))}
+                                    className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer"
+                                />
+                                <span>Overwrite existing UOM values (if unchecked, only empty values are filled)</span>
+                            </label>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                        <Button 
+                            disabled={saving || (bulkUomForm.target === 'group' && !bulkUomForm.groupHead)}
+                            onClick={() => saveBulkUom({
+                                target: bulkUomForm.target,
+                                groupHead: bulkUomForm.groupHead,
+                                updatePurchaseUom: bulkUomForm.updatePurchaseUom,
+                                purchaseUom: bulkUomForm.purchaseUom,
+                                updateIssueUom: bulkUomForm.updateIssueUom,
+                                issueUom: bulkUomForm.issueUom,
+                                updateIssueUomFactor: bulkUomForm.updateIssueUomFactor,
+                                issueUomFactor: bulkUomForm.issueUomFactor ? Number(bulkUomForm.issueUomFactor) : null,
+                                overwrite: bulkUomForm.overwrite
+                            })}
+                        >
+                            {saving ? 'Applying...' : 'Apply Bulk Update'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
