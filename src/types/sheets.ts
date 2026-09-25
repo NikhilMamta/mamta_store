@@ -310,7 +310,8 @@ export type MasterSheet = {
     groupHeads: Record<string, string[]>; // category: items[]
     // Legacy name-keyed map (kept for backward compat during transition)
     itemMux?: Record<string, string>; // itemName (lowercase) -> issue UOM label
-    // Name-keyed maps for issue configuration (avoids master vs inventory ID mismatches)
+    // Name-keyed maps for unit configuration (avoids master vs inventory ID mismatches)
+    itemPurchaseUom?: Record<string, string>;     // item_name (lowercase) -> purchase UOM label (e.g., 'BOX')
     itemIssueUom?: Record<string, string>;        // item_name (lowercase) -> issue UOM label (e.g., 'ml')
     itemIssueUomFactor?: Record<string, number>;  // item_name (lowercase) -> conversion factor (e.g., 1000)
     // itemName -> inventory item_id — used to look up by name when needed

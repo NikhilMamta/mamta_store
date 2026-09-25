@@ -41,12 +41,12 @@ export default () => {
     const [localProducts, setLocalProducts] = useState<{ [key: string]: string[] }>({});
     const [searchTermCategory, setSearchTermCategory] = useState("");
     const [searchTermWard, setSearchTermWard] = useState("");
-    
+
     // Compute all products and their mapping to group heads
     const { allProducts, productToGroupHeadMap } = useMemo(() => {
         const productMap: Record<string, string> = {};
         const masterGroupHeads = options?.groupHeads || {};
-        
+
         // Process master sheet data
         Object.entries(masterGroupHeads).forEach(([groupHead, products]) => {
             products.forEach(product => {
@@ -55,7 +55,7 @@ export default () => {
                 }
             });
         });
-        
+
         // Process local products
         Object.entries(localProducts).forEach(([groupHead, products]) => {
             products.forEach(product => {
@@ -64,7 +64,7 @@ export default () => {
                 }
             });
         });
-        
+
         return {
             allProducts: Object.keys(productMap).sort(),
             productToGroupHeadMap: productMap
@@ -185,8 +185,22 @@ export default () => {
             form.setValue('indentApproveBy', 'Dr Sunil Ramnani');
         } else if (indentType === 'Store Out') {
             form.setValue('indentApproveBy', 'Store Incharge');
+            // Ensure each product's UOM is valid for Store Out
+            const currentProds = form.getValues('products') || [];
+            currentProds.forEach((p, idx) => {
+                if (p.productName) {
+                    const prodNameLower = p.productName.trim().toLowerCase();
+                    const invItem = inventorySheet?.find(inv => inv.itemName?.trim().toLowerCase() === prodNameLower);
+                    const purchaseUom = (prodNameLower ? options?.itemPurchaseUom?.[prodNameLower] : undefined) || invItem?.uom || '';
+                    const issueUom = (prodNameLower ? options?.itemIssueUom?.[prodNameLower] || options?.itemMux?.[prodNameLower] : undefined) || '';
+                    const validUoms = [...new Set([purchaseUom, issueUom].filter(Boolean))];
+                    if (validUoms.length > 0 && (!p.uom || !validUoms.includes(p.uom))) {
+                        form.setValue(`products.${idx}.uom`, issueUom || purchaseUom || '');
+                    }
+                }
+            });
         }
-    }, [indentType, form]);
+    }, [indentType, form, options, inventorySheet]);
 
 
     /**
@@ -338,10 +352,10 @@ export default () => {
                         const invItem = inventorySheet?.find(inv =>
                             inv.itemName?.toLowerCase() === product.productName?.toLowerCase()
                         );
-                        const itemId = invItem?.id;
-                        const purchaseUom = invItem?.uom || '';
                         const prodNameLower = product.productName?.trim().toLowerCase();
-                        const issueUom = prodNameLower ? options?.itemIssueUom?.[prodNameLower] : undefined;
+                        const itemId = invItem?.id || (prodNameLower ? options?.itemIdByName?.[prodNameLower] : undefined);
+                        const purchaseUom = (prodNameLower ? options?.itemPurchaseUom?.[prodNameLower] : undefined) || invItem?.uom || '';
+                        const issueUom = prodNameLower ? options?.itemIssueUom?.[prodNameLower] || options?.itemMux?.[prodNameLower] : undefined;
                         const masterFactor = prodNameLower ? (options?.itemIssueUomFactor?.[prodNameLower] ?? 1) : 1;
                         // If user selected the issue UOM → snapshot the factor; else factor = 1
                         const isIssuingInIssueUom = issueUom && product.uom === issueUom;
@@ -588,10 +602,10 @@ export default () => {
 
                         {fields.map((field, index) => {
                             const groupHead = indentType === 'Store Out' ? products[index]?.category : products[index]?.groupHead;
-                            const productOptions = groupHead 
+                            const productOptions = groupHead
                                 ? allProducts.filter(p => productToGroupHeadMap[p] === groupHead)
                                 : allProducts;
-                            
+
                             const productVal = products[index]?.productName;
                             const inventoryItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === productVal?.toLowerCase());
                             const isUomPreFilled = !!inventoryItem?.uom;
@@ -790,27 +804,29 @@ export default () => {
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel className="text-sm">Product Name<span className="text-destructive">*</span></FormLabel>
-                                                        <Select 
+                                                        <Select
                                                             onValueChange={(val) => {
                                                                 field.onChange(val);
                                                                 // Auto-fill Group Head / Category
                                                                 const mappedGroup = productToGroupHeadMap[val];
                                                                 if (mappedGroup) {
-                                                                    const fieldName = indentType === 'Store Out' 
-                                                                        ? `products.${index}.category` 
+                                                                    const fieldName = indentType === 'Store Out'
+                                                                        ? `products.${index}.category`
                                                                         : `products.${index}.groupHead`;
                                                                     form.setValue(fieldName as any, mappedGroup);
                                                                 }
                                                                 // Auto-fill UOM
-                                                                const inventoryItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === val.toLowerCase());
-                                                                if (indentType === 'Store Out' && inventoryItem) {
-                                                                    const prodNameLower = val?.trim().toLowerCase();
-                                                                    const issueUom = prodNameLower ? options?.itemIssueUom?.[prodNameLower] : undefined;
-                                                                    form.setValue(`products.${index}.uom`, issueUom || inventoryItem?.uom || '');
-                                                                } else if (inventoryItem?.uom) {
-                                                                    form.setValue(`products.${index}.uom`, inventoryItem.uom);
+                                                                const prodNameLower = val?.trim().toLowerCase();
+                                                                const inventoryItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === prodNameLower);
+                                                                const purchaseUom = (prodNameLower ? options?.itemPurchaseUom?.[prodNameLower] : undefined) || inventoryItem?.uom || '';
+                                                                const issueUom = (prodNameLower ? options?.itemIssueUom?.[prodNameLower] || options?.itemMux?.[prodNameLower] : undefined) || '';
+
+                                                                if (indentType === 'Store Out') {
+                                                                    form.setValue(`products.${index}.uom`, issueUom || purchaseUom || '');
+                                                                } else {
+                                                                    form.setValue(`products.${index}.uom`, purchaseUom || '');
                                                                 }
-                                                            }} 
+                                                            }}
                                                             value={field.value}
                                                         >
                                                             <FormControl><SelectTrigger className="w-full h-9"><SelectValue placeholder="Select product" /></SelectTrigger></FormControl>
@@ -860,26 +876,61 @@ export default () => {
                                             control={form.control}
                                             name={`products.${index}.uom`}
                                             render={({ field }) => {
-                                                // Build UOM options: for Store Out show only [purchaseUOM, issueUOM]
-                                                const invItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === productVal?.toLowerCase());
-                                                const purchaseUom = invItem?.uom;
                                                 const prodNameLower = productVal?.trim().toLowerCase();
-                                                const issueUom = prodNameLower ? options?.itemIssueUom?.[prodNameLower] : undefined;
+                                                const invItem = inventorySheet?.find(inv => inv.itemName?.toLowerCase() === prodNameLower);
+                                                const purchaseUom = (prodNameLower ? options?.itemPurchaseUom?.[prodNameLower] : undefined) || invItem?.uom || '';
+                                                const issueUom = (prodNameLower ? options?.itemIssueUom?.[prodNameLower] || options?.itemMux?.[prodNameLower] : undefined) || '';
                                                 const issueFactor = prodNameLower ? options?.itemIssueUomFactor?.[prodNameLower] : undefined;
-                                                const uomList = indentType === 'Store Out' && purchaseUom
-                                                    ? [...new Set([issueUom, purchaseUom].filter(Boolean) as string[])]
+
+                                                // Build UOM options:
+                                                // For Store Out, only show Purchase UOM and Issue UOM of that specific item
+                                                const itemUoms = indentType === 'Store Out' && productVal
+                                                    ? [...new Set([purchaseUom, issueUom].filter(Boolean) as string[])]
+                                                    : [];
+
+                                                const uomList = indentType === 'Store Out'
+                                                    ? (itemUoms.length > 0 ? itemUoms : (productVal ? (options?.units || []) : []))
                                                     : (options?.units || []);
+
+                                                const isDisabled = indentType === 'Store Out' && !productVal;
+
                                                 return (
                                                     <FormItem className="md:col-span-1">
                                                         <FormLabel className="text-sm">UOM<span className="text-destructive">*</span></FormLabel>
-                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                        <Select
+                                                            onValueChange={field.onChange}
+                                                            value={field.value}
+                                                            disabled={isDisabled}
+                                                        >
                                                             <FormControl>
-                                                                <SelectTrigger className="w-full h-9"><SelectValue placeholder="Unit" /></SelectTrigger>
+                                                                <SelectTrigger className="w-full h-9">
+                                                                    <SelectValue placeholder={
+                                                                        indentType === 'Store Out' && !productVal
+                                                                            ? "Select product first"
+                                                                            : indentType === 'Store Out' && uomList.length === 0
+                                                                                ? "No UOM configured"
+                                                                                : "Unit"
+                                                                    } />
+                                                                </SelectTrigger>
                                                             </FormControl>
                                                             <SelectContent>
-                                                                {uomList.map((u) => (
-                                                                    <SelectItem key={u} value={u}>{u}</SelectItem>
-                                                                ))}
+                                                                {uomList.map((u) => {
+                                                                    let label = u;
+                                                                    if (indentType === 'Store Out' && itemUoms.length > 0) {
+                                                                        if (u === purchaseUom && u === issueUom) {
+                                                                            label = `${u} `;
+                                                                        } else if (u === purchaseUom) {
+                                                                            label = `${u} `;
+                                                                        } else if (u === issueUom) {
+                                                                            label = `${u} `;
+                                                                        }
+                                                                    }
+                                                                    return (
+                                                                        <SelectItem key={u} value={u}>
+                                                                            {label}
+                                                                        </SelectItem>
+                                                                    );
+                                                                })}
                                                             </SelectContent>
                                                         </Select>
                                                         {/* Conversion badge — shown only for Store Out when both UOMs are configured */}

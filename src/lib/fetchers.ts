@@ -250,6 +250,7 @@ export async function fetchSheet(
         const wardNames = new Set<string>();
         const itemMux: Record<string, string> = {};
         // Name-keyed maps for unit conversion (avoids ID mismatches between master and inventory tables)
+        const itemPurchaseUom: Record<string, string> = {};
         const itemIssueUom: Record<string, string> = {};
         const itemIssueUomFactor: Record<string, number> = {};
         const itemIdByName: Record<string, number> = {}; // itemName.toLowerCase() -> master row id
@@ -285,14 +286,21 @@ export async function fetchSheet(
                         if (!groupHeads[cRow.groupHead]) groupHeads[cRow.groupHead] = new Set();
                         groupHeads[cRow.groupHead].add(itemName);
                     }
-                    if (cRow.purchaseUom || cRow.unitOfMeasurement) {
-                        units.add(cRow.purchaseUom || cRow.unitOfMeasurement);
+                    const pUom = (cRow.purchaseUom || cRow.unitOfMeasurement)?.trim();
+                    if (pUom) {
+                        units.add(pUom);
                     }
-                    if (itemId && itemNameLower) {
-                        itemIdByName[itemNameLower] = itemId;
+                    if (itemNameLower) {
+                        if (pUom) {
+                            itemPurchaseUom[itemNameLower] = pUom;
+                        }
+                        if (itemId) {
+                            itemIdByName[itemNameLower] = itemId;
+                        }
                         if (cRow.issueUom) {
-                            itemIssueUom[itemNameLower] = cRow.issueUom;
-                            itemMux[itemNameLower] = cRow.issueUom;
+                            const issueUomVal = cRow.issueUom.trim();
+                            itemIssueUom[itemNameLower] = issueUomVal;
+                            itemMux[itemNameLower] = issueUomVal;
                         }
                         if (cRow.issueUomFactor && Number(cRow.issueUomFactor) > 0) {
                             itemIssueUomFactor[itemNameLower] = Number(cRow.issueUomFactor);
@@ -318,14 +326,22 @@ export async function fetchSheet(
             if (cRow.paymentTerm) paymentTerms.add(cRow.paymentTerm);
             if (cRow.department) departments.add(cRow.department);
             if (cRow.defaultTerms) defaultTerms.add(cRow.defaultTerms);
-            if (cRow.unitOfMeasurement || cRow.unitOfMeasurment) {
-                units.add(cRow.unitOfMeasurement || cRow.unitOfMeasurment);
+            const legacyPUom = (cRow.unitOfMeasurement || cRow.unitOfMeasurment || cRow.purchaseUom)?.trim();
+            if (legacyPUom) {
+                units.add(legacyPUom);
             }
             if (cRow.wardName) wardNames.add(cRow.wardName);
 
             if (cRow.groupHead && cRow.itemName && Object.keys(groupHeads).length === 0) {
                 if (!groupHeads[cRow.groupHead]) groupHeads[cRow.groupHead] = new Set();
                 groupHeads[cRow.groupHead].add(cRow.itemName);
+            }
+
+            if (cRow.itemName && legacyPUom) {
+                const nameLower = cRow.itemName.trim().toLowerCase();
+                if (!itemPurchaseUom[nameLower]) {
+                    itemPurchaseUom[nameLower] = legacyPUom;
+                }
             }
 
             if (cRow.itemName && cRow.mux && Object.keys(itemIssueUom).length === 0) {
@@ -351,6 +367,7 @@ export async function fetchSheet(
             departments: [...departments],
             paymentTerms: [...paymentTerms],
             groupHeads: Object.fromEntries(Object.entries(groupHeads).map(([k, v]) => [k, [...v]])),
+            itemPurchaseUom,
             itemMux,
             itemIssueUom,
             itemIssueUomFactor,
