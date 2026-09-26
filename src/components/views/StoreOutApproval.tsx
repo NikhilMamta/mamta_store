@@ -22,7 +22,7 @@ import { PuffLoader as Loader } from 'react-spinners';
 import { toast } from 'sonner';
 import { postToSheet, uploadFileToSupabase } from '@/lib/fetchers';
 import { generateStoreOutSlip } from '@/lib/pdfGenerator';
-import { PackageCheck } from 'lucide-react';
+import { PackageCheck, Search, Clock, Inbox } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useAuth } from '@/context/AuthContext';
 import Heading from '../element/Heading';
@@ -77,6 +77,40 @@ export default () => {
     const [tableData, setTableData] = useState<GroupedStoreOutData[]>([]);
     const [historyData, setHistoryData] = useState<GroupedStoreOutData[]>([]);
     const [loading, setLoading] = useState(false);
+    const [mobilePendingSearch, setMobilePendingSearch] = useState('');
+    const [mobileHistorySearch, setMobileHistorySearch] = useState('');
+
+    const filteredPendingData = tableData.filter((group) => {
+        if (!mobilePendingSearch.trim()) return true;
+        const query = mobilePendingSearch.toLowerCase();
+        const issueMatch = (group.issueNo || '').toLowerCase().includes(query);
+        const requesterMatch = (group.requestedBy || '').toLowerCase().includes(query);
+        const deptMatch = (group.department || '').toLowerCase().includes(query);
+        const wardMatch = (group.wardName || '').toLowerCase().includes(query);
+        const productMatch = group.items.some(i => (i.product || '').toLowerCase().includes(query));
+        return issueMatch || requesterMatch || deptMatch || wardMatch || productMatch;
+    });
+
+    const filteredHistoryData = historyData.filter((group) => {
+        if (!mobileHistorySearch.trim()) return true;
+        const query = mobileHistorySearch.toLowerCase();
+        const issueMatch = (group.issueNo || '').toLowerCase().includes(query);
+        const requesterMatch = (group.requestedBy || '').toLowerCase().includes(query);
+        const deptMatch = (group.department || '').toLowerCase().includes(query);
+        const wardMatch = (group.wardName || '').toLowerCase().includes(query);
+        const productMatch = group.items.some(i => (i.product || '').toLowerCase().includes(query));
+        return issueMatch || requesterMatch || deptMatch || wardMatch || productMatch;
+    });
+
+    const formatGroupDate = (timestamp: string) => {
+        if (!timestamp) return { date: 'N/A', time: '' };
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return { date: 'N/A', time: '' };
+        return {
+            date: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'),
+            time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+        };
+    };
 
     // Force refresh on mount
     useEffect(() => {
@@ -313,42 +347,362 @@ export default () => {
                     <PackageCheck size={50} className="text-primary" />
                 </Heading>
                 <TabsContent value="pending" className="flex-1 min-w-0 w-full overflow-hidden">
-                    <DataTable
-                        data={tableData}
-                        columns={columns}
-                        searchFields={['issueNo', 'requestedBy']}
-                        dataLoading={storeOutApprovalLoading}
-                        tableClassName="min-w-[1600px]"
-                        extraActions={
-                            <Button
-                                variant="default"
-                                onClick={onDownloadClick}
-                                style={{
-                                    background: "linear-gradient(90deg, #4CAF50, #2E7D32)",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    padding: "0 16px",
-                                    fontWeight: "bold",
-                                    boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                }}
-                            >
-                                <DownloadOutlined />
-                                {loading ? "Downloading..." : "Download"}
-                            </Button>
-                        }
-                    />
+                    {/* Desktop, Laptop, and Tablet View (>= 768px): Completely Unchanged */}
+                    <div className="hidden md:block h-full">
+                        <DataTable
+                            data={tableData}
+                            columns={columns}
+                            searchFields={['issueNo', 'requestedBy']}
+                            dataLoading={storeOutApprovalLoading}
+                            tableClassName="min-w-[1600px]"
+                            extraActions={
+                                <Button
+                                    variant="default"
+                                    onClick={onDownloadClick}
+                                    style={{
+                                        background: "linear-gradient(90deg, #4CAF50, #2E7D32)",
+                                        border: "none",
+                                        borderRadius: "8px",
+                                        padding: "0 16px",
+                                        fontWeight: "bold",
+                                        boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                    }}
+                                >
+                                    <DownloadOutlined />
+                                    {loading ? "Downloading..." : "Download"}
+                                </Button>
+                            }
+                        />
+                    </div>
+
+                    {/* Mobile View Only (< 768px): Card View */}
+                    <div className="block md:hidden h-full overflow-y-auto p-4 space-y-4 pb-28">
+                        {/* Search and Export Bar */}
+                        <div className="flex flex-col gap-2.5 bg-card/60 backdrop-blur-sm p-3 rounded-xl border shadow-sm">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search issue #, requester, item..."
+                                    value={mobilePendingSearch}
+                                    onChange={(e) => setMobilePendingSearch(e.target.value)}
+                                    className="pl-9 h-10 text-sm bg-background/80"
+                                />
+                                {mobilePendingSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setMobilePendingSearch('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground p-1"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                                <span className="font-medium">
+                                    {filteredPendingData.length} request{filteredPendingData.length === 1 ? '' : 's'} pending
+                                </span>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={onDownloadClick}
+                                    disabled={loading}
+                                    className="h-8 text-xs font-semibold gap-1.5 border-green-600/30 text-green-700 bg-green-50/60 hover:bg-green-100"
+                                >
+                                    <DownloadOutlined />
+                                    {loading ? "Exporting..." : "Export"}
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Cards List / Loading / Empty */}
+                        {storeOutApprovalLoading ? (
+                            <div className="flex flex-col items-center justify-center py-16 gap-3">
+                                <Loader size={36} color="#16a34a" />
+                                <p className="text-xs text-muted-foreground animate-pulse font-medium">Loading requests...</p>
+                            </div>
+                        ) : filteredPendingData.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 px-4 text-center rounded-xl border border-dashed bg-muted/20">
+                                <Inbox className="h-10 w-10 text-muted-foreground/40 mb-2" />
+                                <p className="font-semibold text-sm text-foreground">No Pending Requests</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    {mobilePendingSearch ? "No requests match your search query" : "All store out requests have been processed"}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {filteredPendingData.map((group) => {
+                                    const { date, time } = formatGroupDate(group.timestamp);
+                                    return (
+                                        <div
+                                            key={group.issueNo}
+                                            className="bg-card rounded-xl border border-border shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                                        >
+                                            {/* Header */}
+                                            <div className="p-3.5 bg-gradient-to-r from-muted/50 to-muted/20 border-b flex items-start justify-between gap-2">
+                                                <div className="space-y-0.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Issue #</span>
+                                                        <span className="font-mono font-bold text-sm text-primary">
+                                                            {group.issueNo?.split(/[_/]/)[0]}
+                                                        </span>
+                                                        <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 rounded-full px-2 py-0.5">
+                                                            Pending
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                        <Clock className="h-3 w-3" />
+                                                        <span>{date} {time ? `• ${time}` : ''}</span>
+                                                    </div>
+                                                </div>
+
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => setSelectedGroup(group)}
+                                                    className="h-8 text-xs font-semibold px-3 shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
+                                                >
+                                                    Action ({group.items.length})
+                                                </Button>
+                                            </div>
+
+                                            {/* Details */}
+                                            <div className="p-3.5 space-y-2.5">
+                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                    <div className="bg-muted/30 p-2 rounded-lg border border-muted/50">
+                                                        <span className="text-[10px] font-medium text-muted-foreground block uppercase">Requested By</span>
+                                                        <span className="font-semibold text-foreground truncate block" title={group.requestedBy}>
+                                                            {group.requestedBy || 'N/A'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="bg-muted/30 p-2 rounded-lg border border-muted/50">
+                                                        <span className="text-[10px] font-medium text-muted-foreground block uppercase">Department</span>
+                                                        <span className="font-semibold text-foreground truncate block" title={group.department}>
+                                                            {group.department || 'N/A'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {group.wardName && group.wardName !== 'N/A' && (
+                                                    <div className="text-xs bg-muted/20 px-2.5 py-1.5 rounded-md border border-muted/40 flex items-center gap-1.5">
+                                                        <span className="text-[10px] font-medium text-muted-foreground uppercase">Ward:</span>
+                                                        <span className="font-medium text-foreground">{group.wardName}</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Items */}
+                                                <div className="mt-2 pt-2 border-t border-border/60">
+                                                    <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                                                        <span>Requested Items ({group.items.length})</span>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        {group.items.map((item, idx) => (
+                                                            <div
+                                                                key={item.searialNumber || idx}
+                                                                className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background border border-muted/70 text-xs"
+                                                            >
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className="font-semibold text-foreground truncate">{item.product}</p>
+                                                                    {item.searialNumber && (
+                                                                        <p className="text-[10px] text-muted-foreground">S.No: {item.searialNumber}</p>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-right shrink-0">
+                                                                    <span className="font-bold text-primary">
+                                                                        {item.qty} {item.unit}
+                                                                    </span>
+                                                                    {item.originalRow?.conversionFactor && item.originalRow.conversionFactor !== 1 && item.originalRow.purchaseUom && (
+                                                                        <p className="text-[10px] text-amber-600 font-medium">
+                                                                            ≈ {(item.qty / item.originalRow.conversionFactor).toFixed(2)} {item.originalRow.purchaseUom}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Review button */}
+                                                <div className="pt-2">
+                                                    <Button
+                                                        variant="default"
+                                                        onClick={() => setSelectedGroup(group)}
+                                                        className="w-full h-9 text-xs font-bold flex items-center justify-center gap-2"
+                                                    >
+                                                        Review & Take Action ({group.items.length} {group.items.length === 1 ? 'item' : 'items'})
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
                 <TabsContent value="history" className="flex-1 min-w-0 w-full overflow-hidden">
-                    <DataTable
-                        data={historyData}
-                        columns={historyColumns}
-                        searchFields={['issueNo', 'requestedBy']}
-                        dataLoading={indentLoading}
-                        tableClassName="min-w-[1600px]"
-                    />
+                    {/* Desktop, Laptop, and Tablet View (>= 768px): Completely Unchanged */}
+                    <div className="hidden md:block h-full">
+                        <DataTable
+                            data={historyData}
+                            columns={historyColumns}
+                            searchFields={['issueNo', 'requestedBy']}
+                            dataLoading={indentLoading}
+                            tableClassName="min-w-[1600px]"
+                        />
+                    </div>
+
+                    {/* Mobile View Only (< 768px): Card View */}
+                    <div className="block md:hidden h-full overflow-y-auto p-4 space-y-4 pb-28">
+                        {/* Search Bar */}
+                        <div className="flex flex-col gap-2.5 bg-card/60 backdrop-blur-sm p-3 rounded-xl border shadow-sm">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search history by issue #, requester, item..."
+                                    value={mobileHistorySearch}
+                                    onChange={(e) => setMobileHistorySearch(e.target.value)}
+                                    className="pl-9 h-10 text-sm bg-background/80"
+                                />
+                                {mobileHistorySearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setMobileHistorySearch('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground p-1"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                                <span className="font-medium">
+                                    {filteredHistoryData.length} record{filteredHistoryData.length === 1 ? '' : 's'} in history
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Cards List / Loading / Empty */}
+                        {indentLoading ? (
+                            <div className="flex flex-col items-center justify-center py-16 gap-3">
+                                <Loader size={36} color="#16a34a" />
+                                <p className="text-xs text-muted-foreground animate-pulse font-medium">Loading history...</p>
+                            </div>
+                        ) : filteredHistoryData.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 px-4 text-center rounded-xl border border-dashed bg-muted/20">
+                                <Inbox className="h-10 w-10 text-muted-foreground/40 mb-2" />
+                                <p className="font-semibold text-sm text-foreground">No History Found</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    {mobileHistorySearch ? "No history records match your search" : "No approved or rejected records yet"}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {filteredHistoryData.map((group) => {
+                                    const { date, time } = formatGroupDate(group.timestamp);
+                                    const approvedCount = group.items.filter(i => i.status?.toLowerCase() === 'approved').length;
+                                    const rejectedCount = group.items.filter(i => i.status?.toLowerCase() === 'rejected').length;
+
+                                    return (
+                                        <div
+                                            key={group.issueNo}
+                                            className="bg-card rounded-xl border border-border shadow-sm overflow-hidden"
+                                        >
+                                            {/* Header */}
+                                            <div className="p-3.5 bg-gradient-to-r from-muted/50 to-muted/20 border-b flex items-start justify-between gap-2">
+                                                <div className="space-y-0.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Issue #</span>
+                                                        <span className="font-mono font-bold text-sm text-primary">
+                                                            {group.issueNo?.split(/[_/]/)[0]}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                        <Clock className="h-3 w-3" />
+                                                        <span>{date} {time ? `• ${time}` : ''}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-1">
+                                                    {approvedCount > 0 && (
+                                                        <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full px-2 py-0.5">
+                                                            {approvedCount} Appr
+                                                        </span>
+                                                    )}
+                                                    {rejectedCount > 0 && (
+                                                        <span className="text-[10px] font-semibold bg-red-100 text-red-800 border border-red-300 rounded-full px-2 py-0.5">
+                                                            {rejectedCount} Rej
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Details */}
+                                            <div className="p-3.5 space-y-2.5">
+                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                    <div className="bg-muted/30 p-2 rounded-lg border border-muted/50">
+                                                        <span className="text-[10px] font-medium text-muted-foreground block uppercase">Requested By</span>
+                                                        <span className="font-semibold text-foreground truncate block">
+                                                            {group.requestedBy || 'N/A'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="bg-muted/30 p-2 rounded-lg border border-muted/50">
+                                                        <span className="text-[10px] font-medium text-muted-foreground block uppercase">Department</span>
+                                                        <span className="font-semibold text-foreground truncate block">
+                                                            {group.department || 'N/A'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {group.wardName && group.wardName !== 'N/A' && (
+                                                    <div className="text-xs bg-muted/20 px-2.5 py-1.5 rounded-md border border-muted/40 flex items-center gap-1.5">
+                                                        <span className="text-[10px] font-medium text-muted-foreground uppercase">Ward:</span>
+                                                        <span className="font-medium text-foreground">{group.wardName}</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Items summary */}
+                                                <div className="space-y-1.5 pt-1">
+                                                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                                                        Items ({group.items.length})
+                                                    </span>
+                                                    {group.items.map((item, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background border border-muted/70 text-xs"
+                                                        >
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="font-medium text-foreground truncate">{item.product}</p>
+                                                                <p className="text-[10px] text-muted-foreground">
+                                                                    Req: {item.qty} {item.unit} | Appr: {item.approveQty} {item.unit}
+                                                                </p>
+                                                            </div>
+                                                            <div className="shrink-0">
+                                                                <Pill variant={item.status?.toLowerCase() === 'rejected' ? 'reject' : 'secondary'} className="text-[10px]">
+                                                                    {item.status}
+                                                                </Pill>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <div className="pt-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => setSelectedHistory(group)}
+                                                        className="w-full h-8 text-xs font-semibold"
+                                                    >
+                                                        View Details ({group.items.length})
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
             </Tabs>
 
@@ -385,27 +739,27 @@ export default () => {
                                 <DialogTitle>Approval History - {selectedHistory.issueNo?.split(/[_/]/)[0]}</DialogTitle>
                                 <DialogDescription>{selectedHistory.requestedBy} | {selectedHistory.department}</DialogDescription>
                             </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <table className="w-full text-sm">
+                            <div className="space-y-4 py-4 overflow-x-auto">
+                                <table className="w-full text-sm min-w-[480px]">
                                     <thead className="bg-primary">
                                         <tr className="border-b text-primary-foreground font-bold text-left">
-                                            <th className="py-2">Product</th>
-                                            <th className="py-2">Req Qty</th>
-                                            <th className="py-2">Appr Qty</th>
-                                            <th className="py-2">Status</th>
-                                            <th className="py-2">S.No</th>
+                                            <th className="py-2 px-3">Product</th>
+                                            <th className="py-2 px-3">Req Qty</th>
+                                            <th className="py-2 px-3">Appr Qty</th>
+                                            <th className="py-2 px-3">Status</th>
+                                            <th className="py-2 px-3">S.No</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {selectedHistory.items.map((item, idx) => (
                                             <tr key={idx} className="border-b last:border-0 border-muted/20">
-                                                <td className="py-2">{item.product}</td>
-                                                <td className="py-2">{item.qty} {item.unit}</td>
-                                                <td className="py-2">{item.approveQty} {item.unit}</td>
-                                                <td className="py-2">
+                                                <td className="py-2 px-3">{item.product}</td>
+                                                <td className="py-2 px-3">{item.qty} {item.unit}</td>
+                                                <td className="py-2 px-3">{item.approveQty} {item.unit}</td>
+                                                <td className="py-2 px-3">
                                                     <Pill variant={item.status === 'Rejected' ? 'reject' : 'secondary'}>{item.status}</Pill>
                                                 </td>
-                                                <td className="py-2">{item.searialNumber || '-'}</td>
+                                                <td className="py-2 px-3">{item.searialNumber || '-'}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -413,6 +767,7 @@ export default () => {
                             </div>
                         </>
                     )}
+
                     <DialogFooter>
                         <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
                     </DialogFooter>

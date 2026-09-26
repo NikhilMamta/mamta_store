@@ -386,53 +386,60 @@ export async function fetchSheet(
     }
 
     if (sheetName === 'INVENTORY') {
-        const { data: invData, error: invError } = await supabase
-            .from('inventory')
+        // Query from 'items' as the primary table with a LEFT JOIN to 'inventory'.
+        // This ensures ALL items appear even if they have no inventory seed row yet —
+        // they will show with 0 qty / 0 rate instead of being silently dropped.
+        const { data: itemsData, error: itemsError } = await supabase
+            .from('items')
             .select(`
                 id,
-                max_level,
-                opening,
-                individual_rate,
-                indented,
-                approved,
-                purchase_quantity,
-                out_quantity,
-                current_stock,
-                total_price,
-                color_code,
-                last_updated,
-                item_id,
-                items (
-                    item_name,
-                    group_head,
-                    purchase_uom
+                item_name,
+                group_head,
+                purchase_uom,
+                inventory (
+                    id,
+                    max_level,
+                    opening,
+                    individual_rate,
+                    indented,
+                    approved,
+                    purchase_quantity,
+                    out_quantity,
+                    current_stock,
+                    total_price,
+                    color_code,
+                    last_updated
                 )
             `);
 
-        if (invError) {
-            console.error('Supabase error fetching INVENTORY:', invError);
-            throw invError;
+        if (itemsError) {
+            console.error('Supabase error fetching INVENTORY (items LEFT JOIN inventory):', itemsError);
+            throw itemsError;
         }
 
-        const flattened = invData.map((row: any) => {
-            const item = row.items || {};
+        // Each items row may have 0 or 1 inventory rows (array from Supabase).
+        // We take the first inventory row if it exists, otherwise default everything to 0.
+        const flattened = itemsData.map((row: any) => {
+            const inv = Array.isArray(row.inventory) && row.inventory.length > 0
+                ? row.inventory[0]
+                : {};
             return {
-                id: row.id,
-                itemId: row.item_id,
-                maxLevel: Number(row.max_level) || 0,
-                opening: Number(row.opening) || 0,
-                individualRate: Number(row.individual_rate) || 0,
-                indented: Number(row.indented) || 0,
-                approved: Number(row.approved) || 0,
-                purchaseQuantity: Number(row.purchase_quantity) || 0,
-                outQuantity: Number(row.out_quantity) || 0,
-                currentStock: Number(row.current_stock) || 0,
-                totalPrice: Number(row.total_price) || 0,
-                colorCode: row.color_code || '',
-                lastUpdated: row.last_updated || '',
-                itemName: item.item_name || '',
-                groupHead: item.group_head || '',
-                uom: item.purchase_uom || ''
+                id: inv.id ?? null,          // inventory.id (null if no row yet)
+                itemId: row.id,              // items.id — stable FK
+                maxLevel: Number(inv.max_level) || 0,
+                opening: Number(inv.opening) || 0,
+                individualRate: Number(inv.individual_rate) || 0,
+                indented: Number(inv.indented) || 0,
+                approved: Number(inv.approved) || 0,
+                purchaseQuantity: Number(inv.purchase_quantity) || 0,
+                outQuantity: Number(inv.out_quantity) || 0,
+                currentStock: Number(inv.current_stock) || 0,
+                totalPrice: Number(inv.total_price) || 0,
+                colorCode: inv.color_code || '',
+                lastUpdated: inv.last_updated || '',
+                itemName: row.item_name || '',
+                groupHead: row.group_head || '',
+                uom: row.purchase_uom || ''
             };
         });
         return flattened as any;

@@ -279,7 +279,31 @@ export default function MasterData() {
                 }
             }
         } else {
-            res = await supabase.from(targetTable).insert([fields]);
+            res = await supabase.from(targetTable).insert([fields]).select();
+
+            // Auto-seed inventory row when a brand-new item is created so it
+            // always appears on the Inventory page (fixes the 158/160 gap).
+            if (!res.error && entityType === 'item' && res.data && res.data.length > 0) {
+                const newItemId = res.data[0].id;
+                if (newItemId) {
+                    const seedRes = await supabase.from('inventory').insert([{
+                        item_id: newItemId,
+                        opening: 0,
+                        individual_rate: 0,
+                        max_level: 0,
+                        indented: 0,
+                        approved: 0,
+                        purchase_quantity: 0,
+                        out_quantity: 0,
+                        current_stock: 0,
+                        total_price: 0,
+                    }]);
+                    if (seedRes.error) {
+                        console.warn('[saveRow] Failed to seed inventory row for new item:', seedRes.error);
+                        // Non-fatal — item is saved; inventory row can be added later.
+                    }
+                }
+            }
         }
 
         if (res.error) {
@@ -721,38 +745,99 @@ export default function MasterData() {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader><DialogTitle>{editingRow ? 'Edit Item' : 'Add Item'}</DialogTitle></DialogHeader>
                     <div className="space-y-3">
-                        {[
-                            ['group_head', 'Group Head / Category'],
-                            ['item_name', 'Item Name'],
-                            ['unit_of_measurement', 'Purchase UOM (e.g., LTR, KG, Box)']
-                        ].map(([key, label]) => (
-                            <div key={key}>
-                                <label className="text-xs font-medium">{label}</label>
+                        {/* Group Head */}
+                        <div>
+                            <label className="text-xs font-medium">Group Head / Category</label>
+                            <Input
+                                className="mt-1"
+                                list="group_head-list"
+                                value={form.group_head || ''}
+                                onChange={e => setForm(p => ({ ...p, group_head: e.target.value }))}
+                            />
+                            <datalist id="group_head-list">
+                                {unique('group_head').map(v => <option key={v} value={v} />)}
+                            </datalist>
+                        </div>
+
+                        {/* Item Name */}
+                        <div>
+                            <label className="text-xs font-medium">Item Name</label>
+                            <Input
+                                className="mt-1"
+                                value={form.item_name || ''}
+                                onChange={e => setForm(p => ({ ...p, item_name: e.target.value }))}
+                            />
+                        </div>
+
+                        {/* Purchase UOM — dropdown-only, no free typing */}
+                        <div>
+                            <label className="text-xs font-medium">Purchase UOM</label>
+                            <select
+                                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                value={form.unit_of_measurement || form.purchase_uom || ''}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if (val === '__other__') {
+                                        // Reveal a text input for a brand-new UOM value
+                                        setForm(p => ({ ...p, unit_of_measurement: '', _puom_other: 'true' }));
+                                    } else {
+                                        setForm(p => ({ ...p, unit_of_measurement: val, _puom_other: '' }));
+                                    }
+                                }}
+                            >
+                                <option value="" disabled>Select Purchase UOM…</option>
+                                {unique('purchase_uom').map(v => (
+                                    <option key={v} value={v}>{v}</option>
+                                ))}
+                                <option value="__other__">Other (type below)…</option>
+                            </select>
+                            {form._puom_other && (
                                 <Input
                                     className="mt-1"
-                                    list={key !== 'item_name' ? `${key}-list` : undefined}
-                                    value={form[key] || ''}
-                                    onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                                    placeholder="Enter new UOM (e.g., Carton, Vial)"
+                                    value={form.unit_of_measurement || ''}
+                                    onChange={e => setForm(p => ({ ...p, unit_of_measurement: e.target.value }))}
+                                    autoFocus
                                 />
-                                {key !== 'item_name' && (
-                                    <datalist id={`${key}-list`}>
-                                        {unique(key as any).map(v => <option key={v} value={v} />)}
-                                    </datalist>
-                                )}
-                            </div>
-                        ))}
+                            )}
+                        </div>
+
                         {/* Issue UOM section */}
                         <div className="border-t pt-3 space-y-3">
                             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Store-Out Unit (Issue UOM)</p>
+
+                            {/* Issue UOM — dropdown-only, no free typing */}
                             <div>
                                 <label className="text-xs font-medium">Issue UOM <span className="text-muted-foreground">(e.g., ml, g, pcs, tablet)</span></label>
-                                <Input
-                                    className="mt-1"
+                                <select
+                                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                     value={form.issue_uom || ''}
-                                    onChange={e => setForm(p => ({ ...p, issue_uom: e.target.value }))}
-                                    placeholder="e.g., ml"
-                                />
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === '__other__') {
+                                            setForm(p => ({ ...p, issue_uom: '', _iuom_other: 'true' }));
+                                        } else {
+                                            setForm(p => ({ ...p, issue_uom: val, _iuom_other: '' }));
+                                        }
+                                    }}
+                                >
+                                    <option value="">None / Same as Purchase UOM</option>
+                                    {unique('issue_uom').map(v => (
+                                        <option key={v} value={v}>{v}</option>
+                                    ))}
+                                    <option value="__other__">Other (type below)…</option>
+                                </select>
+                                {form._iuom_other && (
+                                    <Input
+                                        className="mt-1"
+                                        placeholder="Enter new Issue UOM (e.g., strip, dose)"
+                                        value={form.issue_uom || ''}
+                                        onChange={e => setForm(p => ({ ...p, issue_uom: e.target.value }))}
+                                        autoFocus
+                                    />
+                                )}
                             </div>
+
                             <div>
                                 <label className="text-xs font-medium">
                                     Issue Factor <span className="text-muted-foreground">(1 Purchase UOM = ? Issue units)</span>
@@ -790,6 +875,7 @@ export default function MasterData() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
 
             {/* Bulk UOM Dialog */}
             <Dialog open={openDialog === 'bulk-uom'} onOpenChange={o => !o && setOpenDialog(null)}>

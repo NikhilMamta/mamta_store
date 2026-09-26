@@ -244,6 +244,53 @@ export default () => {
         setHistoryData(finalHistory);
     }, [localStoreOutSheet, localIndentSheet, localStoreOutApprovalSheet]);
 
+    // Build flat per-item rows from the grouped structure.
+    // Each product gets its own table row; shared metadata (date, issue no., indenter, ward) repeats.
+    interface FlatStoreOutRow {
+        // Shared group fields (repeated per item)
+        issueNo: string;
+        timestamp?: string;
+        indenterName: string;
+        department: string;
+        wardName: string;
+        floor: string;
+        slip?: string;
+        // Per-item fields
+        product: string;
+        qty: number;
+        unit: string;
+        storeOutStatus: string;
+        storeOutActual?: string;
+        itemId: string;
+        // Needed to open the confirm dialog for the group this item belongs to
+        group: GroupedStoreOutStatusData;
+    }
+
+    const toFlatRows = (groups: GroupedStoreOutStatusData[]): FlatStoreOutRow[] =>
+        groups.flatMap(group =>
+            group.items.map(item => ({
+                issueNo: group.issueNo,
+                timestamp: group.timestamp,
+                indenterName: group.indenterName,
+                department: group.department,
+                wardName: group.wardName,
+                floor: group.floor,
+                slip: group.slip,
+                product: item.product,
+                qty: item.qty,
+                unit: item.unit,
+                storeOutStatus: item.storeOutStatus,
+                storeOutActual: item.storeOutActual,
+                itemId: item.id,
+                group,
+            }))
+        );
+
+    // flatPending is intentionally NOT used — Pending tab keeps the original grouped
+    // "View (N)" behaviour so all items in an indent are confirmed together.
+    // Only the History tab uses flat rows (one row per product line).
+    const flatHistory = toFlatRows(filteredHistory);
+
     const pendingColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
         {
             id: 'serialNo',
@@ -325,7 +372,7 @@ export default () => {
         }
     ];
 
-    const historyColumns: ColumnDef<GroupedStoreOutStatusData>[] = [
+    const historyColumns: ColumnDef<FlatStoreOutRow>[] = [
         {
             id: 'serialNo',
             header: () => <div className="text-center">S.No.</div>,
@@ -333,18 +380,6 @@ export default () => {
             size: 50,
         },
         {
-            id: 'actions',
-            header: () => <div className="text-center">View</div>,
-            cell: ({ row }) => (
-                <div className="flex justify-center">
-                    <Button size="sm" variant="outline" onClick={() => setSelectedHistory(row.original)} className="h-8 px-3 text-xs border-primary/20 hover:bg-primary/5">
-                        View ({row.original.items.length})
-                    </Button>
-                </div>
-            ),
-        },
-        {
-            accessorKey: 'timestamp',
             id: 'timestamp_history',
             header: () => <div className="text-center">Date</div>,
             cell: ({ row }) => {
@@ -365,28 +400,49 @@ export default () => {
             size: 110,
         },
         {
-            accessorKey: 'issueNo',
             id: 'issueNo_history',
             header: () => <div className="text-center">Issue No.</div>,
-            cell: ({ row }) => <div className="text-center">{row.original.issueNo?.split(/[_/]/)[0]}</div>
+            cell: ({ row }) => <div className="text-center font-mono text-xs">{row.original.issueNo?.split(/[_/]/)[0]}</div>,
         },
         {
-            accessorKey: 'indenterName',
             id: 'indenterName_history',
             header: () => <div className="text-center">Indenter</div>,
-            cell: ({ row }) => <div className="text-center">{row.original.indenterName}</div>
+            cell: ({ row }) => <div className="text-center">{row.original.indenterName}</div>,
         },
         {
-            id: 'products',
-            header: () => <div className="text-center">Products</div>,
+            id: 'wardName_history',
+            header: () => <div className="text-center">Ward Name</div>,
+            cell: ({ row }) => <div className="text-center">{row.original.wardName}</div>,
+        },
+        {
+            id: 'product_history',
+            header: () => <div className="text-center">Product</div>,
             cell: ({ row }) => (
-                <div className="max-w-[300px] break-words text-xs text-center mx-auto">
-                    {[...new Set(row.original.items.map(i => i.product))].join(', ')}
+                <div className="max-w-[260px] break-words text-xs font-medium text-center mx-auto">
+                    {row.original.product}
                 </div>
-            )
+            ),
         },
         {
-            id: 'slip',
+            id: 'qty_history',
+            header: () => <div className="text-center">Qty</div>,
+            cell: ({ row }) => (
+                <div className="text-center text-xs font-semibold">
+                    {row.original.qty} <span className="text-muted-foreground">{row.original.unit}</span>
+                </div>
+            ),
+        },
+        {
+            id: 'status_history',
+            header: () => <div className="text-center">Status</div>,
+            cell: ({ row }) => (
+                <div className="flex justify-center">
+                    <Pill variant="secondary">{row.original.storeOutStatus}</Pill>
+                </div>
+            ),
+        },
+        {
+            id: 'slip_history',
             header: () => <div className="text-center">Slip</div>,
             cell: ({ row }) => (
                 <div className="flex justify-center">
@@ -396,8 +452,8 @@ export default () => {
                         </a>
                     ) : <span className="text-muted-foreground text-xs">-</span>}
                 </div>
-            )
-        }
+            ),
+        },
     ];
 
     return (
@@ -486,13 +542,13 @@ export default () => {
                     <Tabs defaultValue="pending" className="w-full">
                         <TabsList className="mb-4">
                             <TabsTrigger value="pending">Pending ({filteredPending.length})</TabsTrigger>
-                            <TabsTrigger value="history">History ({filteredHistory.length})</TabsTrigger>
+                            <TabsTrigger value="history">History ({flatHistory.length} items)</TabsTrigger>
                         </TabsList>
                         <TabsContent value="pending">
                             <DataTable data={filteredPending} columns={pendingColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
                         </TabsContent>
                         <TabsContent value="history">
-                            <DataTable data={filteredHistory} columns={historyColumns} searchFields={['issueNo', 'indenterName']} dataLoading={localLoading} />
+                            <DataTable data={flatHistory} columns={historyColumns} searchFields={['issueNo', 'indenterName', 'product']} dataLoading={localLoading} />
                         </TabsContent>
                     </Tabs>
                 </div>
